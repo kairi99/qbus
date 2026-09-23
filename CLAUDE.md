@@ -20,3 +20,4 @@ Node comes from nvm: run `. ~/.nvm/nvm.sh` first in non-login shells.
 - `window.__qbus` exposes game state in dev builds for e2e tests.
 - Cities are `CityData` (`src/world/cityData.ts`): `procCity.ts` generates one, `cityBuilder.ts` renders it. `?seed=N` in the URL picks the procedural city.
 - Headless Chrome renders with software WebGL (~5–20 fps), which slows the simulation (frame dt is capped at 0.1 s). In e2e, poll for conditions (`expect.poll`) rather than fixed sleeps.
+- Traffic/pedestrians: `traffic.ts` and `pedestrians.ts` are pure sims (unit-tested for overlaps and gridlock); `trafficBodies.ts` makes Rapier bodies chase the sim poses and releases a car to free physics when the bus hits it. Pedestrians have no colliders by design.

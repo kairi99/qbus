@@ -27,9 +27,14 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   const ground = new MeshBuilder(); // receives shadows only
   const solid = new ChunkedMeshBuilder(); // casts and receives
 
-  const grass = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshLambertMaterial({ color: '#86a85f' }));
-  grass.rotation.x = -Math.PI / 2;
+  // Countryside with a hole where the city is: roads and blocks tile the city area, so nothing
+  // is coplanar with the grass (which z-fought with the asphalt at a distance).
+  const { min, max } = city.bounds;
+  const land = new THREE.Shape([new THREE.Vector2(-2000, -2000), new THREE.Vector2(2000, -2000), new THREE.Vector2(2000, 2000), new THREE.Vector2(-2000, 2000)]);
+  land.holes.push(new THREE.Path([new THREE.Vector2(min.x, -min.z), new THREE.Vector2(min.x, -max.z), new THREE.Vector2(max.x, -max.z), new THREE.Vector2(max.x, -min.z)]));
+  const grass = new THREE.Mesh(new THREE.ShapeGeometry(land).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#86a85f' }));
   grass.position.y = -0.03;
+  grass.renderOrder = -1;
   grass.receiveShadow = true;
   scene.add(grass);
 

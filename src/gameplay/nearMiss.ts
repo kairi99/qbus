@@ -17,6 +17,7 @@ export class NearMissDetector {
   private recent = new Map<number, number>();
   private clock = 0;
   private offsets: number[];
+  private rayY: number;
 
   constructor(
     private world: RAPIER.World,
@@ -24,6 +25,7 @@ export class NearMissDetector {
   ) {
     const L = bus.preset.body.length;
     this.offsets = [L / 2 - 1, 0, -L / 2 + 1];
+    this.rayY = -bus.preset.body.height / 2 + 0.6;
   }
 
   update(dt: number): number {
@@ -36,7 +38,8 @@ export class NearMissDetector {
     for (const side of [-1, 1]) {
       const dir = rotate(q, { x: 0, y: 0, z: side });
       for (const x of this.offsets) {
-        const o = rotate(q, { x, y: 0, z: side * (halfW + 0.02) });
+        // About 1.2 m off the ground: low enough to catch cars, high enough to skip curbs.
+        const o = rotate(q, { x, y: this.rayY, z: side * (halfW + 0.02) });
         const origin = { x: t.x + o.x, y: t.y + o.y, z: t.z + o.z };
         const hit = this.world.castRay(new RAPIER.Ray(origin, dir), REACH, true, undefined, undefined, undefined, this.bus.body);
         if (!hit || hit.timeOfImpact < SCRAPE) continue;

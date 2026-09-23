@@ -8,6 +8,9 @@ export const LINES = {
   impatient: ['¡Apure vea, que llego tarde!', '¡Más rápido, veci!', '¡Esto parece carreta!'],
   happy: ['¡Qué bacán!', '¡De una, maestro!', '¡Llegué volando!'],
   grumpy: ['¡Mejor me iba a pie!', '¡Ni propina le doy!'],
+  driverAngry: ['¡Aprenda a manejar!', '¡Chofer loco!', '¡Oiga, muévase pues!', '¡Qué le pasa, señor!'],
+  carHit: ['¡Mi carro!', '¡Me va a pagar el choque!', '¡Ya me dañó el guardachoque!'],
+  pedDive: ['¡Casi me mata!', '¡Ave María Purísima!', '¡Fíjese por dónde va!', '¡Bruto!'],
 } as const;
 
 export type LineKind = keyof typeof LINES;
@@ -22,4 +25,7 @@ export const SPEAKER: Record<LineKind, string> = {
   impatient: 'Pasajero',
   happy: 'Pasajera',
   grumpy: 'Pasajero',
+  driverAngry: 'Taxista',
+  carHit: 'Conductor',
+  pedDive: 'Peatón',
 };

@@ -61,10 +61,14 @@ async function main() {
   let acc = 0;
   let last = performance.now();
   let flippedFor = 0;
+  let fps = 60;
 
   renderer.setAnimationLoop((now) => {
-    const dt = Math.min(MAX_FRAME, (now - last) / 1000);
+    const raw = (now - last) / 1000;
+    const dt = Math.min(MAX_FRAME, raw);
     last = now;
+    if (raw > 0) fps += (1 / raw - fps) * 0.05;
+    session.adaptTraffic(fps, dt);
 
     for (const action of input.consumeActions()) {
       if (action === 'camera') model.setCockpitView(rig.toggle() === 'cockpit');
@@ -74,6 +78,7 @@ async function main() {
         bus.reset({ x: s.pos.x, y: 0, z: s.pos.z, heading: s.heading });
       }
       if (action === 'restart' && session.game.over) session.restart();
+      if (action === 'horn') session.playerHonk();
     }
 
     const drive = input.drive();
@@ -81,6 +86,7 @@ async function main() {
     acc += dt;
     while (acc >= PHYSICS_STEP) {
       bus.update(drive, PHYSICS_STEP);
+      session.beforeStep(PHYSICS_STEP);
       world.step();
       session.physicsStep(PHYSICS_STEP);
       acc -= PHYSICS_STEP;

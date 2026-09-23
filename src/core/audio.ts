@@ -53,11 +53,15 @@ export class BusAudio {
   }
 
   /** Short synthesized cue: coin for money, chime for bonus time, thud for crashes. */
-  cue(kind: 'coin' | 'time' | 'crash'): void {
-    if (!this.ctx) return;
+  cue(kind: 'coin' | 'time' | 'crash' | 'carHorn', volume = 1): void {
+    if (!this.ctx || volume <= 0.01) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
-    const notes: [number, number][] = kind === 'coin' ? [[988, 0], [1319, 0.07]] : kind === 'time' ? [[660, 0], [880, 0.09], [1175, 0.18]] : [[70, 0]];
+    const notes: [number, number][] =
+      kind === 'coin' ? [[988, 0], [1319, 0.07]]
+      : kind === 'time' ? [[660, 0], [880, 0.09], [1175, 0.18]]
+      : kind === 'carHorn' ? [[520, 0], [620, 0], [520, 0.22], [620, 0.22]] // "pi-piii"
+      : [[70, 0]];
     for (const [freq, at] of notes) {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -65,11 +69,13 @@ export class BusAudio {
       o.frequency.setValueAtTime(freq, now + at);
       if (kind === 'crash') o.frequency.exponentialRampToValueAtTime(35, now + 0.25);
       g.gain.setValueAtTime(0, now + at);
-      g.gain.linearRampToValueAtTime(kind === 'crash' ? 0.6 : 0.12, now + at + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.001, now + at + (kind === 'crash' ? 0.3 : 0.16));
+      const peak = (kind === 'crash' ? 0.6 : kind === 'carHorn' ? 0.08 : 0.12) * volume;
+      const len = kind === 'crash' ? 0.3 : kind === 'carHorn' ? (at > 0 ? 0.35 : 0.14) : 0.16;
+      g.gain.linearRampToValueAtTime(peak, now + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, now + at + len);
       o.connect(g).connect(this.master);
       o.start(now + at);
-      o.stop(now + at + 0.35);
+      o.stop(now + at + 0.5);
     }
   }
 

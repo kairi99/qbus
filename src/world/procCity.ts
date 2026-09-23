@@ -97,7 +97,7 @@ export function generateCity(opts: ProcCityOptions): CityData {
       if (r.kind === 'street') {
         const roll = rng.next();
         if (roll < 0.06) {
-          features.push({ kind: 'ramp', pos: at(mid + rng.range(-12, 12)), heading, length: 10, width: 5, height: 2.2 });
+          features.push({ kind: 'ramp', pos: at(mid + rng.range(-12, 12)), heading, length: 10, width: 3.6, height: 2.2 });
         } else if (roll < 0.2) {
           features.push({ kind: 'hump', pos: at(mid + rng.range(-15, 15)), heading, length: 3, width: r.width, height: 0.22 });
         }
@@ -106,7 +106,7 @@ export function generateCity(opts: ProcCityOptions): CityData {
   };
   nsRoads.forEach((r, i) => addSegmentStuff(r, 'z', ax.centers[i], az.spans, ewRoads));
   ewRoads.forEach((r, j) => addSegmentStuff(r, 'x', az.centers[j], ax.spans, nsRoads));
-  ensureFeature(features, 'ramp', nsRoads, az, ax, { length: 10, width: 5, height: 2.2 });
+  ensureFeature(features, 'ramp', nsRoads, az, ax, { length: 10, width: 3.6, height: 2.2 });
   ensureFeature(features, 'hump', nsRoads, az, ax, { length: 3, width: STREET_WIDTH, height: 0.22 });
 
   // Blocks, buildings, props.
