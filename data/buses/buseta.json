@@ -1,0 +1,48 @@
+{
+  "id": "buseta",
+  "name": "Buseta",
+  "body": {
+    "length": 8,
+    "width": 2.3,
+    "height": 2.8,
+    "color": "#d8342c",
+    "stripe": "#f5c518",
+    "roof": "#efefef"
+  },
+  "capacity": 26,
+  "mass": 1100,
+  "centerOfMassHeight": 0.4,
+  "engineForce": 3000,
+  "reverseForce": 2000,
+  "reverseTopSpeedKmh": 38,
+  "brakeForce": 90,
+  "handbrakeForce": 35,
+  "topSpeedKmh": 85,
+  "steer": {
+    "maxAngle": 0.5,
+    "highSpeedAngle": 0.15,
+    "speed": 4.2
+  },
+  "wheels": {
+    "radius": 0.5,
+    "frontOffset": 2.6,
+    "rearOffset": -2.3,
+    "track": 0.95,
+    "mountHeight": -0.8,
+    "frictionSlip": 2.2,
+    "sideFrictionStiffness": 1.0,
+    "handbrakeFrictionSlip": 0.8
+  },
+  "drift": {
+    "maxAngleDeg": 35.0,
+    "gripRecovery": 2.8
+  },
+  "suspension": {
+    "restLength": 0.42,
+    "maxTravel": 0.38,
+    "stiffness": 30,
+    "compression": 2.1,
+    "relaxation": 2.5,
+    "maxForce": 90000
+  }
+}

@@ -6,6 +6,12 @@ const ZONES: Record<string, () => Promise<{ default: unknown }>> = {
   mariscal: () => import('../../data/cities/mariscal.json'),
 };
 
+/** Zones shown in the menu. */
+export const ZONE_LIST = [
+  { id: 'mariscal', name: 'La Mariscal', blurb: 'Calles reales de Quito, con sus cuestas y sus una-vía' },
+  { id: 'grid', name: 'Ciudad de prueba', blurb: 'Cuadrícula plana con rampas, para practicar' },
+];
+
 export const DEFAULT_ZONE = 'mariscal';
 /** Mild exaggeration: the steepest street (Francisco Salazar, 14% for real) becomes ~19%. */
 export const DEFAULT_HILLS = 1.3;
@@ -20,4 +26,9 @@ export async function loadCity(params: URLSearchParams): Promise<CityData> {
   const city = (await ZONES[zone]()).default as CityData;
   if (city.terrain) city.terrain.scale = Number(params.get('hills') ?? DEFAULT_HILLS);
   return city;
+}
+
+/** City for a menu zone id, without touching the URL. */
+export function loadZone(zone: string, hills = DEFAULT_HILLS): Promise<CityData> {
+  return loadCity(new URLSearchParams({ city: zone, hills: String(hills) }));
 }

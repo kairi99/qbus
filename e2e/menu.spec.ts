@@ -1,0 +1,73 @@
+import { test, expect } from '@playwright/test';
+
+const shots = 'e2e/screenshots';
+
+test('menu: choose bus, zone and route, play, pause, back to menu', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Jugar' })).toBeVisible();
+  await page.screenshot({ path: `${shots}/60-title.png` });
+
+  await page.getByRole('button', { name: 'Jugar' }).click();
+  await expect(page.locator('[data-route]').first()).toBeVisible({ timeout: 30_000 }); // La Mariscal routes loaded
+  await page.screenshot({ path: `${shots}/61-setup-mariscal.png`, fullPage: true });
+
+  await page.locator('[data-bus="buseta"]').click();
+  await page.locator('[data-zone="grid"]').click();
+  await expect(page.locator('[data-route="ruta-amazonas"]')).toBeVisible({ timeout: 30_000 });
+  await page.locator('[data-route="ruta-amazonas"]').click();
+  await expect(page.locator('.mn-summary')).toHaveText('Buseta, Ciudad de prueba, Ruta Amazonas');
+  await page.screenshot({ path: `${shots}/62-setup-choice.png`, fullPage: true });
+
+  await page.getByRole('button', { name: '¡Arranca!' }).click();
+  await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  const game = await page.evaluate(() => {
+    const q = (window as any).__qbus;
+    return { bus: q.bus.preset.id, route: q.route.id, city: q.city.name, stop: q.session.game.activeStop.stop.name };
+  });
+  expect(game.bus).toBe('buseta');
+  expect(game.route).toBe('ruta-amazonas');
+  expect(game.stop).toMatch(/Amazonas/);
+  await page.waitForTimeout(1500);
+  await expect(page.locator('.gh-minimap')).toBeVisible();
+  // The GPS path to the first stop exists and follows the lane graph.
+  const path = await page.evaluate(() => (window as any).__qbus.session.path?.points.length ?? 0);
+  expect(path).toBeGreaterThan(1);
+  await page.screenshot({ path: `${shots}/63-playing-choice.png` });
+
+  // Pause freezes the clock.
+  await page.keyboard.down('KeyW');
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.session.game.timeLeft), { timeout: 20_000 }).toBeLessThan(89.5);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /Seguir/ })).toBeVisible();
+  const t0 = await page.evaluate(() => (window as any).__qbus.session.game.timeLeft);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as any).__qbus.session.game.timeLeft)).toBe(t0);
+  await page.screenshot({ path: `${shots}/64-pause.png` });
+
+  // Choices were remembered for next time.
+  await page.getByRole('button', { name: 'Volver al menú' }).click();
+  await expect(page.getByRole('button', { name: 'Jugar' })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Jugar' }).click();
+  await expect(page.locator('[data-bus="buseta"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[data-route="ruta-amazonas"]')).toHaveAttribute('aria-checked', 'true', { timeout: 30_000 });
+  expect(errors).toEqual([]);
+});
+
+test('settings are saved and applied', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole('button', { name: 'Ajustes' }).click();
+  await page.getByText('Conductor').click();
+  await page.getByText('Quito extremo').click();
+  await page.screenshot({ path: `${shots}/65-settings.png` });
+  await page.goto('/?play=1&city=mariscal');
+  await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  const s = await page.evaluate(() => ({ cam: (window as any).__qbus.rig.mode, hills: (window as any).__qbus.city.terrain.scale }));
+  expect(s).toEqual({ cam: 'cockpit', hills: 2 });
+});

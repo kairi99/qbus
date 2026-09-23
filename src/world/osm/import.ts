@@ -297,7 +297,8 @@ function importStops(
     const raw = e.tags.name?.trim();
     if (raw && /metrob|trole|ecov/i.test(raw)) continue; // BRT platforms in the median
     // Some stops are just called "Bus" or "Parada": name those after the corner instead.
-    const name = raw && !/^(bus|parada|bus stop|parada de bus)$/i.test(raw) ? raw : undefined;
+    const tidy = raw ? tidyStopName(raw) : '';
+    const name = tidy && !/^(bus|parada|bus stop|parada de bus)$/i.test(tidy) && !/sin nombre/i.test(tidy) ? tidy : undefined;
     const p = toXZ(e.lat!, e.lon!);
     if (!inside(p, -40)) continue;
     const near = nearestOnRoads(roads.filter((r) => r.kind === 'avenue' || r.lanes >= 2), p);
@@ -314,12 +315,12 @@ function importStops(
     if (buildings.some((b) => pointInPolygon(shelter, b.footprint) || pointInPolygon(pos, b.footprint))) continue;
     if (stops.some((s) => Math.hypot(s.pos.x - pos.x, s.pos.z - pos.z) < 25)) continue;
     const cross = nearestOnRoads(
-      roads.filter((o) => o.name !== road.name && o.name !== 'Calle sin nombre'),
+      roads.filter((o) => o.name !== road.name && !/sin nombre/i.test(o.name)),
       point,
     );
     stops.push({
       id: `osm${e.id}`,
-      name: name ?? (cross && cross.dist < 120 ? `${road.name.replace(/^Av\. /, '')} y ${cross.road.name.replace(/^Av\. /, '')}` : road.name),
+      name: tidyStopName(name ?? (cross && cross.dist < 120 && !/sin nombre/i.test(road.name) ? `${road.name.replace(/^Av\. /, '')} y ${cross.road.name.replace(/^Av\. /, '')}` : `Parada ${road.name.replace(/^Av\. /, '')}`)),
       pos,
       heading: round(heading, 4),
     });
@@ -535,6 +536,19 @@ function clampInt(s: string | undefined, lo: number, hi: number): number | undef
 function round(v: number, d: number): number {
   const k = 10 ** d;
   return Math.round(v * k) / k;
+}
+
+/** "9 de octubre-Washington S-N" → "9 de Octubre y Washington"; "vicente ramón roca" → "Vicente Ramón Roca". */
+export function tidyStopName(raw: string): string {
+  const small = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e']);
+  return raw
+    .replace(/\s+[SNEO]-[SNEO]\b/gi, '')
+    .replace(/\s*-\s*/g, ' y ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .map((w, i) => (i > 0 && small.has(w.toLowerCase()) ? w.toLowerCase() : w[0].toUpperCase() + w.slice(1)))
+    .join(' ');
 }
 
 function shortName(n: string): string {

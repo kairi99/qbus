@@ -4,7 +4,6 @@ import { Input } from './core/input';
 import { BusAudio } from './core/audio';
 import { BusPhysics } from './vehicle/bus';
 import { BusModel } from './vehicle/busModel';
-import type { BusPreset } from './vehicle/busPreset';
 import { CameraRig } from './camera/cameraRig';
 import { setupSky, followSun } from './world/sky';
 import { buildCity } from './world/cityBuilder';
@@ -14,11 +13,22 @@ import { loadCity } from './world/loadCity';
 import { snapToRoad } from './world/roadSnap';
 import { Hud } from './ui/hud';
 import { GameSession } from './gameplay/session';
-import popular from '../data/buses/popular.json';
+import { busById } from './vehicle/buses';
+import { routesFor } from './gameplay/routes';
+import { Menu } from './menu/menu';
+import { loadSettings } from './menu/settings';
 
 const MAX_FRAME = 0.1;
 
 async function main() {
+  // Without a shift to play (?play=1 from the menu, or ?city= / ?seed= directly), show the menu.
+  const params = new URLSearchParams(location.search);
+  if (!params.has('play') && !params.has('city') && !params.has('seed')) {
+    new Menu(document.body);
+    return;
+  }
+  const settings = loadSettings();
+  if (!params.has('hills')) params.set('hills', String(settings.hills));
   await initRapier();
 
   const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
@@ -40,12 +50,14 @@ async function main() {
 
   const sun = setupSky(scene);
   const world = createWorld();
-  const city = await loadCity(new URLSearchParams(location.search));
+  const city = await loadCity(params);
   if (!city.terrain) addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
   const graph = buildRoadGraph(city);
   const { props } = buildCity(city, world, scene, graph);
 
-  const preset = popular as BusPreset;
+  const preset = busById(params.get('bus') ?? settings.bus);
+  const routes = routesFor(city);
+  const route = routes.find((r) => r.id === params.get('route')) ?? routes[0];
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const model = new BusModel(preset);
@@ -56,9 +68,26 @@ async function main() {
   const rig = new CameraRig(camera);
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
   const hud = new Hud(hudRoot, city.attribution);
-  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph });
+  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph, route });
+  audio.setVolume(settings.volume);
+  if (settings.camera === 'cockpit') rig.toggle();
 
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  let paused = false;
+  const setPaused = (on: boolean) => {
+    paused = on && !session.game.over;
+    session.showPause(paused);
+  };
+  const toMenu = () => (location.search = '');
+  session.onHudAction = (a) => {
+    if (a === 'resume') setPaused(false);
+    if (a === 'menu') toMenu();
+    if (a === 'again') {
+      setPaused(false);
+      session.restart();
+    }
+  };
+
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session, route, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();
@@ -80,13 +109,16 @@ async function main() {
         const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading);
         bus.reset({ x: s.pos.x, y: groundHeightAt(city, s.pos), z: s.pos.z, heading: s.heading });
       }
+      if (action === 'pause') setPaused(!paused);
+      if (paused) continue;
       if (action === 'restart' && session.game.over) session.restart();
       if (action === 'horn') session.playerHonk();
     }
 
-    const drive = input.drive();
+    const drive = paused ? { throttle: 0, steer: 0, handbrake: false } : input.drive();
     if (drive.throttle > 0) session.start();
-    acc += dt;
+    // Paused: the world stands still (but keeps rendering behind the menu).
+    acc = paused ? 0 : acc + dt;
     while (acc >= PHYSICS_STEP) {
       bus.update(drive, PHYSICS_STEP);
       session.beforeStep(PHYSICS_STEP);

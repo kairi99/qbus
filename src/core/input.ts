@@ -7,11 +7,11 @@ export interface DriveInput {
   handbrake: boolean;
 }
 
-export type Action = 'camera' | 'reset' | 'horn' | 'restart';
+export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause';
 
-const KEY_ACTIONS: Record<string, Action> = { KeyC: 'camera', KeyR: 'reset', KeyH: 'horn', Enter: 'restart', NumpadEnter: 'restart' };
-// Standard gamepad mapping: Y toggles camera, Back resets, left stick press honks, Start restarts.
-const PAD_ACTIONS: Record<number, Action> = { 3: 'camera', 8: 'reset', 10: 'horn', 9: 'restart' };
+const KEY_ACTIONS: Record<string, Action> = { KeyC: 'camera', KeyR: 'reset', KeyH: 'horn', Enter: 'restart', NumpadEnter: 'restart', Escape: 'pause', KeyP: 'pause' };
+// Standard gamepad mapping: Y toggles camera, Back resets, left stick press honks, Start pauses.
+const PAD_ACTIONS: Record<number, Action> = { 3: 'camera', 8: 'reset', 10: 'horn', 9: 'pause' };
 
 export class Input {
   private keys = new Set<string>();

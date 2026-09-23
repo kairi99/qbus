@@ -9,6 +9,7 @@ export class BusAudio {
   private engineOsc!: OscillatorNode;
   private engineGain!: GainNode;
   private master!: GainNode;
+  private volume = 1;
 
   constructor(target: Window = window) {
     const start = () => {
@@ -24,7 +25,7 @@ export class BusAudio {
     const ctx = new AudioContext();
     this.ctx = ctx;
     const master = ctx.createGain();
-    master.gain.value = 0.35;
+    master.gain.value = 0.35 * this.volume;
     master.connect(ctx.destination);
     this.master = master;
 
@@ -50,6 +51,12 @@ export class BusAudio {
     this.engineOsc.type = 'sawtooth';
     this.engineOsc.connect(this.engineGain);
     this.engineOsc.start();
+  }
+
+  /** 0..1, applied now or when audio starts. */
+  setVolume(v: number): void {
+    this.volume = v;
+    if (this.master) this.master.gain.value = 0.35 * v;
   }
 
   /** Short synthesized cue: coin for money, chime for bonus time, thud for crashes. */

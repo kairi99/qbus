@@ -4,10 +4,12 @@ import { BusPhysics } from '../src/vehicle/bus';
 import type { DriveInput } from '../src/core/input';
 import type { BusPreset } from '../src/vehicle/busPreset';
 import popular from '../data/buses/popular.json';
+import interparroquial from '../data/buses/interparroquial.json';
+import buseta from '../data/buses/buseta.json';
 
-const preset = popular as BusPreset;
 const idle: DriveInput = { throttle: 0, steer: 0, handbrake: false };
 
+describe.each([popular, interparroquial, buseta] as BusPreset[])('BusPhysics ($name)', (preset) => {
 function setup() {
   const world = createWorld();
   addGround(world);
@@ -21,7 +23,6 @@ function setup() {
   return { world, bus, run };
 }
 
-describe('BusPhysics', () => {
   beforeAll(() => initRapier());
 
   it('settles on its wheels', () => {

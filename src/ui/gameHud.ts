@@ -1,6 +1,8 @@
 import type { Rating } from '../gameplay/routeGame';
 import type { TrickKind } from '../gameplay/scoring';
 
+export type HudAction = 'again' | 'menu' | 'resume';
+
 export const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 export const TRICK_LABEL: Record<TrickKind, string> = {
@@ -27,7 +29,7 @@ export class GameHud {
   private speechUntil = 0;
   private clock = 0;
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, routeName = '') {
     const wrap = document.createElement('div');
     wrap.className = 'gh';
     wrap.innerHTML = `
@@ -40,6 +42,7 @@ export class GameHud {
         <div class="gh-feed" data-k="feed"></div>
       </div>
       <div class="gh-money" data-k="money">$0.00</div>
+      <div class="gh-route">${routeName}</div>
       <div class="gh-riders" data-k="riders"></div>
       <div class="gh-combo" data-k="combo"></div>
       <div class="gh-speech" data-k="speech"><small data-k="speaker"></small><span data-k="line"></span></div>
@@ -53,11 +56,33 @@ export class GameHud {
             <dt>Mejor combo</dt><dd data-k="rCombo"></dd>
             <dt>Mayor vuelo</dt><dd data-k="rAir"></dd>
           </dl>
-          <p>Presiona <b>Enter</b> para otra vuelta</p>
+          <div class="gh-actions">
+            <button class="gh-btn gh-btn-go" data-act="again">Otra vuelta <small>Enter</small></button>
+            <button class="gh-btn" data-act="menu">Menú</button>
+          </div>
+        </div>
+      </div>
+      <div class="gh-results gh-pause" data-k="pause" hidden>
+        <div class="gh-results-card">
+          <h2>Pausa</h2>
+          <div class="gh-actions gh-actions-col">
+            <button class="gh-btn gh-btn-go" data-act="resume">Seguir <small>Esc</small></button>
+            <button class="gh-btn" data-act="again">Reiniciar turno</button>
+            <button class="gh-btn" data-act="menu">Volver al menú</button>
+          </div>
         </div>
       </div>`;
     root.appendChild(wrap);
     wrap.querySelectorAll<HTMLElement>('[data-k]').forEach((e) => (this.el[e.dataset.k!] = e));
+    wrap.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => b.addEventListener('click', () => this.onAction?.(b.dataset.act as HudAction)));
+  }
+
+  /** Clicks on results/pause buttons. */
+  onAction: ((a: HudAction) => void) | null = null;
+
+  showPause(on: boolean): void {
+    this.el.pause.hidden = !on;
+    if (on) this.el.pause.querySelector<HTMLElement>('button')?.focus();
   }
 
   update(dt: number, s: { timeLeft: number; cents: number; onBoard: number; capacity: number; chain: number; started: boolean }): void {
@@ -108,5 +133,6 @@ export class GameHud {
     this.el.rDelivered.textContent = String(r.delivered);
     this.el.rCombo.textContent = r.bestCombo >= 2 ? `×${r.bestCombo}` : '—';
     this.el.rAir.textContent = r.longestAir > 0 ? `${r.longestAir.toFixed(1)} s` : '—';
+    this.el.results.querySelector<HTMLElement>('button')?.focus();
   }
 }

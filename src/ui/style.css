@@ -222,7 +222,7 @@ body {
 .gh-combo {
   position: absolute;
   right: 30px;
-  top: 40%;
+  top: 28%;
   font-size: 40px;
   font-weight: 900;
   color: #ffd23f;
@@ -348,4 +348,466 @@ body {
   .gh-pop {
     animation: none;
   }
+}
+
+/* ---- Menus -------------------------------------------------------------------
+   Built from what's on a Quito bus: the amber LED destination board for headings,
+   and cardboard windshield placards for routes. Everything else stays quiet. */
+
+.mn {
+  --mn-ink: #1d1a14;
+  --mn-paper: #f3ead2;
+  --mn-paper-edge: #d9ccaa;
+  --mn-amber: #ffb000;
+  --mn-green: #2e7d4f;
+  --mn-sky-top: #5d9be0;
+  --mn-sky-low: #dfe9ee;
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  background: linear-gradient(var(--mn-sky-top), var(--mn-sky-low) 70%);
+  color: var(--mn-ink);
+  font-family: 'Roboto Condensed', 'Arial Narrow', 'DejaVu Sans Condensed', system-ui, sans-serif;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.mn-sky {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 45vh;
+  pointer-events: none;
+}
+
+.mn main {
+  position: relative;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 24px 120px;
+}
+
+.mn-led {
+  display: inline-block;
+  padding: 10px 26px;
+  background: #0c0a06 radial-gradient(rgb(255 255 255 / 5%) 1px, transparent 1.3px) 0 0 / 5px 5px;
+  border: 4px solid #2a2418;
+  border-radius: 6px;
+  box-shadow: inset 0 0 14px rgb(0 0 0 / 80%), 0 6px 18px rgb(0 0 0 / 25%);
+  color: var(--mn-amber);
+  font-family: 'DejaVu Sans Mono', Consolas, monospace;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgb(255 160 0 / 75%);
+  letter-spacing: 0.08em;
+}
+
+.mn-title {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  padding-bottom: 20vh !important;
+}
+
+.mn-logo {
+  font-size: clamp(56px, 12vw, 132px);
+  line-height: 1;
+  padding: 18px 48px;
+}
+
+.mn-logo span {
+  animation: mn-flicker 6s steps(1) infinite;
+}
+
+@keyframes mn-flicker {
+  0%,
+  96%,
+  100% {
+    opacity: 1;
+  }
+  97% {
+    opacity: 0.55;
+  }
+}
+
+.mn-tag {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1f2c3a;
+}
+
+.mn-title-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.mn-foot {
+  position: fixed;
+  bottom: 10px;
+  margin: 0;
+  font-size: 12px;
+  color: #2c3a2a;
+}
+
+.mn-btn {
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  padding: 12px 30px;
+  border: 3px solid var(--mn-ink);
+  border-radius: 8px;
+  background: var(--mn-paper);
+  color: var(--mn-ink);
+  cursor: pointer;
+}
+
+.mn-btn-go {
+  background: var(--mn-amber);
+}
+
+.mn-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.mn-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.mn :focus-visible {
+  outline: 3px solid #1f5fbf;
+  outline-offset: 3px;
+}
+
+.mn-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.mn-led-wide {
+  font-size: 26px;
+}
+
+.mn-back {
+  width: 48px;
+  height: 48px;
+  font-size: 30px;
+  line-height: 1;
+  border: 3px solid var(--mn-ink);
+  border-radius: 50%;
+  background: var(--mn-paper);
+  cursor: pointer;
+}
+
+.mn-step {
+  margin-bottom: 26px;
+}
+
+.mn-step h2 {
+  margin: 0 0 10px;
+  font-size: 24px;
+  font-weight: 800;
+  color: #16283a;
+}
+
+.mn-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.mn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  font: inherit;
+  padding: 14px 16px;
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 12%);
+  cursor: pointer;
+  color: var(--mn-ink);
+}
+
+.mn-card[aria-checked='true'] {
+  border-color: var(--mn-ink);
+  background: #fff;
+  box-shadow: 0 0 0 4px var(--mn-amber), 0 6px 16px rgb(0 0 0 / 18%);
+}
+
+.mn-card-name {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.mn-card-blurb {
+  font-size: 15px;
+  color: #4a4a44;
+}
+
+.mn-card-cap {
+  font-size: 13px;
+  color: #6a675e;
+}
+
+.mn-bus-art {
+  width: 100%;
+  height: 80px;
+}
+
+.mn-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  align-items: center;
+}
+
+.mn-stats dt {
+  color: #4a4a44;
+}
+
+.mn-stats dd {
+  margin: 0;
+  height: 8px;
+  border-radius: 4px;
+  background: #e2ddd0;
+  overflow: hidden;
+}
+
+.mn-stats dd span {
+  display: block;
+  height: 100%;
+  width: calc(var(--v) * 100%);
+  background: var(--mn-green);
+}
+
+.mn-routes {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.mn-placards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Windshield placard: stiff card, route name in heavy capitals, stops beneath. */
+.mn-placard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  font: inherit;
+  padding: 10px 16px 12px;
+  background: var(--mn-paper);
+  border: 2px solid var(--mn-paper-edge);
+  border-top: 10px solid #c62828;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 15%);
+  cursor: pointer;
+  color: var(--mn-ink);
+}
+
+.mn-placard:nth-child(3n + 2) {
+  border-top-color: #1565c0;
+}
+
+.mn-placard:nth-child(3n) {
+  border-top-color: var(--mn-green);
+}
+
+.mn-placard[aria-checked='true'] {
+  /* Keep the colored band on top; outline the rest. */
+  border-left-color: var(--mn-ink);
+  border-right-color: var(--mn-ink);
+  border-bottom-color: var(--mn-ink);
+  box-shadow: 0 0 0 4px var(--mn-amber), 0 4px 12px rgb(0 0 0 / 20%);
+}
+
+.mn-placard-name {
+  font-size: 22px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.mn-placard-stops {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mn-placard-meta {
+  font-size: 13px;
+  color: #6a675e;
+}
+
+.mn-map {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 3px solid var(--mn-ink);
+  border-radius: 8px;
+  background: #e9e3d3;
+}
+
+.mn-loading {
+  margin: 0;
+  font-size: 16px;
+}
+
+.mn-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 24px;
+  background: rgb(22 40 58 / 92%);
+  color: #fff;
+}
+
+.mn-summary {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.mn-settings .mn-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 560px;
+  padding: 20px 24px;
+  background: rgb(255 255 255 / 85%);
+  border-radius: 10px;
+}
+
+.mn-panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mn-panel legend {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.mn-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 2px solid #c9c2b0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.mn-choice:has(input:checked) {
+  border-color: var(--mn-ink);
+  background: var(--mn-paper);
+}
+
+.mn-volume {
+  display: grid;
+  grid-template-columns: auto 1fr 3.5em;
+  gap: 12px;
+  align-items: center;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .mn-routes {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-logo span {
+    animation: none;
+  }
+}
+
+.gh-route {
+  position: absolute;
+  left: 24px;
+  top: 96px;
+  font-size: 15px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.gh-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.gh-actions-col {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 240px;
+}
+
+.gh-btn {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 9px 16px;
+  border: 2px solid #ffb000;
+  border-radius: 6px;
+  background: transparent;
+  color: #ffb000;
+  cursor: pointer;
+}
+
+.gh-btn small {
+  font-size: 11px;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+
+.gh-btn-go {
+  background: #ffb000;
+  color: #0c0a06;
+  text-shadow: none;
+}
+
+.gh-btn:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+.gh-minimap {
+  position: absolute;
+  right: 22px;
+  bottom: 96px;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
 }

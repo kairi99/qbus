@@ -64,10 +64,10 @@ for (const city of ['grid', 'mariscal']) test(`a shift on ${city}: start, pick u
 
   // Time runs out -> results; Enter -> new shift.
   await page.evaluate(() => ((window as any).__qbus.session.game.timeLeft = 0.2));
-  await expect(page.locator('.gh-results')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('[data-k="results"]')).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: `${shots}/34-results-${city}.png` });
   await page.keyboard.press('Enter');
-  await expect(page.locator('.gh-results')).toBeHidden();
+  await expect(page.locator('[data-k="results"]')).toBeHidden();
   const s2 = await state(page);
   expect(s2.over).toBe(false);
   expect(s2.cents).toBe(0);

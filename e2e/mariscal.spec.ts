@@ -12,7 +12,7 @@ test('La Mariscal: loads real streets with hills, bus drives, traffic runs', asy
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const t0 = Date.now();
-  await page.goto('/');
+  await page.goto('/?city=mariscal');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   const loadMs = Date.now() - t0;
   console.log(`MARISCAL load ${loadMs} ms`);
