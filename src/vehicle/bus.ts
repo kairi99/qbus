@@ -12,7 +12,6 @@ export interface Spawn {
 
 const FRONT = [0, 1];
 const REAR = [2, 3];
-const REVERSE_LIMIT = 25 / 3.6;
 const COAST_BRAKE = 1.5;
 
 /**
@@ -107,7 +106,7 @@ export class BusPhysics {
       else if (speedFrac < 1) engine = p.engineForce * input.throttle;
     } else if (input.throttle < 0) {
       if (speed > 1) brake = p.brakeForce * -input.throttle;
-      else if (speed > -REVERSE_LIMIT) engine = p.reverseForce * input.throttle;
+      else if (speed > -p.reverseTopSpeedKmh / 3.6) engine = p.reverseForce * input.throttle;
     } else {
       brake = COAST_BRAKE;
     }
@@ -146,11 +145,12 @@ export class BusPhysics {
     this.body.setAngvel({ x: w.x, y: w.y * Math.exp(-40 * excess * dt), z: w.z }, true);
   }
 
-  /** Puts the bus upright at `spawn` (or where it is now, facing its current heading). */
+  /** Puts the bus upright at `spawn` (y = ground height there), or lifts it where it is. */
   reset(spawn?: Spawn): void {
-    const target = spawn ?? { ...this.body.translation(), y: this.body.translation().y + 2, heading: this.heading };
     const clearance = this.preset.body.height / 2 + 0.6;
-    this.body.setTranslation({ x: target.x, y: Math.max(target.y, clearance), z: target.z }, true);
+    const t = this.body.translation();
+    const target = spawn ?? { x: t.x, y: t.y - clearance + 2, z: t.z, heading: this.heading };
+    this.body.setTranslation({ x: target.x, y: target.y + clearance, z: target.z }, true);
     this.body.setRotation({ x: 0, y: Math.sin(target.heading / 2), z: 0, w: Math.cos(target.heading / 2) }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);

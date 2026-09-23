@@ -10,7 +10,7 @@ const busState = (page: Page) =>
 test('boots, drives, steers and toggles camera', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/?city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${shots}/01-start.png` });
@@ -34,7 +34,7 @@ test('boots, drives, steers and toggles camera', async ({ page }) => {
 });
 
 test('city views', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   const place = (x: number, z: number, heading: number) =>
     page.evaluate(([x, z, heading]) => (window as any).__qbus.bus.reset({ x, y: 0, z, heading }), [x, z, heading]);
@@ -58,7 +58,7 @@ test('city views', async ({ page }) => {
 });
 
 test('R rescues a bus stuck off-road back onto the street', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   // Drop the bus tilted in the middle of a block, among buildings.
   await page.evaluate(() => {

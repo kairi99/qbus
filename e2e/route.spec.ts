@@ -12,17 +12,18 @@ const parkAtActive = (page: Page) =>
   page.evaluate(() => {
     const { session, bus } = (window as any).__qbus;
     const { zone, stop } = session.game.activeStop;
-    bus.reset({ x: zone.x, y: 0, z: zone.z, heading: stop.heading });
+    const t = (window as any).__qbus.city.terrain;
+    bus.reset({ x: zone.x, y: t ? (window as any).__qbus.groundAt(zone) : 0, z: zone.z, heading: stop.heading });
   });
 
-test('a shift: start, pick up, drop off, results, restart', async ({ page }) => {
+for (const city of ['grid', 'mariscal']) test(`a shift on ${city}: start, pick up, drop off, results, restart`, async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
-  await page.waitForFunction(() => (window as any).__qbus?.session);
+  await page.goto(`/?city=${city}`);
+  await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   await page.waitForTimeout(800);
   await expect(page.locator('.gh-prompt')).toBeVisible();
-  await page.screenshot({ path: `${shots}/30-route-start.png` });
+  await page.screenshot({ path: `${shots}/30-route-start-${city}.png` });
 
   // Clock starts on throttle.
   // Hold until a frame has seen it: first frames can be slow while shaders compile.
@@ -43,27 +44,28 @@ test('a shift: start, pick up, drop off, results, restart', async ({ page }) => 
     if (served === 1) {
       expect((await state(page)).onBoard).toBeGreaterThan(0);
       await page.waitForTimeout(300);
-      await page.screenshot({ path: `${shots}/31-boarding.png` });
+      await page.screenshot({ path: `${shots}/31-boarding-${city}.png` });
     }
   }
   const s1 = await state(page);
   expect(s1.delivered).toBeGreaterThan(0);
   expect(s1.cents).toBeGreaterThanOrEqual(35 * s1.delivered);
-  await page.screenshot({ path: `${shots}/32-dropoff.png` });
+  await page.screenshot({ path: `${shots}/32-dropoff-${city}.png` });
 
   // Drive away a bit in chase view to show the arrow and marker.
   await page.evaluate(() => {
     const { session, bus } = (window as any).__qbus;
     const { zone, stop } = session.game.activeStop;
-    bus.reset({ x: zone.x - Math.cos(stop.heading) * 45, y: 0, z: zone.z + Math.sin(stop.heading) * 45, heading: stop.heading });
+    const p = { x: zone.x - Math.cos(stop.heading) * 45, z: zone.z + Math.sin(stop.heading) * 45 };
+    bus.reset({ ...p, y: (window as any).__qbus.groundAt(p), heading: stop.heading });
   });
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: `${shots}/33-arrow.png` });
+  await page.screenshot({ path: `${shots}/33-arrow-${city}.png` });
 
   // Time runs out -> results; Enter -> new shift.
   await page.evaluate(() => ((window as any).__qbus.session.game.timeLeft = 0.2));
   await expect(page.locator('.gh-results')).toBeVisible({ timeout: 20_000 });
-  await page.screenshot({ path: `${shots}/34-results.png` });
+  await page.screenshot({ path: `${shots}/34-results-${city}.png` });
   await page.keyboard.press('Enter');
   await expect(page.locator('.gh-results')).toBeHidden();
   const s2 = await state(page);

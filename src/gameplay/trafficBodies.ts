@@ -24,6 +24,7 @@ export class TrafficBodies {
   constructor(
     private world: RAPIER.World,
     private sim: TrafficSim,
+    private groundAt: (p: Vec2) => number = () => 0,
   ) {
     this.bodies = sim.cars.map((c) => {
       const body = world.createRigidBody(
@@ -60,9 +61,15 @@ export class TrafficBodies {
       let vz = (c.pos.z - t.z) / dt;
       const v = Math.hypot(vx, vz);
       if (v > MAX_SPEED) (vx *= MAX_SPEED / v), (vz *= MAX_SPEED / v);
-      b.setLinvel({ x: vx, y: b.linvel().y, z: vz }, true);
-      const turn = wrap(c.heading - heading(b));
-      b.setAngvel({ x: 0, y: Math.max(-6, Math.min(6, turn / dt)), z: 0 }, true);
+      // Ride on the ground: height and nose-up/down pitch come from the terrain under the car.
+      const f = { x: Math.cos(c.heading), z: -Math.sin(c.heading) };
+      const half = c.kind.length / 2;
+      const front = this.groundAt({ x: c.pos.x + f.x * half, z: c.pos.z + f.z * half });
+      const back = this.groundAt({ x: c.pos.x - f.x * half, z: c.pos.z - f.z * half });
+      const y = (front + back) / 2 + c.kind.height / 2 + 0.02;
+      b.setLinvel({ x: vx, y: (y - t.y) / dt, z: vz }, true);
+      b.setRotation(yawPitch(c.heading, Math.atan2(front - back, c.kind.length)), true);
+      b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     });
   }
 
@@ -98,6 +105,10 @@ export class TrafficBodies {
     return [...hit];
   }
 
+  isCar(c: RAPIER.Collider): boolean {
+    return this.byHandle.has(c.handle);
+  }
+
   /** Wrecked cars, for the sim to steer around. */
   obstacles(): Obstacle[] {
     const out: Obstacle[] = [];
@@ -125,7 +136,7 @@ export class TrafficBodies {
     this.generation[i] = c.generation;
     const b = this.bodies[i];
     b.setEnabled(true);
-    b.setTranslation({ x: c.pos.x, y: c.kind.height / 2 + 0.02, z: c.pos.z }, true);
+    b.setTranslation({ x: c.pos.x, y: this.groundAt(c.pos) + c.kind.height / 2 + 0.02, z: c.pos.z }, true);
     b.setRotation(yaw(c.heading), true);
     b.setLinvel({ x: 0, y: 0, z: 0 }, true);
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -149,6 +160,16 @@ export class TrafficBodies {
 
 function yaw(h: number) {
   return { x: 0, y: Math.sin(h / 2), z: 0, w: Math.cos(h / 2) };
+}
+
+/** Yaw about +Y, then pitch about the car's own +Z (right) axis: positive = nose up. */
+function yawPitch(h: number, pitch: number) {
+  const cy = Math.cos(h / 2);
+  const sy = Math.sin(h / 2);
+  const cp = Math.cos(pitch / 2);
+  const sp = Math.sin(pitch / 2);
+  // q = qYaw * qPitch with qYaw = (0, sy, 0, cy), qPitch = (0, 0, sp, cp)
+  return { x: sy * sp, y: sy * cp, z: cy * sp, w: cy * cp };
 }
 
 function heading(b: RAPIER.RigidBody): number {

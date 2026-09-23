@@ -40,7 +40,8 @@ describe('city + bus integration', () => {
     const { scene, props } = setup();
     const meshes: THREE.Object3D[] = [];
     scene.traverse((o) => (o as THREE.Mesh).isMesh && meshes.push(o));
-    expect(meshes.length).toBeLessThan(60);
+    // Merged into ~150 m tiles (buildings + three ground layers), never one mesh per object.
+    expect(meshes.length).toBeLessThan(150);
     expect(props.count).toBe(city.props.length);
   });
 

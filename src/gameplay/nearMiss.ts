@@ -10,8 +10,8 @@ const SCRAPE = 0.12;
 const COOLDOWN = 2;
 
 /**
- * Casts short rays out of both sides of the bus; an obstacle within reach at speed is a
- * near miss. Rapier-only so it runs headless in tests.
+ * Casts short rays out of both sides of the bus; a counted obstacle (traffic) within reach at
+ * speed is a near miss. Rapier-only so it runs headless in tests.
  */
 export class NearMissDetector {
   private recent = new Map<number, number>();
@@ -22,6 +22,8 @@ export class NearMissDetector {
   constructor(
     private world: RAPIER.World,
     private bus: BusPhysics,
+    /** Which colliders count (traffic, not scenery). Defaults to anything. */
+    private counts: (c: RAPIER.Collider) => boolean = () => true,
   ) {
     const L = bus.preset.body.length;
     this.offsets = [L / 2 - 1, 0, -L / 2 + 1];
@@ -41,9 +43,10 @@ export class NearMissDetector {
         // About 1.2 m off the ground: low enough to catch cars, high enough to skip curbs.
         const o = rotate(q, { x, y: this.rayY, z: side * (halfW + 0.02) });
         const origin = { x: t.x + o.x, y: t.y + o.y, z: t.z + o.z };
-        const hit = this.world.castRay(new RAPIER.Ray(origin, dir), REACH, true, undefined, undefined, undefined, this.bus.body);
+        const hit = this.world.castRay(new RAPIER.Ray(origin, dir), REACH, true, undefined, undefined, undefined, this.bus.body, this.counts);
         if (!hit || hit.timeOfImpact < SCRAPE) continue;
-        if (origin.y + dir.y * hit.timeOfImpact < 0.5) continue; // the ground while leaning
+        // The ground while leaning (or on a slope): anything near the bottom of the bus.
+        if (origin.y + dir.y * hit.timeOfImpact < t.y - this.bus.preset.body.height / 2 + 0.3) continue;
         const last = this.recent.get(hit.collider.handle);
         if (last !== undefined && this.clock - last < COOLDOWN) continue;
         this.recent.set(hit.collider.handle, this.clock);

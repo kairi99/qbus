@@ -5,3 +5,4 @@ playwright-report/
 e2e/screenshots/
 .claude/
 .serena/
+data/raw/*.tif

@@ -28,7 +28,15 @@ export class CameraRig {
     return this.mode;
   }
 
+  /** Dev/testing: fixed viewpoint instead of following the bus. */
+  debugView: { pos: THREE.Vector3Like; look: THREE.Vector3Like } | null = null;
+
   update(dt: number, bus: BusPhysics): void {
+    if (this.debugView) {
+      this.camera.position.copy(this.debugView.pos);
+      this.camera.lookAt(this.debugView.look.x, this.debugView.look.y, this.debugView.look.z);
+      return;
+    }
     const t = bus.body.translation();
     const q = bus.body.rotation();
     this.busPos.set(t.x, t.y, t.z);

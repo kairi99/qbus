@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Vec2 } from '../world/cityData';
+import { type CityData, type Vec2, terrainAt } from '../world/cityData';
 import { ZONE_RADIUS } from './routeGame';
 
 const PICKUP = new THREE.Color('#3dff8a');
@@ -16,7 +16,10 @@ export class StopMarker {
   private fillMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, opacity: 0.15, side: THREE.DoubleSide });
   private t = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private city: CityData,
+  ) {
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 140, 16, 1, true), this.beamMat);
     beam.position.y = 70; // taller than the tallest towers so it shows over rooftops
     const ring = new THREE.Mesh(new THREE.RingGeometry(ZONE_RADIUS - 0.5, ZONE_RADIUS, 40), this.ringMat);
@@ -30,7 +33,7 @@ export class StopMarker {
   }
 
   place(zone: Vec2, dropoff: boolean): void {
-    this.root.position.set(zone.x, 0, zone.z);
+    this.root.position.set(zone.x, terrainAt(this.city, zone), zone.z);
     const c = dropoff ? DROPOFF : PICKUP;
     for (const m of [this.beamMat, this.ringMat, this.fillMat]) m.color.copy(c);
   }

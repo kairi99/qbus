@@ -9,7 +9,7 @@ export class Hud {
   private fps: HTMLElement;
   private frameMs = 16;
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, attribution?: string) {
     root.innerHTML = `
       <div class="hud-speed"><span id="hud-kmh">0</span><small>km/h</small></div>
       <div class="hud-street" id="hud-street"></div>
@@ -18,6 +18,7 @@ export class Hud {
         <b>W/S</b> acelerar/frenar · <b>A/D</b> girar · <b>Espacio</b> freno de mano<br>
         <b>C</b> cámara · <b>H</b> pito · <b>R</b> volver a la calle
       </div>
+      ${attribution ? `<div class="hud-credit">${attribution}</div>` : ''}
       <div class="hud-flipped" id="hud-flipped">¡Ñaño, te viraste! Presiona <b>R</b></div>`;
     this.speed = root.querySelector('#hud-kmh')!;
     this.mode = root.querySelector('#hud-mode')!;

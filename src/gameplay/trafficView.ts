@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MeshBuilder, vertexColorMaterial } from '../world/meshBuilder';
-import { SIDEWALK_HEIGHT } from '../world/cityData';
+import { type CityData, groundHeightAt } from '../world/cityData';
 import { CAR_KINDS, type CarKind, type TrafficSim } from './traffic';
 import type { TrafficBodies } from './trafficBodies';
 import type { PedestrianSim } from './pedestrians';
@@ -113,6 +113,7 @@ export class PedestrianView {
   constructor(
     scene: THREE.Scene,
     private sim: PedestrianSim,
+    private city: CityData,
   ) {
     const mb = new MeshBuilder();
     mb.add(new THREE.BoxGeometry(0.36, 0.7, 0.22), at(0, 0.35, 0), '#3a3f4a');
@@ -136,7 +137,7 @@ export class PedestrianView {
     this.sim.peds.forEach((ped, i) => {
       const walking = ped.mode === 'walk' || ped.mode === 'cross';
       const bob = walking ? Math.abs(Math.sin(time * ped.speed * 5 + ped.look * 10)) * 0.05 : 0;
-      const y = (ped.onRoad ? 0.02 : SIDEWALK_HEIGHT) + ped.hop + bob;
+      const y = groundHeightAt(this.city, ped.pos) + 0.02 + ped.hop + bob;
       // Local +Z faces the walking direction: yaw = heading + 90°.
       this.q.setFromAxisAngle(this.up, ped.heading + Math.PI / 2).multiply(this.roll.setFromAxisAngle(this.fwd, ped.lean));
       this.m.compose(this.p.set(ped.pos.x, y, ped.pos.z), this.q, this.one);

@@ -125,6 +125,14 @@ describe('BusPhysics', () => {
     });
   });
 
+  it('reverses at a useful speed', () => {
+    const { bus, run } = setup();
+    run(idle, 1);
+    run({ ...idle, throttle: -1 }, 4);
+    expect(bus.speed * 3.6).toBeLessThan(-25);
+    expect(bus.speed * 3.6).toBeGreaterThan(-(preset.reverseTopSpeedKmh + 5));
+  });
+
   it('reset puts the bus back upright at spawn', () => {
     const { bus, run } = setup();
     run({ ...idle, throttle: 1, steer: 1 }, 3);

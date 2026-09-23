@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateCity } from '../src/world/procCity';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { TrafficSim, CAR_KINDS, RECYCLE_RADIUS, SPAWN_BEHIND_DIST, SPAWN_HIDDEN_DIST, type Obstacle, type TrafficEvent } from '../src/gameplay/traffic';
-import { distToPolyline } from '../src/world/geom';
+import { distToPolyline, pointInPolygon } from '../src/world/geom';
 import { forward, right, type Vec2 } from '../src/world/cityData';
 
 const city = generateCity({ seed: 42 });
@@ -160,3 +160,45 @@ function pose(sim: TrafficSim, i: number) {
   const c = sim.cars[i];
   return { pos: c.pos, heading: c.heading, length: c.kind.length, width: c.kind.width };
 }
+
+describe('TrafficSim on La Mariscal (real map, one-way streets)', () => {
+  const real: import('../src/world/cityData').CityData = JSON.parse(require('node:fs').readFileSync('data/cities/mariscal.json', 'utf8'));
+  const g = buildRoadGraph(real);
+  const hulls = g.nodes.filter((n) => n.hull).map((n) => n.hull!);
+  const run = (seed: number, seconds: number, each: (sim: TrafficSim) => void) => {
+    const sim = new TrafficSim(g, real, { seed, count: 50 });
+    sim.recycle({ pos: real.spawn.pos, heading: real.spawn.heading }, true);
+    for (let t = 0; t < seconds; t += DT) {
+      sim.step(DT, []);
+      each(sim);
+    }
+    return sim;
+  };
+
+  it.each([1, 2, 3])('keeps cars on the asphalt, apart, and moving (seed %i)', (seed) => {
+    let overlapsSeen = 0;
+    let offRoad = 0;
+    const last = new Map<number, Vec2>();
+    const moved = new Map<number, number>();
+    run(seed, 90, (sim) => {
+      const driving = sim.cars.filter((c) => c.state === 'driving');
+      for (let a = 0; a < driving.length; a++) {
+        const c = driving[a];
+        const off = Math.min(...real.roads.map((r) => distToPolyline(c.pos, r.points) - r.width / 2));
+        // Turn curves may clip a curb corner slightly; junction areas are paved.
+        if (off > 0.6 && !hulls.some((h) => pointInPolygon(c.pos, h))) offRoad++;
+        for (let b = a + 1; b < driving.length; b++) if (overlaps(pose(sim, c.id), pose(sim, driving[b].id))) overlapsSeen++;
+        const l = last.get(c.id);
+        // Relocations (map exits, recycling) jump; don't count those as driving.
+        if (l && Math.hypot(c.pos.x - l.x, c.pos.z - l.z) < 3) moved.set(c.id, (moved.get(c.id) ?? 0) + Math.hypot(c.pos.x - l.x, c.pos.z - l.z));
+        last.set(c.id, { ...c.pos });
+      }
+    });
+    expect(offRoad).toBe(0);
+    // Real-map geometry leaves rare brief touches (in game the two bodies just bump); the
+    // generated grid above is held to zero.
+    expect(overlapsSeen).toBeLessThanOrEqual(20);
+    const d = [...moved.values()].sort((a, b) => a - b);
+    expect(d[Math.floor(d.length * 0.1)]).toBeGreaterThan(150); // 90% of cars keep moving
+  }, 60_000);
+});

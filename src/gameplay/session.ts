@@ -14,7 +14,8 @@ import { StopMarker } from './stopMarker';
 import { NavArrow } from '../ui/arrow';
 import { GameHud, money, RATING_LABEL, TRICK_LABEL } from '../ui/gameHud';
 import { LINES, SPEAKER, type LineKind } from './lines';
-import { buildRoadGraph } from '../world/roadGraph';
+import type { RoadGraph } from '../world/roadGraph';
+import { groundHeightAt } from '../world/cityData';
 import { TrafficSim, type Obstacle } from './traffic';
 import { TrafficBodies } from './trafficBodies';
 import { PedestrianSim } from './pedestrians';
@@ -39,6 +40,7 @@ export interface SessionDeps {
   props: PropSystem;
   audio: BusAudio;
   hudRoot: HTMLElement;
+  graph: RoadGraph;
 }
 
 /**
@@ -71,21 +73,23 @@ export class GameSession {
   private sinceRecycle = 0;
 
   constructor(private d: SessionDeps) {
-    this.nearMiss = new NearMissDetector(d.world, d.bus);
     this.passengers = new PassengersView(d.scene, d.city);
-    this.marker = new StopMarker(d.scene);
+    this.marker = new StopMarker(d.scene, d.city);
     this.arrow = new NavArrow(d.scene);
     this.hud = new GameHud(d.hudRoot);
     const spawn = d.city.spawn.pos;
-    this.traffic = new TrafficSim(buildRoadGraph(d.city), d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 } });
+    const graph = d.graph;
+    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 } });
     this.traffic.setBudget(this.budget, spawn);
-    this.trafficBodies = new TrafficBodies(d.world, this.traffic);
+    this.trafficBodies = new TrafficBodies(d.world, this.traffic, (p) => groundHeightAt(d.city, p));
+    // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
+    this.nearMiss = new NearMissDetector(d.world, d.bus, (c) => this.trafficBodies.isCar(c));
     this.trafficView = new TrafficView(d.scene, this.traffic, this.trafficBodies);
-    this.peds = new PedestrianSim(d.city, { seed: 5, count: PEDESTRIANS });
+    this.peds = new PedestrianSim(d.city, graph, { seed: 5, count: PEDESTRIANS });
     const focus = { pos: spawn, heading: d.city.spawn.heading };
     this.traffic.recycle(focus, true);
     this.peds.recycle(focus, true);
-    this.pedView = new PedestrianView(d.scene, this.peds);
+    this.pedView = new PedestrianView(d.scene, this.peds, d.city);
     this.restart();
   }
 
@@ -111,7 +115,7 @@ export class GameSession {
     this.game.route.forEach((r, i) => this.passengers.showWaiting(r, this.game.waitingAt(i)));
     this.retarget();
     this.hud.showResults(null);
-    bus.reset({ x: city.spawn.pos.x, y: 0, z: city.spawn.pos.z, heading: city.spawn.heading });
+    bus.reset({ x: city.spawn.pos.x, y: groundHeightAt(city, city.spawn.pos), z: city.spawn.pos.z, heading: city.spawn.heading });
   }
 
   /** The player honked: traffic ahead hurries, people on the crosswalk run. */

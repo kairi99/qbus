@@ -1,4 +1,5 @@
 import { distToPolyline, pointInPolygon } from './geom';
+import { type Terrain, terrainHeight } from './terrain';
 
 /**
  * Engine-agnostic description of a drivable city. Both the procedural generator and the
@@ -16,7 +17,10 @@ export interface Road {
   kind: 'street' | 'avenue';
   points: Vec2[];
   width: number;
+  /** Total lanes (both directions, or all one way when `oneway`). */
   lanes: number;
+  /** Traffic only flows in the direction the points are listed. */
+  oneway?: boolean;
 }
 
 /** Raised pedestrian area (sidewalk around a block, or a park). */
@@ -70,13 +74,25 @@ export interface CityData {
   trees: Vec2[];
   spawn: { pos: Vec2; heading: number };
   bounds: { min: Vec2; max: Vec2 };
+  /** Real elevation (imported cities). Absent means flat ground at y = 0. */
+  terrain?: Terrain;
+  /** Green areas drawn on the ground (imported cities; generated ones use park blocks). */
+  parks?: Vec2[][];
+  /** Where the data came from, shown in credits. */
+  attribution?: string;
 }
 
 export const SIDEWALK_HEIGHT = 0.15;
 
-/** Height of the walkable surface at `p` (top of a sidewalk/park slab, else street level). */
+/** Height of the terrain (without sidewalk slabs) at `p`. */
+export function terrainAt(city: CityData, p: Vec2): number {
+  return city.terrain ? terrainHeight(city.terrain, p.x, p.z) : 0;
+}
+
+/** Height of the walkable surface at `p`: terrain plus the sidewalk/park slab if on one. */
 export function groundHeightAt(city: CityData, p: Vec2): number {
-  return city.blocks.some((b) => pointInPolygon(p, b.footprint)) ? SIDEWALK_HEIGHT : 0;
+  const slab = city.blocks.some((b) => pointInPolygon(p, b.footprint)) ? SIDEWALK_HEIGHT : 0;
+  return terrainAt(city, p) + slab;
 }
 
 /** Unit forward vector for a heading. */

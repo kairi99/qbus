@@ -7,9 +7,10 @@ import { BusModel } from './vehicle/busModel';
 import type { BusPreset } from './vehicle/busPreset';
 import { CameraRig } from './camera/cameraRig';
 import { setupSky, followSun } from './world/sky';
-import { generateCity } from './world/procCity';
 import { buildCity } from './world/cityBuilder';
-import { nearestRoad } from './world/cityData';
+import { groundHeightAt, nearestRoad } from './world/cityData';
+import { buildRoadGraph } from './world/roadGraph';
+import { loadCity } from './world/loadCity';
 import { snapToRoad } from './world/roadSnap';
 import { Hud } from './ui/hud';
 import { GameSession } from './gameplay/session';
@@ -27,7 +28,8 @@ async function main() {
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 2000);
+  // Far plane reaches the mountain ring around the largest imported city.
+  const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 6000);
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
@@ -38,14 +40,14 @@ async function main() {
 
   const sun = setupSky(scene);
   const world = createWorld();
-  const seed = Number(new URLSearchParams(location.search).get('seed') ?? 42);
-  const city = generateCity({ seed });
-  addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
-  const { props } = buildCity(city, world, scene);
+  const city = await loadCity(new URLSearchParams(location.search));
+  if (!city.terrain) addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
+  const graph = buildRoadGraph(city);
+  const { props } = buildCity(city, world, scene, graph);
 
   const preset = popular as BusPreset;
   const { pos, heading } = city.spawn;
-  const bus = new BusPhysics(world, preset, { x: pos.x, y: 0, z: pos.z, heading });
+  const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const model = new BusModel(preset);
   scene.add(model.root);
 
@@ -53,10 +55,10 @@ async function main() {
   const audio = new BusAudio();
   const rig = new CameraRig(camera);
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
-  const hud = new Hud(hudRoot);
-  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot });
+  const hud = new Hud(hudRoot, city.attribution);
+  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph });
 
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session };
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();
@@ -65,7 +67,8 @@ async function main() {
 
   renderer.setAnimationLoop((now) => {
     const raw = (now - last) / 1000;
-    const dt = Math.min(MAX_FRAME, raw);
+    // rAF timestamps can precede the first performance.now(): never let dt go negative.
+    const dt = Math.max(0, Math.min(MAX_FRAME, raw));
     last = now;
     if (raw > 0) fps += (1 / raw - fps) * 0.05;
     session.adaptTraffic(fps, dt);
@@ -75,7 +78,7 @@ async function main() {
       if (action === 'reset') {
         const t = bus.body.translation();
         const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading);
-        bus.reset({ x: s.pos.x, y: 0, z: s.pos.z, heading: s.heading });
+        bus.reset({ x: s.pos.x, y: groundHeightAt(city, s.pos), z: s.pos.z, heading: s.heading });
       }
       if (action === 'restart' && session.game.over) session.restart();
       if (action === 'horn') session.playerHonk();

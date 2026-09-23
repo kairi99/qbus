@@ -6,8 +6,13 @@ import { MeshBuilder } from './meshBuilder';
 // and a snowy volcano (Cotopaxi-style) far to the south.
 const HAZE = new THREE.Color('#dfe9ee');
 
-/** Distant low-poly mountain ring. Unfogged, but pre-blended toward the horizon color. */
-export function buildMountains(seed = 7): THREE.Mesh {
+/**
+ * Distant low-poly mountain ring. Unfogged, but pre-blended toward the horizon color.
+ * `cityRadius` (center to farthest corner) keeps the ring outside the playable area; the
+ * layout was tuned for a ~470 m radius and scales up from there, keeping peaks' apparent size.
+ */
+export function buildMountains(cityRadius = 470, seed = 7): THREE.Mesh {
+  const k = Math.max(1, cityRadius / 470);
   const rng = new Rng(seed);
   const mb = new MeshBuilder();
   const peaks: { angle: number; dist: number; radius: number; height: number; snow: boolean }[] = [];
@@ -17,13 +22,13 @@ export function buildMountains(seed = 7): THREE.Mesh {
     const west = Math.max(0, -Math.cos(angle));
     peaks.push({
       angle,
-      dist: rng.range(1250, 1450) - west * 120,
-      radius: rng.range(220, 340),
-      height: rng.range(110, 220) + west * 260,
+      dist: (rng.range(1250, 1450) - west * 120) * k,
+      radius: rng.range(220, 340) * k,
+      height: (rng.range(110, 220) + west * 260) * k,
       snow: false,
     });
   }
-  peaks.push({ angle: Math.PI / 2 + 0.25, dist: 1650, radius: 420, height: 560, snow: true }); // south (+z)
+  peaks.push({ angle: Math.PI / 2 + 0.25, dist: 1650 * k, radius: 420 * k, height: 560 * k, snow: true }); // south (+z)
 
   for (const p of peaks) {
     const geo = new THREE.ConeGeometry(p.radius, p.height, 7, p.snow ? 1 : 3);
@@ -37,7 +42,7 @@ export function buildMountains(seed = 7): THREE.Mesh {
       }
     }
     const m = new THREE.Matrix4().makeTranslation(Math.cos(p.angle) * p.dist, p.height / 2 - 5, Math.sin(p.angle) * p.dist);
-    const haze = Math.min(0.75, (p.dist - 900) / 1000);
+    const haze = Math.min(0.75, (p.dist / k - 900) / 1000);
     const rock = new THREE.Color('#6f8a6a').lerp(HAZE, haze);
     mb.add(geo, m, new THREE.Color('#7f9a78').lerp(HAZE, haze), rock);
     geo.dispose();

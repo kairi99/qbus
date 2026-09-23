@@ -11,6 +11,7 @@ export interface BusPreset {
   centerOfMassHeight: number;
   engineForce: number;
   reverseForce: number;
+  reverseTopSpeedKmh: number;
   brakeForce: number;
   handbrakeForce: number;
   topSpeedKmh: number;
