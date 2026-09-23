@@ -88,3 +88,24 @@ test('R rescues a bus stuck off-road back onto the street', async ({ page }) => 
   expect(Math.abs(Math.sin(2 * s.heading))).toBeLessThan(0.05);
   await page.screenshot({ path: `${shots}/20-after-reset.png` });
 });
+
+test('Q looks back at the bus while held', async ({ page }) => {
+  await page.goto('/?city=grid');
+  await page.waitForFunction(() => (window as any).__qbus);
+  const camAhead = () =>
+    page.evaluate(() => {
+      const { bus, rig } = (window as any).__qbus;
+      const t = bus.body.translation();
+      const h = bus.heading;
+      const c = rig.camera.position;
+      return (c.x - t.x) * Math.cos(h) - (c.z - t.z) * Math.sin(h);
+    });
+  await page.waitForTimeout(800);
+  expect(await camAhead()).toBeLessThan(0); // chase camera behind the bus
+  await page.keyboard.down('KeyQ');
+  await expect.poll(camAhead, { timeout: 10_000 }).toBeGreaterThan(8);
+  await page.screenshot({ path: `${shots}/21-look-back.png` });
+  await page.keyboard.up('KeyQ');
+  await expect.poll(camAhead, { timeout: 10_000 }).toBeLessThan(0);
+});
+

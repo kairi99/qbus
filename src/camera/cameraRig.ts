@@ -19,6 +19,7 @@ export class CameraRig {
   private headQuat = new THREE.Quaternion();
   private first = true;
   private lastBus = new THREE.Vector3(Infinity, 0, 0);
+  private lookingBack = false;
 
   constructor(readonly camera: THREE.PerspectiveCamera) {}
 
@@ -31,7 +32,8 @@ export class CameraRig {
   /** Dev/testing: fixed viewpoint instead of following the bus. */
   debugView: { pos: THREE.Vector3Like; look: THREE.Vector3Like } | null = null;
 
-  update(dt: number, bus: BusPhysics): void {
+  /** `lookBack`: camera in front of the bus, facing it (held button). Works from either mode. */
+  update(dt: number, bus: BusPhysics, lookBack = false): void {
     if (this.debugView) {
       this.camera.position.copy(this.debugView.pos);
       this.camera.lookAt(this.debugView.look.x, this.debugView.look.y, this.debugView.look.z);
@@ -46,6 +48,21 @@ export class CameraRig {
     this.busQuat.set(q.x, q.y, q.z, q.w);
     const h = bus.heading;
     this.flatFwd.set(Math.cos(h), 0, -Math.sin(h));
+
+    // Switching views cuts instantly rather than swinging the camera through the bus.
+    if (lookBack !== this.lookingBack) this.first = true;
+    this.lookingBack = lookBack;
+    if (lookBack) {
+      this.camera.fov = BASE_FOV;
+      this.camera.updateProjectionMatrix();
+      const ahead = bus.preset.body.length / 2 + 11;
+      this.camera.position.copy(this.busPos).addScaledVector(this.flatFwd, ahead);
+      this.camera.position.y += 4.5;
+      this.lookTarget.copy(this.busPos).addScaledVector(this.flatFwd, -bus.preset.body.length * 0.3);
+      this.lookTarget.y += 1;
+      this.camera.lookAt(this.lookTarget);
+      return;
+    }
 
     const speedFrac = Math.min(1, Math.abs(bus.speed) / (bus.preset.topSpeedKmh / 3.6));
     this.camera.fov = BASE_FOV + SPEED_FOV * speedFrac;

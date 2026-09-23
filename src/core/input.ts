@@ -29,6 +29,11 @@ export class Input {
   }
 
   /** True while the horn key/button is held. */
+  /** True while the look-back key/button is held (Q, or LB on a gamepad). */
+  get lookBackHeld(): boolean {
+    return this.keys.has('KeyQ') || !!this.pad()?.buttons[4]?.pressed;
+  }
+
   get hornHeld(): boolean {
     return this.keys.has('KeyH') || !!this.pad()?.buttons[10]?.pressed;
   }

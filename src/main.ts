@@ -74,7 +74,7 @@ async function main() {
     session.adaptTraffic(fps, dt);
 
     for (const action of input.consumeActions()) {
-      if (action === 'camera') model.setCockpitView(rig.toggle() === 'cockpit');
+      if (action === 'camera') rig.toggle();
       if (action === 'reset') {
         const t = bus.body.translation();
         const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading);
@@ -101,7 +101,10 @@ async function main() {
 
     props.sync();
     model.sync(bus);
-    rig.update(dt, bus);
+    const lookBack = input.lookBackHeld;
+    // Looking back from the driver's seat needs the bus's outside to be there to look at.
+    model.setCockpitView(rig.mode === 'cockpit' && !lookBack);
+    rig.update(dt, bus, lookBack);
     followSun(sun, model.root.position);
     session.frame(dt, camera, rig.mode);
     const speedFrac = Math.abs(bus.speed) / (preset.topSpeedKmh / 3.6);
