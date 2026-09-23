@@ -4,6 +4,7 @@ import { right } from '../cityData';
 import { distToPolyline, pointInPolygon, polygonToPolylineDistance } from '../geom';
 import { type Terrain, smoothHeights } from '../terrain';
 import { buildRoadGraph } from '../roadGraph';
+import { importLines } from './lines';
 
 /** Subset of the Overpass JSON (`out geom;`) we use. */
 export interface OsmJson {
@@ -17,7 +18,7 @@ export interface OsmElement {
   lon?: number;
   tags?: Record<string, string>;
   geometry?: { lat: number; lon: number }[];
-  members?: { type: string; role: string; geometry?: { lat: number; lon: number }[] }[];
+  members?: { type: string; ref?: number; role: string; geometry?: { lat: number; lon: number }[] }[];
 }
 
 /** Elevation raster in lat/lon (row 0 = north edge). */
@@ -81,7 +82,7 @@ export function makeProjection(bbox: [number, number, number, number]) {
 }
 
 /** Converts Overpass data + a DEM into a drivable CityData. */
-export function importOsm(osm: OsmJson, dem: Dem, opts: ImportOptions): CityData {
+export function importOsm(osm: OsmJson, dem: Dem, opts: ImportOptions, routesOsm?: OsmJson): CityData {
   const rng = new Rng(opts.seed ?? 1);
   const proj = makeProjection(opts.bbox);
   const sw = proj.toXZ(opts.bbox[0], opts.bbox[1]);
@@ -128,6 +129,7 @@ export function importOsm(osm: OsmJson, dem: Dem, opts: ImportOptions): CityData
     bounds,
     terrain,
     parks,
+    lines: routesOsm ? importLines(routesOsm, proj.toXZ, stops) : undefined,
     attribution: '© OpenStreetMap contributors (ODbL); elevation: Copernicus GLO-30 DEM',
   };
 }

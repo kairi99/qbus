@@ -14,7 +14,7 @@ describe.each([
 ])('routesFor (%s)', (_, city, minRoutes) => {
   const routes = routesFor(city);
 
-  it('offers a neighborhood circuit plus corridor routes', () => {
+  it('offers a neighborhood circuit plus corridor or real-line routes', () => {
     expect(routes[0].id).toBe('circuito');
     expect(routes.length).toBeGreaterThanOrEqual(minRoutes);
     expect(new Set(routes.map((r) => r.id)).size).toBe(routes.length);
@@ -58,3 +58,14 @@ describe.each([
     }
   });
 });
+
+describe('route pruning', () => {
+  it('drops the dead-end stop itself, not the healthy stops after it', () => {
+    const routes = routesFor(mariscal);
+    // Catar 061 has one unreachable stop at its end; the line must survive with the rest.
+    const catar = routes.find((r) => r.line === 'CATAR-061');
+    expect(catar, 'Catar 061 kept').toBeDefined();
+    expect(catar!.stops.length).toBeGreaterThanOrEqual(15);
+  });
+});
+

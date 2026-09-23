@@ -43,3 +43,17 @@ test('La Mariscal: loads real streets with hills, bus drives, traffic runs', asy
   await expect.poll(async () => (await bus(page)).wheels, { timeout: 20_000 }).toBe(4);
   expect(errors).toEqual([]);
 });
+
+test('La Mariscal: a real bus line route plays with GPS guidance', async ({ page }) => {
+  await page.goto('/?play=1&city=mariscal&route=linea-catar-061');
+  await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  const r = await page.evaluate(() => {
+    const q = (window as any).__qbus;
+    return { line: q.route.line, stops: q.session.game.route.length };
+  });
+  expect(r.line).toBe('CATAR-061');
+  expect(r.stops).toBeGreaterThanOrEqual(15);
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.session.path?.points.length ?? 0), { timeout: 20_000 }).toBeGreaterThan(1);
+  await page.screenshot({ path: `${shots}/52-mariscal-real-line.png` });
+});
+

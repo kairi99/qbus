@@ -80,6 +80,8 @@ export interface CityData {
   parks?: Vec2[][];
   /** Where the data came from, shown in credits. */
   attribution?: string;
+  /** Real bus lines through an imported zone. */
+  lines?: import('./osm/lines').BusLine[];
 }
 
 export const SIDEWALK_HEIGHT = 0.15;

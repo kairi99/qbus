@@ -14,6 +14,8 @@ export interface RouteDef {
   stops: string[];
   /** Avenue the route runs along, for corridor routes. */
   corridor?: string;
+  /** OSM ref of the real bus line this follows, for real-line routes. */
+  line?: string;
   lengthM: number;
 }
 
@@ -23,6 +25,8 @@ const CORRIDOR_REACH = 25;
 const MIN_CORRIDOR_STOPS = 5;
 const MAX_CORRIDOR_STOPS = 10;
 const MAX_ROUTES = 5;
+/** Real lines shown in the menu (after the neighborhood circuit). */
+const MAX_LINES = 6;
 
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
 
@@ -33,12 +37,33 @@ const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
 export function routesFor(city: CityData, graph: RoadGraph = buildRoadGraph(city)): RouteDef[] {
   const legal = new LegalLegs(city, graph);
   const routes: RouteDef[] = [circuit(city, legal)];
+  // Real bus lines, where the zone has them (their stretch through it, both directions).
+  const lines = (city.lines ?? [])
+    .map((l) => realLine(city, l, legal))
+    .filter((r): r is RouteDef => !!r)
+    .slice(0, MAX_LINES);
+  if (lines.length) return routes.concat(lines);
   const avenues = [...new Set(city.roads.filter((r) => r.kind === 'avenue').map((r) => r.name))];
   const corridors = avenues
     .map((name) => corridor(city, name, legal))
     .filter((r): r is RouteDef => !!r)
     .sort((a, b) => b.stops.length - a.stops.length);
   return routes.concat(corridors.slice(0, MAX_ROUTES - 1));
+}
+
+function realLine(city: CityData, l: import('../world/osm/lines').BusLine, legal: LegalLegs): RouteDef | null {
+  const byId = new Map(city.stops.map((s) => [s.id, s]));
+  const stops = legal.prune(l.stops.map((id) => byId.get(id)!).filter(Boolean));
+  if (stops.length < MIN_CORRIDOR_STOPS) return null;
+  const also = l.alsoServedBy.length ? ` · también ${l.alsoServedBy.slice(0, 2).join(', ')}${l.alsoServedBy.length > 2 ? '…' : ''}` : '';
+  return {
+    id: `linea-${l.ref.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    name: l.name,
+    blurb: `Su tramo por la zona (${l.endpoints})${also}`,
+    stops: stops.map((s) => s.id),
+    line: l.ref,
+    lengthM: legalLength(stops, legal),
+  };
 }
 
 /** A leg is acceptable when it can be driven legally without a silly detour. */
@@ -81,11 +106,15 @@ class LegalLegs {
   /** Drops stops until every leg of the loop (including last → first) is acceptable. */
   prune(stops: Stop[]): Stop[] {
     const list = stops.filter((s) => this.usable(s));
+    const badLegs = (l: Stop[]) => l.filter((st, i) => !this.ok(st, l[(i + 1) % l.length])).length;
     for (let guard = 0; guard < 40 && list.length >= 3; guard++) {
-      const bad = list.findIndex((s, i) => !this.ok(s, list[(i + 1) % list.length]));
+      const bad = list.findIndex((st, i) => !this.ok(st, list[(i + 1) % list.length]));
       if (bad < 0) break;
-      // Remove whichever end of the bad leg makes the smaller loop.
-      list.splice((bad + 1) % list.length, 1);
+      // Drop whichever end of the bad leg leaves fewer bad legs: a dead-end stop poisons both
+      // the leg into it and the leg out of it, so removing the other end would just move on.
+      const next = (bad + 1) % list.length;
+      const without = (i: number) => list.filter((_, j) => j !== i);
+      list.splice(badLegs(without(bad)) <= badLegs(without(next)) ? bad : next, 1);
     }
     return list;
   }

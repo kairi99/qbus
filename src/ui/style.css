@@ -658,6 +658,8 @@ body {
 }
 
 .mn-map {
+  position: sticky;
+  top: 16px;
   width: 100%;
   aspect-ratio: 1;
   border: 3px solid var(--mn-ink);
