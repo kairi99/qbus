@@ -98,4 +98,17 @@ describe('city + bus integration', () => {
     const t = body!.translation();
     expect(Math.hypot(t.x - stand.pos.x, t.z - stand.pos.z)).toBeGreaterThan(1);
   });
+
+  it('reports knocked props once each', () => {
+    const { bus, run, props } = setup();
+    const stand = city.props.find((p) => p.kind === 'fruitStand' && p.heading === 0 && nearestRoad(city, { x: p.pos.x, z: p.pos.z - 4 }) && !city.stops.some((s) => Math.hypot(s.pos.x - p.pos.x, s.pos.z - p.pos.z) < 25))!;
+    run({ ...go, throttle: 0 }, 0.2);
+    expect(props.consumeKnocked()).toBe(0);
+    bus.reset({ x: stand.pos.x - 16, y: 0, z: stand.pos.z, heading: 0 });
+    let total = 0;
+    run(go, 3, () => (total += props.consumeKnocked()));
+    expect(total).toBeGreaterThanOrEqual(1);
+    run({ ...go, throttle: 0 }, 1, () => (total += props.consumeKnocked() * 1000));
+    expect(total).toBeLessThan(1000);
+  });
 });

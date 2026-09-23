@@ -57,7 +57,7 @@ function fruitStandSpec(): KindSpec {
  * bus hits one; each kind renders as one InstancedMesh.
  */
 export class PropSystem {
-  private groups: { mesh: THREE.InstancedMesh; bodies: RAPIER.RigidBody[] }[] = [];
+  private groups: { mesh: THREE.InstancedMesh; bodies: RAPIER.RigidBody[]; origins: THREE.Vector3[]; knocked: boolean[] }[] = [];
   private m = new THREE.Matrix4();
   private p = new THREE.Vector3();
   private q = new THREE.Quaternion();
@@ -87,7 +87,8 @@ export class PropSystem {
         world.createCollider(spec.collider().setMass(spec.mass).setFriction(0.7), body);
         return body;
       });
-      this.groups.push({ mesh, bodies });
+      const origins = bodies.map((b) => new THREE.Vector3().copy(b.translation()));
+      this.groups.push({ mesh, bodies, origins, knocked: bodies.map(() => false) });
       scene.add(mesh);
     }
     this.sync(true);
@@ -95,6 +96,23 @@ export class PropSystem {
 
   get count(): number {
     return this.groups.reduce((n, g) => n + g.bodies.length, 0);
+  }
+
+  /** Number of props that have been shoved off their spot since the last call. */
+  consumeKnocked(): number {
+    let n = 0;
+    for (const g of this.groups) {
+      g.bodies.forEach((b, i) => {
+        if (g.knocked[i] || b.isSleeping()) return;
+        const t = b.translation();
+        const o = g.origins[i];
+        if (Math.hypot(t.x - o.x, t.y - o.y, t.z - o.z) > 0.4) {
+          g.knocked[i] = true;
+          n++;
+        }
+      });
+    }
+    return n;
   }
 
   /** Copies awake bodies into instance matrices (all of them when `force`). */

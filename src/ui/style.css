@@ -74,3 +74,270 @@ body {
   font-weight: 800;
   color: #ffd23f;
 }
+
+/* ---- Route HUD ----------------------------------------------------------
+   One loud element: the next-stop board, styled like the amber LED
+   destination sign on Quito buses. Everything else stays plain white. */
+
+.gh-top {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.gh-timer {
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-timer.low {
+  color: #ff5a4a;
+  animation: gh-tick 1s steps(2) infinite;
+}
+
+@keyframes gh-tick {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+.gh-board {
+  min-width: 340px;
+  padding: 8px 16px 7px;
+  background: #0c0a06;
+  border: 3px solid #2a2418;
+  border-radius: 4px;
+  box-shadow: inset 0 0 12px rgb(0 0 0 / 80%);
+  color: #ffb000;
+  font-family: 'DejaVu Sans Mono', 'Consolas', monospace;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgb(255 160 0 / 75%);
+  /* LED dot grid over the text */
+  background-image: radial-gradient(rgb(255 255 255 / 4%) 1px, transparent 1.2px);
+  background-size: 4px 4px;
+}
+
+.gh-board-stop {
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.gh-board-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.gh-board.dropoff .gh-board-meta span:last-child {
+  color: #ffe36b;
+  animation: gh-blink 0.9s steps(2) infinite;
+}
+
+@keyframes gh-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.gh-feed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.gh-pop {
+  font-size: 22px;
+  font-weight: 800;
+  animation: gh-pop 1.8s ease-out forwards;
+}
+
+.gh-pop.money {
+  color: #9dff7a;
+}
+
+.gh-pop.time {
+  color: #7ad7ff;
+}
+
+.gh-pop.bad {
+  color: #ff8a7a;
+}
+
+@keyframes gh-pop {
+  0% {
+    transform: translateY(8px) scale(0.9);
+    opacity: 0;
+  }
+  12% {
+    transform: none;
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+}
+
+.gh-money {
+  position: absolute;
+  left: 24px;
+  top: 54px;
+  font-size: 34px;
+  font-weight: 800;
+  color: #9dff7a;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-riders {
+  position: absolute;
+  right: 30px;
+  top: 68px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.gh-combo {
+  position: absolute;
+  right: 30px;
+  top: 40%;
+  font-size: 40px;
+  font-weight: 900;
+  color: #ffd23f;
+  opacity: 0;
+  transform: rotate(-4deg);
+  transition: opacity 0.2s;
+}
+
+.gh-combo.on {
+  opacity: 1;
+}
+
+.gh-speech {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%) translateY(10px);
+  max-width: 460px;
+  padding: 10px 18px 12px;
+  background: #fff;
+  color: #1b1b1b;
+  text-shadow: none;
+  border-radius: 18px;
+  font-size: 22px;
+  font-weight: 700;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+}
+
+.gh-speech::after {
+  content: '';
+  position: absolute;
+  left: 40px;
+  bottom: -12px;
+  border: 12px solid transparent;
+  border-top-color: #fff;
+  border-bottom: 0;
+}
+
+.gh-speech small {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b6b6b;
+}
+
+.gh-speech.on {
+  opacity: 1;
+  transform: translateX(-50%);
+}
+
+.gh-prompt {
+  position: absolute;
+  top: 46%;
+  width: 100%;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.gh-results {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(10 20 30 / 45%);
+  pointer-events: auto;
+}
+
+.gh-results[hidden] {
+  display: none;
+}
+
+.gh-results-card {
+  min-width: 320px;
+  padding: 24px 32px;
+  background: #0c0a06;
+  border: 3px solid #2a2418;
+  border-radius: 6px;
+  color: #ffb000;
+  text-shadow: 0 0 6px rgb(255 160 0 / 55%);
+  font-family: 'DejaVu Sans Mono', 'Consolas', monospace;
+  text-align: center;
+}
+
+.gh-results-card h2 {
+  margin: 0 0 8px;
+  font-size: 26px;
+}
+
+.gh-results-total {
+  font-size: 56px;
+  font-weight: 800;
+  color: #9dff7a;
+  text-shadow: 0 0 10px rgb(120 255 90 / 45%);
+}
+
+.gh-results-card dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 24px;
+  margin: 16px 0;
+  text-align: left;
+}
+
+.gh-results-card dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+}
+
+.gh-results-card p {
+  margin: 0;
+  font-size: 15px;
+  color: #d9c79a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-timer.low,
+  .gh-board.dropoff .gh-board-meta span:last-child,
+  .gh-pop {
+    animation: none;
+  }
+}

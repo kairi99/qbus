@@ -18,6 +18,7 @@ export class CameraRig {
   private tmp = new THREE.Vector3();
   private headQuat = new THREE.Quaternion();
   private first = true;
+  private lastBus = new THREE.Vector3(Infinity, 0, 0);
 
   constructor(readonly camera: THREE.PerspectiveCamera) {}
 
@@ -31,6 +32,9 @@ export class CameraRig {
     const t = bus.body.translation();
     const q = bus.body.rotation();
     this.busPos.set(t.x, t.y, t.z);
+    // A teleport (reset, restart) snaps the camera instead of gliding through buildings.
+    if (this.busPos.distanceTo(this.lastBus) > 15) this.first = true;
+    this.lastBus.copy(this.busPos);
     this.busQuat.set(q.x, q.y, q.z, q.w);
     const h = bus.heading;
     this.flatFwd.set(Math.cos(h), 0, -Math.sin(h));

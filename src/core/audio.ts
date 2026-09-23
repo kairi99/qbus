@@ -8,6 +8,7 @@ export class BusAudio {
   private hornGain!: GainNode;
   private engineOsc!: OscillatorNode;
   private engineGain!: GainNode;
+  private master!: GainNode;
 
   constructor(target: Window = window) {
     const start = () => {
@@ -25,6 +26,7 @@ export class BusAudio {
     const master = ctx.createGain();
     master.gain.value = 0.35;
     master.connect(ctx.destination);
+    this.master = master;
 
     this.hornGain = ctx.createGain();
     this.hornGain.gain.value = 0;
@@ -48,6 +50,27 @@ export class BusAudio {
     this.engineOsc.type = 'sawtooth';
     this.engineOsc.connect(this.engineGain);
     this.engineOsc.start();
+  }
+
+  /** Short synthesized cue: coin for money, chime for bonus time, thud for crashes. */
+  cue(kind: 'coin' | 'time' | 'crash'): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const notes: [number, number][] = kind === 'coin' ? [[988, 0], [1319, 0.07]] : kind === 'time' ? [[660, 0], [880, 0.09], [1175, 0.18]] : [[70, 0]];
+    for (const [freq, at] of notes) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = kind === 'crash' ? 'triangle' : 'square';
+      o.frequency.setValueAtTime(freq, now + at);
+      if (kind === 'crash') o.frequency.exponentialRampToValueAtTime(35, now + 0.25);
+      g.gain.setValueAtTime(0, now + at);
+      g.gain.linearRampToValueAtTime(kind === 'crash' ? 0.6 : 0.12, now + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, now + at + (kind === 'crash' ? 0.3 : 0.16));
+      o.connect(g).connect(this.master);
+      o.start(now + at);
+      o.stop(now + at + 0.35);
+    }
   }
 
   update(hornHeld: boolean, speedFrac: number, throttle: number): void {

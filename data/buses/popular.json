@@ -2,6 +2,7 @@
   "id": "popular",
   "name": "Popular Azul",
   "body": { "length": 11, "width": 2.5, "height": 3.0, "color": "#2f6fd6", "stripe": "#f2c230", "roof": "#e8e8e8" },
+  "capacity": 40,
   "mass": 1500,
   "centerOfMassHeight": 0.4,
   "engineForce": 3600,

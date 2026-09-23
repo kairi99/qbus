@@ -4,6 +4,8 @@ export interface BusPreset {
   id: string;
   name: string;
   body: { length: number; width: number; height: number; color: string; stripe: string; roof: string };
+  /** Passengers that fit on board. */
+  capacity: number;
   mass: number;
   /** Height of the center of mass above the chassis center (m). Higher = more comic body roll. */
   centerOfMassHeight: number;

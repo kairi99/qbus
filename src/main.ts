@@ -12,6 +12,7 @@ import { buildCity } from './world/cityBuilder';
 import { nearestRoad } from './world/cityData';
 import { snapToRoad } from './world/roadSnap';
 import { Hud } from './ui/hud';
+import { GameSession } from './gameplay/session';
 import popular from '../data/buses/popular.json';
 
 const MAX_FRAME = 0.1;
@@ -51,9 +52,11 @@ async function main() {
   const input = new Input();
   const audio = new BusAudio();
   const rig = new CameraRig(camera);
-  const hud = new Hud(document.querySelector('#hud')!);
+  const hudRoot = document.querySelector<HTMLElement>('#hud')!;
+  const hud = new Hud(hudRoot);
+  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot });
 
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene };
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session };
 
   let acc = 0;
   let last = performance.now();
@@ -70,13 +73,16 @@ async function main() {
         const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading);
         bus.reset({ x: s.pos.x, y: 0, z: s.pos.z, heading: s.heading });
       }
+      if (action === 'restart' && session.game.over) session.restart();
     }
 
     const drive = input.drive();
+    if (drive.throttle > 0) session.start();
     acc += dt;
     while (acc >= PHYSICS_STEP) {
       bus.update(drive, PHYSICS_STEP);
       world.step();
+      session.physicsStep(PHYSICS_STEP);
       acc -= PHYSICS_STEP;
     }
 
@@ -88,6 +94,7 @@ async function main() {
     model.sync(bus);
     rig.update(dt, bus);
     followSun(sun, model.root.position);
+    session.frame(dt, camera, rig.mode);
     const speedFrac = Math.abs(bus.speed) / (preset.topSpeedKmh / 3.6);
     audio.update(input.hornHeld, speedFrac, drive.throttle);
     const t = bus.body.translation();
