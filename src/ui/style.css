@@ -288,6 +288,8 @@ body {
 .gh-results {
   position: absolute;
   inset: 0;
+  /* Over the minimap and gauges, which come later in the HUD. */
+  z-index: 2;
   display: grid;
   place-items: center;
   background: rgb(10 20 30 / 45%);
@@ -984,40 +986,47 @@ body {
   box-shadow: 0 2px 8px rgb(0 0 0 / 40%);
 }
 
-/* Right thumb: pedals at the bottom, nitro and handbrake over them. */
+/* Right thumb: pedals at the bottom, nitro and handbrake over them, horn and look-back to
+   their left. Sized off the screen height so the column fits under the top buttons. */
+.tc {
+  --tc-w: 80px;
+  --tc-gap: 8px;
+  --tc-pedal: min(120px, 34vh);
+}
+
 .tc-btn {
   position: absolute;
-  width: 84px;
+  width: var(--tc-w);
   border-radius: 14px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .tc-gas {
-  right: 14px;
-  bottom: 14px;
-  height: 128px;
+  right: 10px;
+  bottom: 10px;
+  height: var(--tc-pedal);
   background: rgb(46 125 79 / 55%);
 }
 
 .tc-brake {
-  right: 108px;
-  bottom: 14px;
-  height: 96px;
+  right: calc(10px + var(--tc-w) + var(--tc-gap));
+  bottom: 10px;
+  height: calc(var(--tc-pedal) * 0.75);
   background: rgb(190 50 40 / 50%);
 }
 
 .tc-nitro {
-  right: 14px;
-  bottom: 152px;
-  height: 58px;
+  right: 10px;
+  bottom: calc(10px + var(--tc-pedal) + var(--tc-gap));
+  height: min(52px, 15vh);
   background: rgb(31 95 191 / 55%);
 }
 
 .tc-hand {
-  right: 108px;
-  bottom: 120px;
-  height: 58px;
+  right: calc(10px + var(--tc-w) + var(--tc-gap));
+  bottom: calc(10px + var(--tc-pedal) * 0.75 + var(--tc-gap));
+  height: min(52px, 15vh);
 }
 
 .tc-top {
@@ -1029,11 +1038,25 @@ body {
 }
 
 .tc-small {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  font-size: 18px;
+  font-size: 16px;
   padding: 0;
+}
+
+.tc-horn,
+.tc-look {
+  position: absolute;
+  right: calc(10px + 2 * (var(--tc-w) + var(--tc-gap)));
+}
+
+.tc-horn {
+  bottom: 10px;
+}
+
+.tc-look {
+  bottom: 58px;
 }
 
 /* Phones held upright: driving needs it sideways. */
@@ -1057,72 +1080,274 @@ body {
   }
 }
 
-/* The HUD around the controls: the minimap and nitro gauge go up under the buttons,
-   the speed between the thumbs. */
-.touch .hud-speed {
+/* The HUD on a touch screen: the minimap in the top-left corner with the money beside it,
+   the stop board up the middle, the street over the speed, and nothing else on the right
+   but the controls. Talk, combos and popups stay small, between the thumbs. */
+.touch .gh-minimap {
+  top: 8px;
+  left: 8px;
   right: auto;
-  left: 50%;
-  bottom: 6px;
-  transform: translateX(-50%);
-  font-size: 40px;
+  bottom: auto;
+  width: 88px !important;
+  height: 88px !important;
 }
 
-.touch .hud-speed small {
-  font-size: 14px;
-}
-
-.touch .hud-mode {
+.touch .gh-nitro,
+.touch .hud-mode,
+.touch .gh-route {
   display: none;
 }
 
-.touch .gh-minimap {
-  top: 60px;
-  right: 14px;
-  bottom: auto;
-  width: 120px !important;
-  height: 120px !important;
+.touch .gh-money {
+  left: 104px;
+  top: 8px;
+  font-size: 22px;
 }
 
-.touch .gh-nitro {
-  top: 60px;
-  right: 142px;
-  bottom: auto;
-  width: 16px;
-  height: 120px;
-}
-
-.touch .gh-nitro span {
+.touch .gh-free .gh-money {
   display: none;
 }
 
 .touch .gh-riders {
+  left: 104px;
   right: auto;
-  left: 16px;
-  top: 92px;
-}
-
-.touch .gh-route {
-  left: 16px;
-  top: 70px;
+  top: 36px;
   font-size: 13px;
 }
 
-.touch .gh-free .gh-route {
-  top: 40px;
+.touch .gh-combo {
+  left: 104px;
+  right: auto;
+  top: 56px;
+  font-size: 16px;
+  transform: none;
 }
 
-/* Long stop names wrap instead of running under the buttons. */
 .touch .gh-top {
-  max-width: 40%;
+  top: 6px;
+  max-width: 40vw;
+  gap: 2px;
+}
+
+.touch .gh-timer {
+  font-size: 26px;
+}
+
+.touch .gh-board {
+  min-width: 0;
+  max-width: 40vw;
+  padding: 3px 8px;
+  border-width: 2px;
 }
 
 .touch .gh-board-stop {
-  white-space: normal;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.touch .gh-combo {
-  right: 50%;
-  transform: translateX(50%) rotate(-4deg);
+.touch .gh-board-meta {
+  gap: 10px;
+  font-size: 10px;
+}
+
+.touch .gh-pop {
+  font-size: 13px;
+}
+
+.touch .gh-feed .gh-pop:nth-child(n + 3) {
+  display: none;
+}
+
+.touch .gh-speech {
+  bottom: 62px;
+  /* Between the steering wheel and the horn/look-back buttons. */
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100vw - 464px);
+  padding: 5px 10px 6px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.touch .gh-speech::after {
+  left: 18px;
+  bottom: -8px;
+  border-width: 8px;
+}
+
+.touch .gh-speech small {
+  font-size: 10px;
+}
+
+.touch .gh-prompt {
+  top: 42%;
+  left: 50%;
+  width: auto;
+  max-width: 36vw;
+  transform: translateX(-50%);
+  font-size: 15px;
+}
+
+.touch .hud-street {
+  top: auto;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  max-width: 30vw;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.touch .hud-speed {
+  right: auto;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 30px;
+}
+
+.touch .hud-speed small {
+  font-size: 12px;
+}
+
+.touch .hud-credit {
+  right: auto;
+  left: 8px;
+  bottom: 2px;
+  font-size: 9px;
+}
+
+.touch .hud-flipped {
+  top: 30%;
+  font-size: 20px;
+}
+
+/* The nitro tank fills the Nitro button from the bottom; the line is the half a burst needs. */
+.touch .tc-nitro {
+  background: linear-gradient(to top, rgb(63 169 255 / 75%) calc(var(--nitro, 0) * 100%), rgb(20 20 20 / 35%) 0);
+}
+
+.touch .tc-nitro::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  /* Ticks at the edges only, clear of the label. */
+  background: linear-gradient(to right, #fff 10px, transparent 10px calc(100% - 10px), #fff calc(100% - 10px));
+}
+
+[data-nitro='empty'] .tc-nitro {
+  filter: grayscale(0.8) brightness(0.8);
+}
+
+[data-nitro='full'] .tc-nitro {
+  border-color: #3fa9ff;
+}
+
+[data-nitro='burn'] .tc-nitro {
+  background: linear-gradient(to top, #ff7a1a, #ffd23f);
+  box-shadow: 0 0 14px #3fa9ff;
+}
+
+/* Small screens (phones on their side): the menus a size down, so the bar at the bottom
+   and the cards leave room for each other. */
+@media (max-height: 520px) {
+  .mn main {
+    padding: 12px 16px 80px;
+  }
+
+  .mn-head {
+    margin-bottom: 10px;
+  }
+
+  .mn-led-wide {
+    font-size: 18px;
+    padding: 6px 14px;
+  }
+
+  .mn-back {
+    width: 38px;
+    height: 38px;
+    font-size: 22px;
+  }
+
+  .mn-step {
+    margin-bottom: 14px;
+  }
+
+  .mn-step h2 {
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+
+  .mn-row {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+
+  .mn-card {
+    padding: 8px 12px;
+    gap: 3px;
+  }
+
+  .mn-card-name {
+    font-size: 17px;
+  }
+
+  .mn-card-blurb {
+    font-size: 12px;
+  }
+
+  .mn-bus-art {
+    height: 48px;
+  }
+
+  .mn-stats {
+    font-size: 11px;
+  }
+
+  .mn-routes {
+    grid-template-columns: 1fr 220px;
+  }
+
+  .mn-placard {
+    padding: 6px 10px 8px;
+    border-top-width: 6px;
+  }
+
+  .mn-placard-name {
+    font-size: 16px;
+  }
+
+  .mn-placard-stops {
+    font-size: 12px;
+  }
+
+  .mn-placard-meta {
+    font-size: 11px;
+  }
+
+  .mn-bar {
+    gap: 12px;
+    padding: 6px 12px;
+  }
+
+  .mn-summary {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mn-bar .mn-btn {
+    padding: 6px 16px;
+    font-size: 16px;
+  }
 }
 
 /* Small landscape screens (phones): everything a size down. */

@@ -104,6 +104,10 @@ export class GameHud {
     this.el.nitro.classList.toggle('burn', s.boosting);
     this.el.nitro.classList.toggle('full', s.nitro >= 1);
     this.el.nitro.classList.toggle('empty', !s.nitroReady && !s.boosting);
+    // The tank as page-wide state too: on touch screens the Nitro button shows it (ui/touchControls).
+    const doc = document.documentElement;
+    doc.style.setProperty('--nitro', String(s.nitro));
+    doc.dataset.nitro = s.boosting ? 'burn' : !s.nitroReady ? 'empty' : s.nitro >= 1 ? 'full' : '';
     if (this.clock > this.speechUntil) this.el.speech.classList.remove('on');
   }
 

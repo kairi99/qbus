@@ -12,8 +12,8 @@ type Hold = Exclude<keyof TouchState, 'steer'>;
 
 /**
  * On-screen driving controls for touch screens, feeding `Input.touch`: the left thumb steers
- * (drag sideways from wherever it lands), the right one works the pedals, nitro and handbrake;
- * small buttons up top for the camera, horn, looking back, getting back on the street and pausing.
+ * (drag sideways from wherever it lands), the right one works the pedals, nitro, handbrake, horn
+ * and looking back; small buttons up top pause, switch the camera and get back on the street.
  * Every control tracks its own finger, so steering, gas and nitro work at the same time.
  */
 export class TouchControls {
@@ -26,10 +26,10 @@ export class TouchControls {
       <div class="tc-top">
         <button class="tc-small" data-tap="pause" aria-label="Pausa">❚❚</button>
         <button class="tc-small" data-tap="camera" aria-label="Cámara">🎥</button>
-        <button class="tc-small" data-hold="lookBack" aria-label="Mirar atrás">👀</button>
-        <button class="tc-small" data-hold="horn" data-tap="horn" aria-label="Pito">📯</button>
         <button class="tc-small" data-tap="reset" aria-label="Volver a la calle">↺</button>
       </div>
+      <button class="tc-small tc-horn" data-hold="horn" data-tap="horn" aria-label="Pito">📯</button>
+      <button class="tc-small tc-look" data-hold="lookBack" aria-label="Mirar atrás">👀</button>
       <button class="tc-btn tc-hand" data-hold="handbrake">Mano</button>
       <button class="tc-btn tc-nitro" data-hold="boost">Nitro</button>
       <button class="tc-btn tc-brake" data-hold="brake">Freno</button>
