@@ -16,10 +16,17 @@ const parkAtActive = (page: Page) =>
     bus.reset({ x: zone.x, y: t ? (window as any).__qbus.groundAt(zone) : 0, z: zone.z, heading: stop.heading });
   });
 
-for (const city of ['grid', 'mariscal']) test(`a shift on ${city}: start, pick up, drop off, results, restart`, async ({ page }) => {
+// The Trolebús route boards at median stations, through the left door.
+const SHIFTS: [string, string][] = [
+  ['grid', '/?city=grid'],
+  ['mariscal', '/?city=mariscal'],
+  ['trolebus', '/?play=1&city=mariscal&route=linea-c4'],
+];
+
+for (const [city, url] of SHIFTS) test(`a shift on ${city}: start, pick up, drop off, results, restart`, async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`/?city=${city}`);
+  await page.goto(url);
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   await page.waitForTimeout(800);
   await expect(page.locator('.gh-prompt')).toBeVisible();

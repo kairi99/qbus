@@ -3,7 +3,10 @@ import { MeshBuilder, vertexColorMaterial } from '../world/meshBuilder';
 import { type CityData, groundHeightAt } from '../world/cityData';
 import { CAR_KINDS, type CarKind, type TrafficSim } from './traffic';
 import type { TrafficBodies } from './trafficBodies';
-import type { PedestrianSim } from './pedestrians';
+import type { Pedestrian } from './pedestrians';
+
+/** What the view needs of a walker (street pedestrians, or people at a Metro entrance). */
+export type WalkerPose = Pick<Pedestrian, 'pos' | 'heading' | 'speed' | 'look' | 'hop' | 'lean'> & { mode: string };
 
 // Body parts are white in the geometry and tinted per car through instance colors.
 const TINT = '#ffffff';
@@ -112,7 +115,7 @@ export class PedestrianView {
 
   constructor(
     scene: THREE.Scene,
-    private sim: PedestrianSim,
+    private sim: { readonly peds: readonly WalkerPose[] },
     private city: CityData,
   ) {
     const mb = new MeshBuilder();

@@ -2,6 +2,9 @@ import type { CameraMode } from '../camera/cameraRig';
 
 /** What the player picked last time, and their preferences. Saved in localStorage. */
 export interface Settings {
+  /** A shift on a route, or free roam. */
+  mode: 'route' | 'free';
+  /** Vehicle id (in route mode always a bus). */
   bus: string;
   zone: string;
   /** Route id within the zone ('circuito' always exists). */
@@ -13,7 +16,7 @@ export interface Settings {
   hills: number;
 }
 
-export const DEFAULTS: Settings = { bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: 1.3 };
+export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: 1.3 };
 export const HILLS_OPTIONS = [
   { value: 1, label: 'Reales' },
   { value: 1.3, label: 'Un poquito más' },
@@ -38,6 +41,7 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     return v < lo ? DEFAULTS[k] : Math.min(hi, v);
   };
   return {
+    mode: raw.mode === 'free' ? 'free' : 'route',
     bus: str('bus'),
     zone: str('zone'),
     route: str('route'),

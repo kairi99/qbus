@@ -5,6 +5,8 @@ export type CameraMode = 'chase' | 'cockpit';
 
 const BASE_FOV = 68;
 const SPEED_FOV = 14;
+/** Extra widening while the nitro burns. */
+const NITRO_FOV = 10;
 // Camera looks down -Z; the bus faces +X, so rotate -90° about Y to look forward.
 const LOOK_FORWARD = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
 
@@ -20,6 +22,7 @@ export class CameraRig {
   private first = true;
   private lastBus = new THREE.Vector3(Infinity, 0, 0);
   private lookingBack = false;
+  private nitroFov = 0;
 
   constructor(readonly camera: THREE.PerspectiveCamera) {}
 
@@ -65,7 +68,8 @@ export class CameraRig {
     }
 
     const speedFrac = Math.min(1, Math.abs(bus.speed) / (bus.preset.topSpeedKmh / 3.6));
-    this.camera.fov = BASE_FOV + SPEED_FOV * speedFrac;
+    this.nitroFov += ((bus.boosting ? NITRO_FOV : 0) - this.nitroFov) * Math.min(1, dt * (bus.boosting ? 8 : 3));
+    this.camera.fov = BASE_FOV + SPEED_FOV * speedFrac + this.nitroFov;
     this.camera.updateProjectionMatrix();
 
     if (this.mode === 'chase') this.chase(dt, bus, speedFrac);
@@ -74,9 +78,11 @@ export class CameraRig {
   }
 
   private chase(dt: number, bus: BusPhysics, speedFrac: number): void {
-    const back = bus.preset.body.length * 1.3 + speedFrac * 4;
+    // Scaled to the vehicle: high and far behind a bus, lower and closer behind a car.
+    const { length, height } = bus.preset.body;
+    const back = Math.max(7, length * 1.3) + speedFrac * 4;
     const desired = this.tmp.copy(this.busPos).addScaledVector(this.flatFwd, -back);
-    desired.y += 7;
+    desired.y += Math.min(7, 2 + height * 1.8);
     const k = this.first ? 1 : 1 - Math.exp(-dt * 5);
     this.camera.position.lerp(desired, k);
     const look = this.tmp.copy(this.busPos).addScaledVector(this.flatFwd, 10);
@@ -87,7 +93,8 @@ export class CameraRig {
 
   private cockpit(dt: number, bus: BusPhysics): void {
     const { length, width, height } = bus.preset.body;
-    const seat = this.tmp.set(length / 2 - 1.6, height * 0.32, -width / 2 + 0.75).applyQuaternion(this.busQuat);
+    const [sx, sy, sz] = bus.preset.cockpit?.seat ?? [length / 2 - 1.6, height * 0.32, -width / 2 + 0.75];
+    const seat = this.tmp.set(sx, sy, sz).applyQuaternion(this.busQuat);
     this.camera.position.copy(this.busPos).add(seat);
     // Head lags a little behind the chassis rotation so bumps and turns feel physical.
     const target = this.busQuat.clone().multiply(LOOK_FORWARD);

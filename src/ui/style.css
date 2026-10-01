@@ -813,3 +813,380 @@ body {
   border-radius: 50%;
   box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
 }
+
+/* Nitro tank: a vertical gauge beside the minimap. */
+.gh-nitro {
+  position: absolute;
+  right: 246px;
+  bottom: 96px;
+  width: 22px;
+  height: 210px;
+  border: 3px solid #1d1a14;
+  border-radius: 11px;
+  background: rgb(0 0 0 / 45%);
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
+}
+
+.gh-nitro-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: bottom;
+  background: linear-gradient(to top, #1f5fbf, #3fa9ff 70%, #bfe6ff);
+}
+
+.gh-nitro span {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%) rotate(180deg);
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+
+.gh-nitro.full {
+  border-color: #3fa9ff;
+}
+
+.gh-nitro.burn {
+  border-color: #fff4c2;
+  box-shadow: 0 0 18px #3fa9ff;
+}
+
+.gh-nitro.burn .gh-nitro-fill {
+  background: linear-gradient(to top, #ff7a1a, #ffd23f 70%, #fff4c2);
+}
+
+/* The half-tank line a burst needs; below it the gauge is dimmed. */
+.gh-nitro-mark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 50%;
+  height: 2px;
+  background: #fff;
+  opacity: 0.8;
+}
+
+.gh-nitro.empty .gh-nitro-fill {
+  filter: grayscale(0.8) brightness(0.7);
+}
+
+/* Free roam: just the drive (speed, street, minimap, nitro, speech). */
+.gh-free .gh-timer,
+.gh-free .gh-board,
+.gh-free .gh-money,
+.gh-free .gh-riders,
+.gh-free .gh-combo,
+.gh-free .gh-prompt {
+  display: none;
+}
+.gh-free .gh-route { top: 58px; }
+
+/* ---- Touch screens -----------------------------------------------------------
+   On-screen pedals and steering (ui/touchControls.ts); the HUD moves out of the
+   thumbs' way. Key hints only show where there's a keyboard. */
+
+.touch-only {
+  display: none;
+}
+
+.touch .touch-only {
+  display: inline;
+}
+
+.touch .keys-only,
+.touch .hud-help,
+.touch .gh-btn small {
+  display: none;
+}
+
+/* Above the controls, so the pause and results screens cover them (the HUD itself lets
+   touches through). */
+.touch #hud {
+  z-index: 6;
+}
+
+.touch,
+.touch #game {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.tc {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  font-family: system-ui, sans-serif;
+}
+
+.tc button {
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 70%);
+  border: 2px solid rgb(255 255 255 / 55%);
+  background: rgb(20 20 20 / 35%);
+  backdrop-filter: blur(2px);
+}
+
+.tc button.on {
+  background: rgb(255 255 255 / 45%);
+  border-color: #fff;
+}
+
+/* Left thumb: anywhere in the lower left steers. */
+.tc-steer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 42%;
+  height: 72%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.tc-wheel {
+  position: absolute;
+  left: 110px;
+  top: 62%;
+  width: 180px;
+  height: 56px;
+  margin: -28px 0 0 -90px;
+  border-radius: 28px;
+  border: 2px solid rgb(255 255 255 / 35%);
+  background: rgb(20 20 20 / 20%);
+  opacity: 0.6;
+}
+
+.tc-wheel.on {
+  opacity: 1;
+}
+
+.tc-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 75%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 40%);
+}
+
+/* Right thumb: pedals at the bottom, nitro and handbrake over them. */
+.tc-btn {
+  position: absolute;
+  width: 84px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.tc-gas {
+  right: 14px;
+  bottom: 14px;
+  height: 128px;
+  background: rgb(46 125 79 / 55%);
+}
+
+.tc-brake {
+  right: 108px;
+  bottom: 14px;
+  height: 96px;
+  background: rgb(190 50 40 / 50%);
+}
+
+.tc-nitro {
+  right: 14px;
+  bottom: 152px;
+  height: 58px;
+  background: rgb(31 95 191 / 55%);
+}
+
+.tc-hand {
+  right: 108px;
+  bottom: 120px;
+  height: 58px;
+}
+
+.tc-top {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.tc-small {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 18px;
+  padding: 0;
+}
+
+/* Phones held upright: driving needs it sideways. */
+.tc-rotate {
+  display: none;
+  position: absolute;
+  inset: 0;
+  place-items: center;
+  padding: 24px;
+  background: rgb(10 20 30 / 85%);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+  pointer-events: auto;
+}
+
+@media (orientation: portrait) {
+  .tc-rotate {
+    display: grid;
+  }
+}
+
+/* The HUD around the controls: the minimap and nitro gauge go up under the buttons,
+   the speed between the thumbs. */
+.touch .hud-speed {
+  right: auto;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  font-size: 40px;
+}
+
+.touch .hud-speed small {
+  font-size: 14px;
+}
+
+.touch .hud-mode {
+  display: none;
+}
+
+.touch .gh-minimap {
+  top: 60px;
+  right: 14px;
+  bottom: auto;
+  width: 120px !important;
+  height: 120px !important;
+}
+
+.touch .gh-nitro {
+  top: 60px;
+  right: 142px;
+  bottom: auto;
+  width: 16px;
+  height: 120px;
+}
+
+.touch .gh-nitro span {
+  display: none;
+}
+
+.touch .gh-riders {
+  right: auto;
+  left: 16px;
+  top: 92px;
+}
+
+.touch .gh-route {
+  left: 16px;
+  top: 70px;
+  font-size: 13px;
+}
+
+.touch .gh-free .gh-route {
+  top: 40px;
+}
+
+/* Long stop names wrap instead of running under the buttons. */
+.touch .gh-top {
+  max-width: 40%;
+}
+
+.touch .gh-board-stop {
+  white-space: normal;
+}
+
+.touch .gh-combo {
+  right: 50%;
+  transform: translateX(50%) rotate(-4deg);
+}
+
+/* Small landscape screens (phones): everything a size down. */
+@media (max-height: 520px) {
+  .hud-street {
+    font-size: 18px;
+    top: 12px;
+    left: 16px;
+  }
+
+  .gh-top {
+    top: 8px;
+    gap: 4px;
+  }
+
+  .gh-timer {
+    font-size: 34px;
+  }
+
+  .gh-board {
+    min-width: 0;
+    padding: 4px 10px;
+  }
+
+  .gh-board-stop {
+    font-size: 15px;
+  }
+
+  .gh-board-meta {
+    font-size: 11px;
+  }
+
+  .gh-money {
+    font-size: 24px;
+    left: 16px;
+    top: 38px;
+  }
+
+  .gh-pop {
+    font-size: 16px;
+  }
+
+  .gh-speech {
+    bottom: 60px;
+    font-size: 16px;
+    max-width: 320px;
+  }
+
+  .gh-prompt {
+    font-size: 18px;
+  }
+
+  .gh-results-card {
+    min-width: 0;
+    padding: 12px 18px;
+    max-height: 92vh;
+    overflow: auto;
+  }
+
+  .gh-results-total {
+    font-size: 36px;
+  }
+
+  .hud-flipped {
+    font-size: 22px;
+  }
+}

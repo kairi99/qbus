@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CityData, Vec2 } from '../world/cityData';
+import type { CityData, Stop, Vec2 } from '../world/cityData';
 import { forward, groundHeightAt, right } from '../world/cityData';
 import type { BusPhysics } from '../vehicle/bus';
 import type { Passenger, RouteStop } from './routeGame';
@@ -37,16 +37,18 @@ export class PassengersView {
     private city: CityData,
   ) {}
 
-  /** Places the given passengers in a queue beside their stop's shelter. */
+  /** Places the given passengers in a queue beside their stop's shelter (or along the platform edge). */
   showWaiting(stop: RouteStop, passengers: Passenger[]): void {
     const fw = forward(stop.stop.heading);
-    const rt = right(stop.stop.heading);
+    // Away from the road: to the right of travel at the curb, to the left on a median platform.
+    const left = stop.stop.side === 'left';
+    const rt = right(stop.stop.heading + (left ? Math.PI : 0));
     passengers.forEach((p, k) => {
       if (this.figures.has(p.id)) return;
       const along = (k - (passengers.length - 1) / 2) * 0.9 + (k % 2 ? 0.2 : -0.2);
       const pos = this.at({ x: stop.stop.pos.x + fw.x * along + rt.x * 0.3, z: stop.stop.pos.z + fw.z * along + rt.z * 0.3 });
       const fig = this.make(p, pos);
-      fig.group.rotation.y = stop.stop.heading + Math.PI / 2; // face the street
+      fig.group.rotation.y = stop.stop.heading + (left ? -Math.PI / 2 : Math.PI / 2); // face the street
       this.figures.set(p.id, fig);
     });
   }
@@ -58,15 +60,25 @@ export class PassengersView {
     }
   }
 
-  /** Spawns figures at the door that walk away onto the sidewalk. */
-  alight(passengers: Passenger[], bus: BusPhysics): void {
-    const door = this.doorPos(bus);
-    const rt = right(bus.heading);
+  /**
+   * Spawns figures at the door that walk away onto the sidewalk, or along a median platform
+   * (`stop.side === 'left'`) toward its ends instead of off the far edge into traffic.
+   */
+  alight(passengers: Passenger[], bus: BusPhysics, stop: Stop): void {
+    const left = stop.side === 'left';
+    const door = this.doorPos(bus, left);
+    const rt = right(bus.heading + (left ? Math.PI : 0));
+    const fw = forward(bus.heading);
     passengers.forEach((p, k) => {
       const f = this.make(p, door.clone().add(new THREE.Vector3(-k * 0.4 * Math.cos(bus.heading), 0, k * 0.4 * Math.sin(bus.heading))));
       f.mode = 'leaving';
-      f.target = this.at({ x: door.x + rt.x * 4 + (k - 1) * 1.5, z: door.z + rt.z * 4 });
-      f.target.addScaledVector(new THREE.Vector3(f.target.x - door.x, 0, f.target.z - door.z).normalize(), WALK_AWAY);
+      if (left) {
+        const along = (k % 2 ? 1 : -1) * (WALK_AWAY + k);
+        f.target = this.at({ x: door.x + rt.x * 1.6 + fw.x * along, z: door.z + rt.z * 1.6 + fw.z * along });
+      } else {
+        f.target = this.at({ x: door.x + rt.x * 4 + (k - 1) * 1.5, z: door.z + rt.z * 4 });
+        f.target.addScaledVector(new THREE.Vector3(f.target.x - door.x, 0, f.target.z - door.z).normalize(), WALK_AWAY);
+      }
       this.leaving.push(f);
     });
   }
@@ -77,8 +89,9 @@ export class PassengersView {
     this.leaving = [];
   }
 
-  update(dt: number, bus: BusPhysics): void {
-    const door = this.doorPos(bus);
+  /** `leftDoor`: boarding at a median station, through the door on the left. */
+  update(dt: number, bus: BusPhysics, leftDoor = false): void {
+    const door = this.doorPos(bus, leftDoor);
     for (const [id, f] of this.figures) {
       f.phase += dt;
       if (f.mode === 'waiting') {
@@ -113,11 +126,11 @@ export class PassengersView {
     return d;
   }
 
-  /** Front door on the right-hand side of the bus, at street level. */
-  private doorPos(bus: BusPhysics): THREE.Vector3 {
+  /** Front door on the right-hand side of the bus (or the left), at street level. */
+  private doorPos(bus: BusPhysics, left = false): THREE.Vector3 {
     const t = bus.body.translation();
     const fw = forward(bus.heading);
-    const rt = right(bus.heading);
+    const rt = right(bus.heading + (left ? Math.PI : 0));
     const L = bus.preset.body.length;
     const W = bus.preset.body.width;
     return this.at({ x: t.x + fw.x * (L / 2 - 1.3) + rt.x * (W / 2 + 0.3), z: t.z + fw.z * (L / 2 - 1.3) + rt.z * (W / 2 + 0.3) });

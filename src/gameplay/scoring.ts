@@ -53,6 +53,8 @@ export class TrickScorer {
   chain = 0;
   bestCombo = 0;
   longestAir = 0;
+  /** Sliding sideways this step (a drift in progress). */
+  sliding = false;
   private sinceTrick = Infinity;
   private drift = 0;
   private driftGrace = 0;
@@ -85,6 +87,7 @@ export class TrickScorer {
 
     // Drift: awarded when the slide ends.
     const sliding = !t.airborne && speed > DRIFT_MIN_SPEED && Math.abs(t.slipAngle) > DRIFT_MIN_SLIP;
+    this.sliding = sliding;
     if (sliding) {
       this.drift += t.dt;
       this.driftGrace = DRIFT_GRACE;

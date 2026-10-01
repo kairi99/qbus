@@ -6,13 +6,15 @@ import type { BusPreset } from '../src/vehicle/busPreset';
 import popular from '../data/buses/popular.json';
 import interparroquial from '../data/buses/interparroquial.json';
 import buseta from '../data/buses/buseta.json';
+import ae86 from '../data/buses/ae86.json';
 
 const idle: DriveInput = { throttle: 0, steer: 0, handbrake: false };
 
-describe.each([popular, interparroquial, buseta] as BusPreset[])('BusPhysics ($name)', (preset) => {
+describe.each([popular, interparroquial, buseta, ae86] as BusPreset[])('BusPhysics ($name)', (preset) => {
 function setup() {
   const world = createWorld();
-  addGround(world);
+  // Big enough that the fastest vehicle can't drive off it during a test.
+  addGround(world, 3000);
   const bus = new BusPhysics(world, preset, { x: 0, y: 3, z: 0, heading: 0 });
   const run = (input: DriveInput, seconds: number) => {
     for (let t = 0; t < seconds; t += PHYSICS_STEP) {
@@ -132,6 +134,28 @@ function setup() {
     run({ ...idle, throttle: -1 }, 4);
     expect(bus.speed * 3.6).toBeLessThan(-25);
     expect(bus.speed * 3.6).toBeGreaterThan(-(preset.reverseTopSpeedKmh + 5));
+  });
+
+  it('nitro gives a clear kick in 1.5 s, stays upright, and can pass top speed', () => {
+    const plain = setup();
+    const boosted = setup();
+    for (const s of [plain, boosted]) {
+      s.run(idle, 1);
+      s.run({ ...idle, throttle: 1 }, 2);
+    }
+    plain.run({ ...idle, throttle: 1 }, 1.5);
+    boosted.run({ ...idle, throttle: 1, boost: true }, 1.5);
+    expect(boosted.bus.boosting).toBe(true);
+    expect((boosted.bus.speed - plain.bus.speed) * 3.6).toBeGreaterThan(20);
+    expect(boosted.bus.wheelsOnGround).toBeGreaterThanOrEqual(3);
+    expect(Math.abs(boosted.bus.body.translation().z)).toBeLessThan(1);
+
+    // Already flat out: nitro still pushes past top speed, but only up to the bonus.
+    boosted.run({ ...idle, throttle: 1 }, 6);
+    boosted.run({ ...idle, throttle: 1, boost: true }, 6);
+    const kmh = boosted.bus.speed * 3.6;
+    expect(kmh).toBeGreaterThan(preset.topSpeedKmh + 5);
+    expect(kmh).toBeLessThanOrEqual(preset.topSpeedKmh + preset.nitro.topSpeedBonusKmh + 3);
   });
 
   it('reset puts the bus back upright at spawn', () => {

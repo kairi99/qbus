@@ -3,6 +3,8 @@
 export interface BusPreset {
   id: string;
   name: string;
+  /** A car (free roam only) rather than a bus. Default: bus. */
+  kind?: 'bus' | 'car';
   body: { length: number; width: number; height: number; color: string; stripe: string; roof: string };
   /** Passengers that fit on board. */
   capacity: number;
@@ -32,6 +34,14 @@ export interface BusPreset {
     maxAngleDeg: number;
     /** How fast rear grip returns after releasing the handbrake, in frictionSlip units per second. */
     gripRecovery: number;
+  };
+  /** Driver's eye position in chassis space (default: front-left, where a bus driver sits). */
+  cockpit?: { seat: [number, number, number] };
+  nitro: {
+    /** Extra forward acceleration while boosting, m/s² (on top of the engine). */
+    accel: number;
+    /** How far past its top speed nitro can push the bus. */
+    topSpeedBonusKmh: number;
   };
   suspension: {
     restLength: number;

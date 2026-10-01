@@ -1,5 +1,6 @@
 import type { CityData, Vec2 } from './cityData';
-import { forward, right } from './cityData';
+import { forward, groundHeightAt, right } from './cityData';
+import { profileAt, roadProfiles } from './elevation';
 
 /** Keep reset spots this far from a segment's ends so the bus isn't dropped past the city edge. */
 const END_MARGIN = 10;
@@ -9,28 +10,39 @@ const FEATURE_MARGIN = 6;
 /**
  * Nearest drivable spot to `p`: on the closest road centerline, shifted into the right-hand
  * lane for whichever road direction is closer to `heading`, and moved along the road until
- * clear of ramps and humps.
+ * clear of ramps and humps. With `y` (where the bus is now), a bridge or underpass only counts
+ * as close if it's at about that height, so a bus under a bridge stays under it. Returns the
+ * road surface height there too.
  */
-export function snapToRoad(city: CityData, p: Vec2, heading: number): { pos: Vec2; heading: number } {
-  let best: { a: Vec2; dir: Vec2; len: number; t: number; width: number; lanes: number; oneway: boolean } | null = null;
+export function snapToRoad(city: CityData, p: Vec2, heading: number, y?: number): { pos: Vec2; heading: number; y: number } {
+  let best: { a: Vec2; dir: Vec2; len: number; t: number; width: number; lanes: number; oneway: boolean; road: number; s0: number } | null = null;
   let bestD = Infinity;
-  for (const r of city.roads) {
+  const profiles = roadProfiles(city);
+  for (const [ri, r] of city.roads.entries()) {
+    const prof = profiles[ri];
+    let cum = 0;
     for (let i = 0; i < r.points.length - 1; i++) {
       const a = r.points[i];
       const b = r.points[i + 1];
       const len = Math.hypot(b.x - a.x, b.z - a.z);
+      const s0 = cum;
+      cum += len;
       if (len < 1) continue;
       const dir = { x: (b.x - a.x) / len, z: (b.z - a.z) / len };
       const margin = Math.min(END_MARGIN, len / 2);
       const t = Math.max(margin, Math.min(len - margin, (p.x - a.x) * dir.x + (p.z - a.z) * dir.z));
-      const d = Math.hypot(p.x - (a.x + dir.x * t), p.z - (a.z + dir.z * t));
+      let d = Math.hypot(p.x - (a.x + dir.x * t), p.z - (a.z + dir.z * t));
+      if (y !== undefined) {
+        const q = { x: a.x + dir.x * t, z: a.z + dir.z * t };
+        d += 1.5 * Math.abs((prof ? profileAt(prof, s0 + t).y : groundHeightAt(city, q)) - y);
+      }
       if (d < bestD) {
         bestD = d;
-        best = { a, dir, len, t, width: r.width, lanes: r.lanes, oneway: !!r.oneway };
+        best = { a, dir, len, t, width: r.width, lanes: r.lanes, oneway: !!r.oneway, road: ri, s0 };
       }
     }
   }
-  if (!best) return { pos: city.spawn.pos, heading: city.spawn.heading };
+  if (!best) return { pos: city.spawn.pos, heading: city.spawn.heading, y: groundHeightAt(city, city.spawn.pos) };
 
   // Pick the road direction closest to where the bus was pointing.
   const cur = forward(heading);
@@ -65,5 +77,8 @@ export function snapToRoad(city: CityData, p: Vec2, heading: number): { pos: Vec
     const ahead = ft + clear;
     t = back >= 0 && (Math.abs(back - t) <= Math.abs(ahead - t) || ahead > best.len) ? back : ahead;
   }
-  return { pos: at(t), heading: snapped };
+  const prof = profiles[best.road];
+  const pos = at(t);
+  const lift = prof ? profileAt(prof, best.s0 + t) : null;
+  return { pos, heading: snapped, y: lift && Math.abs(lift.lift) > 0.02 ? lift.y : groundHeightAt(city, pos) };
 }

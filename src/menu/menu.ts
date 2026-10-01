@@ -1,20 +1,31 @@
 import type { BusPreset } from '../vehicle/busPreset';
-import { BUSES, busStats } from '../vehicle/buses';
+import { BUSES, VEHICLES, busStats } from '../vehicle/buses';
 import { ZONE_LIST, loadZone } from '../world/loadCity';
-import type { CityData } from '../world/cityData';
-import { type RouteDef, routesFor } from '../gameplay/routes';
+import type { CityData, Vec2 } from '../world/cityData';
+import { type RouteDef, routePaths, routesFor } from '../gameplay/routes';
+import { buildRoadGraph } from '../world/roadGraph';
 import { HILLS_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
 
 export interface Selection {
+  mode: 'route' | 'free';
   bus: string;
   zone: string;
   route: string;
 }
 
-/** URL that starts a shift with this selection (the game reads it on load). */
+/** URL that starts a shift (or a free drive) with this selection (the game reads it on load). */
 export function playUrl(s: Selection): string {
+  if (s.mode === 'free') return `?${new URLSearchParams({ play: '1', mode: 'free', city: s.zone, bus: s.bus })}`;
   return `?${new URLSearchParams({ play: '1', city: s.zone, bus: s.bus, route: s.route })}`;
 }
+
+const MODES = [
+  { id: 'route', name: 'Turno', blurb: 'Una ruta con paradas, pasajeros, reloj y plata' },
+  { id: 'free', name: 'Paseo libre', blurb: 'Recorra la ciudad a su gusto, sin paradas ni reloj' },
+] as const;
+
+/** Vehicles offered in a mode: buses on a route; buses and cars in free roam. */
+const vehiclesFor = (mode: Selection['mode']) => (mode === 'free' ? VEHICLES : BUSES);
 
 /**
  * Title screen and shift setup (bus, zone, route) plus settings. Pure DOM; the game itself
@@ -62,8 +73,12 @@ export class Menu {
           <div class="mn-led mn-led-wide"><span>ELIJA SU TURNO</span></div>
         </header>
         <section class="mn-step">
-          <h2>El bus</h2>
-          <div class="mn-row" role="radiogroup" aria-label="Bus">${BUSES.map((b) => busCard(b.preset, b.blurb, b.preset.id === s.bus)).join('')}</div>
+          <h2>El modo</h2>
+          <div class="mn-row" role="radiogroup" aria-label="Modo">${MODES.map((m) => modeCard(m, m.id === s.mode)).join('')}</div>
+        </section>
+        <section class="mn-step">
+          <h2 class="mn-vehicle-title"></h2>
+          <div class="mn-row mn-vehicles" role="radiogroup" aria-label="Vehículo"></div>
         </section>
         <section class="mn-step">
           <h2>La zona</h2>
@@ -82,12 +97,15 @@ export class Menu {
         </footer>
       </main>`;
     this.on('[data-go="back"]', () => this.title());
-    this.root.querySelectorAll<HTMLElement>('[data-bus]').forEach((el) =>
+    this.root.querySelectorAll<HTMLElement>('[data-mode]').forEach((el) =>
       el.addEventListener('click', () => {
-        this.pick('bus', el.dataset.bus!);
-        this.mark('[data-bus]', el);
+        this.pick('mode', el.dataset.mode as Selection['mode']);
+        this.mark('[data-mode]', el);
+        this.showVehicles();
+        this.showRoutes();
       }),
     );
+    this.showVehicles();
     this.root.querySelectorAll<HTMLElement>('[data-zone]').forEach((el) =>
       el.addEventListener('click', () => {
         if (this.settings.zone !== el.dataset.zone) this.pick('route', 'circuito');
@@ -101,7 +119,23 @@ export class Menu {
       location.search = playUrl(this.settings);
     });
     this.showRoutes();
-    this.root.querySelector<HTMLElement>('[data-bus][aria-checked="true"]')?.focus();
+    this.root.querySelector<HTMLElement>('[data-mode][aria-checked="true"]')?.focus();
+  }
+
+  /** The vehicle cards for the current mode (cars only in free roam). */
+  private showVehicles(): void {
+    const list = vehiclesFor(this.settings.mode);
+    if (!list.some((v) => v.preset.id === this.settings.bus)) this.pick('bus', list[0].preset.id);
+    const pool = list.map((v) => v.preset);
+    this.root.querySelector('.mn-vehicle-title')!.textContent = this.settings.mode === 'free' ? 'El vehículo' : 'El bus';
+    const row = this.root.querySelector<HTMLElement>('.mn-vehicles')!;
+    row.innerHTML = list.map((b) => busCard(b.preset, b.blurb, b.preset.id === this.settings.bus, pool)).join('');
+    row.querySelectorAll<HTMLElement>('[data-bus]').forEach((el) =>
+      el.addEventListener('click', () => {
+        this.pick('bus', el.dataset.bus!);
+        this.mark('[data-bus]', el);
+      }),
+    );
   }
 
   private settingsScreen(back: () => void): void {
@@ -153,12 +187,25 @@ export class Menu {
     const zone = this.settings.zone;
     const box = this.root.querySelector<HTMLElement>('.mn-placards')!;
     const play = this.root.querySelector<HTMLButtonElement>('[data-go="play"]')!;
+    // Free roam has no route to pick: nothing to load before playing.
+    const free = this.settings.mode === 'free';
+    this.root.querySelector<HTMLElement>('.mn-step-route')!.hidden = free;
+    if (free) {
+      play.disabled = false;
+      this.summary();
+      return;
+    }
     box.innerHTML = '<p class="mn-loading">Cargando rutas…</p>';
     play.disabled = true;
     if (!this.cities.has(zone)) this.cities.set(zone, loadZone(zone));
     const city = await this.cities.get(zone)!;
     if (this.settings.zone !== zone || !box.isConnected) return; // switched zone meanwhile
-    const routes = routesFor(city);
+    const graph = buildRoadGraph(city);
+    const routes = routesFor(city, graph);
+    const draw = (id: string) => {
+      const route = routes.find((r) => r.id === id)!;
+      drawMap(this.root.querySelector('canvas')!, city, route, routePaths(city, route, graph));
+    };
     if (!routes.some((r) => r.id === this.settings.route)) this.pick('route', routes[0].id);
     const names = new Map(city.stops.map((st) => [st.id, st.name]));
     box.innerHTML = routes.map((r) => placard(r, names, r.id === this.settings.route)).join('');
@@ -166,17 +213,17 @@ export class Menu {
       el.addEventListener('click', () => {
         this.pick('route', el.dataset.route!);
         this.mark('[data-route]', el);
-        drawMap(this.root.querySelector('canvas')!, city, routes.find((r) => r.id === el.dataset.route)!);
+        draw(el.dataset.route!);
       }),
     );
-    drawMap(this.root.querySelector('canvas')!, city, routes.find((r) => r.id === this.settings.route)!);
+    draw(this.settings.route);
     play.disabled = false;
     this.summary();
   }
 
   // ---- helpers ---------------------------------------------------------------
 
-  private pick<K extends keyof Selection>(k: K, v: string): void {
+  private pick<K extends keyof Selection>(k: K, v: Settings[K]): void {
     this.settings[k] = v;
     this.summary();
   }
@@ -184,9 +231,10 @@ export class Menu {
   private summary(): void {
     const el = this.root.querySelector('.mn-summary');
     if (!el) return;
-    const bus = BUSES.find((b) => b.preset.id === this.settings.bus)?.preset.name ?? '';
+    const bus = VEHICLES.find((b) => b.preset.id === this.settings.bus)?.preset.name ?? '';
     const zone = ZONE_LIST.find((z) => z.id === this.settings.zone)?.name ?? '';
-    const route = this.root.querySelector(`[data-route="${this.settings.route}"] .mn-placard-name`)?.textContent ?? '';
+    const route =
+      this.settings.mode === 'free' ? 'Paseo libre' : (this.root.querySelector(`[data-route="${this.settings.route}"] .mn-placard-name`)?.textContent ?? '');
     el.textContent = [bus, zone, route].filter(Boolean).join(', ');
   }
 
@@ -213,13 +261,35 @@ const SKYLINE = `
     <polygon points="1180,150 1230,185 1150,190" fill="#f4f6f8"/>
   </svg>`;
 
-function busCard(p: BusPreset, blurb: string, checked: boolean): string {
+function modeCard(m: { id: string; name: string; blurb: string }, checked: boolean): string {
+  return `
+    <button class="mn-card mn-zone" role="radio" aria-checked="${checked}" data-mode="${m.id}">
+      <span class="mn-card-name">${m.name}</span>
+      <span class="mn-card-blurb">${m.blurb}</span>
+    </button>`;
+}
+
+/** Side view of the AE86 in its panda livery. */
+const AE86_ART = `
+  <g transform="translate(40,18)">
+    <polygon points="4,26 22,20 52,19 70,6 104,6 128,20 140,22 140,40 4,40" fill="#f4f4f1"/>
+    <polygon points="56,19 72,9 86,9 86,19" fill="#1c2a38"/><polygon points="90,9 103,9 122,20 90,20" fill="#1c2a38"/>
+    <rect x="4" y="32" width="136" height="9" fill="#1b1b1d"/>
+    <rect x="137" y="24" width="4" height="6" fill="#d42020"/>
+    <circle cx="30" cy="41" r="8" fill="#1b1b1b"/><circle cx="30" cy="41" r="4" fill="#d9d9d4"/>
+    <circle cx="114" cy="41" r="8" fill="#1b1b1b"/><circle cx="114" cy="41" r="4" fill="#d9d9d4"/>
+  </g>`;
+
+function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset[]): string {
   const { color, stripe, roof } = p.body;
   // Side view scaled to the bus's real length, so the buseta looks small and the coach long.
   const w = 70 + p.body.length * 11;
   return `
     <button class="mn-card mn-bus" role="radio" aria-checked="${checked}" data-bus="${p.id}">
-      <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">
+      <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">${
+        p.kind === 'car'
+          ? AE86_ART
+          : `
         <g transform="translate(${(220 - w) / 2},8)">
           <rect x="0" y="0" width="${w}" height="10" rx="4" fill="${roof}"/>
           <rect x="0" y="6" width="${w}" height="48" rx="6" fill="${color}"/>
@@ -228,14 +298,15 @@ function busCard(p: BusPreset, blurb: string, checked: boolean): string {
           <rect x="0" y="36" width="${w}" height="6" fill="${stripe}"/>
           <circle cx="${w * 0.2}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.2}" cy="56" r="3.5" fill="#bbb"/>
           <circle cx="${w * 0.8}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.8}" cy="56" r="3.5" fill="#bbb"/>
-        </g>
+        </g>`
+      }
       </svg>
       <span class="mn-card-name">${p.name}</span>
       <span class="mn-card-blurb">${blurb}</span>
-      <dl class="mn-stats">${busStats(p)
+      <dl class="mn-stats">${busStats(p, pool)
         .map((st) => `<dt>${st.label}</dt><dd><span style="--v:${st.value.toFixed(2)}"></span></dd>`)
         .join('')}</dl>
-      <span class="mn-card-cap">${p.capacity} pasajeros · ${p.topSpeedKmh} km/h</span>
+      <span class="mn-card-cap">${p.kind === 'car' ? `${p.capacity + 1} puestos` : `${p.capacity} pasajeros`} · ${p.topSpeedKmh} km/h</span>
     </button>`;
 }
 
@@ -264,8 +335,8 @@ function choice(name: string, value: string, label: string, checked: boolean): s
   return `<label class="mn-choice"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} /><span>${label}</span></label>`;
 }
 
-/** Streets in grey, the chosen route in amber with numbered stops. */
-function drawMap(canvas: HTMLCanvasElement, city: CityData, route: RouteDef): void {
+/** Streets in grey, the chosen route in amber along the streets it drives, numbered stops. */
+function drawMap(canvas: HTMLCanvasElement, city: CityData, route: RouteDef, legs: Vec2[][]): void {
   const ctx = canvas.getContext('2d')!;
   const { min, max } = city.bounds;
   const size = Math.max(max.x - min.x, max.z - min.z);
@@ -287,12 +358,12 @@ function drawMap(canvas: HTMLCanvasElement, city: CityData, route: RouteDef): vo
   const pts = route.stops.map((id) => byId.get(id)!.pos);
   ctx.strokeStyle = '#d98a00';
   ctx.lineWidth = 3;
-  ctx.setLineDash([6, 4]);
-  ctx.beginPath();
-  pts.forEach((p, i) => (i ? ctx.lineTo(X(p.x), Z(p.z)) : ctx.moveTo(X(p.x), Z(p.z))));
-  ctx.closePath();
-  ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.lineJoin = 'round';
+  for (const leg of legs) {
+    ctx.beginPath();
+    leg.forEach((p, i) => (i ? ctx.lineTo(X(p.x), Z(p.z)) : ctx.moveTo(X(p.x), Z(p.z))));
+    ctx.stroke();
+  }
   ctx.font = 'bold 11px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

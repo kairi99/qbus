@@ -37,6 +37,7 @@
     "maxAngleDeg": 35.0,
     "gripRecovery": 2.8
   },
+  "nitro": { "accel": 10, "topSpeedBonusKmh": 30 },
   "suspension": {
     "restLength": 0.42,
     "maxTravel": 0.38,

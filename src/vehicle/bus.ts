@@ -24,6 +24,8 @@ export class BusPhysics {
   readonly vehicle: RAPIER.DynamicRayCastVehicleController;
   private steerAngle = 0;
   private rearGrip: number;
+  /** Nitro fired on the last update. */
+  boosting = false;
 
   constructor(
     private world: RAPIER.World,
@@ -126,6 +128,19 @@ export class BusPhysics {
 
     this.vehicle.updateVehicle(dt);
     this.limitDriftAngle(dt);
+    this.boost(!!input.boost, speed, dt);
+  }
+
+  /** Nitro: a straight shove along the chassis (not through the tires, so it can't just spin them). */
+  private boost(on: boolean, speed: number, dt: number): void {
+    const n = this.preset.nitro;
+    this.boosting = on && this.wheelsOnGround >= 2 && speed < (this.preset.topSpeedKmh + n.topSpeedBonusKmh) / 3.6;
+    if (!this.boosting) return;
+    const q = this.body.rotation();
+    // Chassis +X in world space.
+    const f = { x: 1 - 2 * (q.y * q.y + q.z * q.z), y: 2 * (q.x * q.y + q.w * q.z), z: 2 * (q.x * q.z - q.w * q.y) };
+    const j = this.body.mass() * n.accel * dt;
+    this.body.applyImpulse({ x: f.x * j, y: f.y * j, z: f.z * j }, true);
   }
 
   /** Signed angle from the velocity direction to the heading, radians. 0 when not moving. */
@@ -156,6 +171,7 @@ export class BusPhysics {
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.steerAngle = 0;
     this.rearGrip = this.preset.wheels.frictionSlip;
+    this.boosting = false;
   }
 
   /** Current yaw, derived from the forward vector projected onto the ground plane. */

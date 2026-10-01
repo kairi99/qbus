@@ -2,6 +2,7 @@ import type { CityData, Vec2 } from './cityData';
 import { bbox, pointInPolygon } from './geom';
 import { type RoadGraph, dirAt, makePath, pointAt } from './roadGraph';
 import { RoadIndex } from './roadIndex';
+import { LIFTED, liftAlong } from './elevation';
 
 export const SIDEWALK_WIDTH = 3;
 const STEP = 3;
@@ -39,6 +40,12 @@ export function sidewalkSections(city: CityData, graph: RoadGraph): SidewalkSect
       let run: SidewalkSection[] = [];
       for (const s of along) {
         const p = pointAt(path, s);
+        // No sidewalk on bridges, in underpasses or up their ramps.
+        if (Math.abs(liftAlong(r, s)) > LIFTED) {
+          if (run.length > 1) out.push(run);
+          run = [];
+          continue;
+        }
         const d = dirAt(path, Math.min(s, path.len - 0.01));
         // Widest clear strip starting at the curb, probed outward.
         const curb = r.width / 2 + 0.02;

@@ -29,9 +29,10 @@ export class GameHud {
   private speechUntil = 0;
   private clock = 0;
 
-  constructor(root: HTMLElement, routeName = '') {
+  /** `free`: free roam, no route (no timer, board, money or riders). */
+  constructor(root: HTMLElement, routeName = '', free = false) {
     const wrap = document.createElement('div');
-    wrap.className = 'gh';
+    wrap.className = free ? 'gh gh-free' : 'gh';
     wrap.innerHTML = `
       <div class="gh-top">
         <div class="gh-timer" data-k="timer">90</div>
@@ -45,8 +46,9 @@ export class GameHud {
       <div class="gh-route">${routeName}</div>
       <div class="gh-riders" data-k="riders"></div>
       <div class="gh-combo" data-k="combo"></div>
+      <div class="gh-nitro" data-k="nitro"><div class="gh-nitro-fill" data-k="nitroFill"></div><i class="gh-nitro-mark"></i><span>NITRO</span></div>
       <div class="gh-speech" data-k="speech"><small data-k="speaker"></small><span data-k="line"></span></div>
-      <div class="gh-prompt" data-k="prompt">Acelera con <b>W</b> para empezar la ruta</div>
+      <div class="gh-prompt" data-k="prompt">Acelera <span class="keys-only">con <b>W</b></span><span class="touch-only">(<b>Dale</b>)</span> para empezar la ruta</div>
       <div class="gh-results" data-k="results" hidden>
         <div class="gh-results-card">
           <h2>Fin del turno</h2>
@@ -67,7 +69,7 @@ export class GameHud {
           <h2>Pausa</h2>
           <div class="gh-actions gh-actions-col">
             <button class="gh-btn gh-btn-go" data-act="resume">Seguir <small>Esc</small></button>
-            <button class="gh-btn" data-act="again">Reiniciar turno</button>
+            <button class="gh-btn" data-act="again">${free ? 'Volver al inicio' : 'Reiniciar turno'}</button>
             <button class="gh-btn" data-act="menu">Volver al menú</button>
           </div>
         </div>
@@ -85,7 +87,10 @@ export class GameHud {
     if (on) this.el.pause.querySelector<HTMLElement>('button')?.focus();
   }
 
-  update(dt: number, s: { timeLeft: number; cents: number; onBoard: number; capacity: number; chain: number; started: boolean }): void {
+  update(
+    dt: number,
+    s: { timeLeft: number; cents: number; onBoard: number; capacity: number; chain: number; started: boolean; nitro: number; nitroReady: boolean; boosting: boolean },
+  ): void {
     this.clock += dt;
     const secs = Math.ceil(s.timeLeft);
     this.el.timer.textContent = String(secs);
@@ -95,6 +100,10 @@ export class GameHud {
     this.el.prompt.hidden = s.started;
     this.el.combo.textContent = s.chain >= 2 ? `Combo ×${s.chain}` : '';
     this.el.combo.classList.toggle('on', s.chain >= 2);
+    this.el.nitroFill.style.transform = `scaleY(${s.nitro})`;
+    this.el.nitro.classList.toggle('burn', s.boosting);
+    this.el.nitro.classList.toggle('full', s.nitro >= 1);
+    this.el.nitro.classList.toggle('empty', !s.nitroReady && !s.boosting);
     if (this.clock > this.speechUntil) this.el.speech.classList.remove('on');
   }
 

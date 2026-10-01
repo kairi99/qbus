@@ -6,9 +6,18 @@ import { buildCity } from '../src/world/cityBuilder';
 import type { CityData } from '../src/world/cityData';
 import { DEFAULT_HILLS } from '../src/world/loadCity';
 import { terrainHeight } from '../src/world/terrain';
+import { planTrenches } from '../src/world/gradeBuilder';
+import { buildRoadGraph } from '../src/world/roadGraph';
 
 const city: CityData = JSON.parse(readFileSync('data/cities/mariscal.json', 'utf8'));
 city.terrain!.scale = DEFAULT_HILLS;
+
+/** Around underpasses the terrain is replaced by a patch with the cut open (see gradeBuilder.ts): roads there are meant to be below it. */
+const cut = planTrenches(city, buildRoadGraph(city))?.cells ?? new Set<number>();
+function inCut(x: number, z: number): boolean {
+  const t = city.terrain!;
+  return cut.has(Math.floor((z - t.minZ) / t.cell) * (t.cols - 1) + Math.floor((x - t.minX) / t.cell));
+}
 
 /** Share of triangle sample points (corners, edge midpoints, centroid) not clearly above the ground. */
 function buried(mesh: THREE.Mesh, margin: number): { bad: number; total: number; worst: number } {
@@ -21,6 +30,7 @@ function buried(mesh: THREE.Mesh, margin: number): { bad: number; total: number;
     for (let k = 0; k < 3; k++) v[k].fromBufferAttribute(p, i + k);
     const pts = [v[0], v[1], v[2], v[0].clone().lerp(v[1], 0.5), v[1].clone().lerp(v[2], 0.5), v[2].clone().lerp(v[0], 0.5), v[0].clone().add(v[1]).add(v[2]).divideScalar(3)];
     for (const q of pts) {
+      if (inCut(q.x, q.z)) continue;
       total++;
       const gap = q.y - terrainHeight(city.terrain!, q.x, q.z);
       if (gap < margin) {

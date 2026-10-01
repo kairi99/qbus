@@ -5,13 +5,15 @@ import { BusAudio } from './core/audio';
 import { BusPhysics } from './vehicle/bus';
 import { BusModel } from './vehicle/busModel';
 import { CameraRig } from './camera/cameraRig';
-import { setupSky, followSun } from './world/sky';
+import { SKY_HORIZON, setupSky, followSun } from './world/sky';
+import { buildBackdrop } from './world/backdrop';
 import { buildCity } from './world/cityBuilder';
 import { groundHeightAt, nearestRoad } from './world/cityData';
 import { buildRoadGraph } from './world/roadGraph';
 import { loadCity } from './world/loadCity';
 import { snapToRoad } from './world/roadSnap';
 import { Hud } from './ui/hud';
+import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
 import { busById } from './vehicle/buses';
 import { routesFor } from './gameplay/routes';
@@ -33,13 +35,18 @@ async function main() {
 
   const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  // Phones have tiny, very dense screens and weak GPUs: one pixel per CSS pixel is plenty.
+  const touch = isTouchDevice();
+  renderer.setPixelRatio(Math.min(devicePixelRatio, touch ? 1 : 1.5));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
-  // Far plane reaches the mountain ring around the largest imported city.
-  const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 6000);
+  // The city camera only needs to reach past the fog; far scenery has its own pass and camera.
+  const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 3000);
+  const farCamera = new THREE.PerspectiveCamera(68, 1, 20, 120000);
+  renderer.autoClear = false;
+  renderer.setClearColor(SKY_HORIZON);
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
@@ -54,10 +61,15 @@ async function main() {
   if (!city.terrain) addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
   const graph = buildRoadGraph(city);
   const { props } = buildCity(city, world, scene, graph);
+  const { min, max } = city.bounds;
+  const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))));
 
-  const preset = busById(params.get('bus') ?? settings.bus);
-  const routes = routesFor(city);
-  const route = routes.find((r) => r.id === params.get('route')) ?? routes[0];
+  // Free roam (?mode=free) has no route; a route shift is always driven in a bus.
+  const free = params.get('mode') === 'free';
+  const picked = busById(params.get('bus') ?? settings.bus);
+  const preset = free || picked.kind !== 'car' ? picked : busById('popular');
+  const routes = free ? [] : routesFor(city);
+  const route = free ? null : (routes.find((r) => r.id === params.get('route')) ?? routes[0]);
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const model = new BusModel(preset);
@@ -69,12 +81,13 @@ async function main() {
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
   const hud = new Hud(hudRoot, city.attribution);
   const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph, route });
+  if (touch) new TouchControls(document.body, input);
   audio.setVolume(settings.volume);
   if (settings.camera === 'cockpit') rig.toggle();
 
   let paused = false;
   const setPaused = (on: boolean) => {
-    paused = on && !session.game.over;
+    paused = on && !session.game?.over;
     session.showPause(paused);
   };
   const toMenu = () => (location.search = '');
@@ -93,6 +106,7 @@ async function main() {
   let last = performance.now();
   let flippedFor = 0;
   let fps = 60;
+  let wasBoosting = false;
 
   renderer.setAnimationLoop((now) => {
     const raw = (now - last) / 1000;
@@ -106,21 +120,22 @@ async function main() {
       if (action === 'camera') rig.toggle();
       if (action === 'reset') {
         const t = bus.body.translation();
-        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading);
-        bus.reset({ x: s.pos.x, y: groundHeightAt(city, s.pos), z: s.pos.z, heading: s.heading });
+        // The bus's center is ~1.5 m over the road: look for a road at about that height.
+        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, t.y - 1.5);
+        bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading });
       }
       if (action === 'pause') setPaused(!paused);
       if (paused) continue;
-      if (action === 'restart' && session.game.over) session.restart();
+      if (action === 'restart' && session.game?.over) session.restart();
       if (action === 'horn') session.playerHonk();
     }
 
     const drive = paused ? { throttle: 0, steer: 0, handbrake: false } : input.drive();
-    if (drive.throttle > 0) session.start();
+    if (drive.throttle > 0 || drive.boost) session.start();
     // Paused: the world stands still (but keeps rendering behind the menu).
     acc = paused ? 0 : acc + dt;
     while (acc >= PHYSICS_STEP) {
-      bus.update(drive, PHYSICS_STEP);
+      bus.update({ ...drive, boost: session.nitro.step(!!drive.boost, PHYSICS_STEP) }, PHYSICS_STEP);
       session.beforeStep(PHYSICS_STEP);
       world.step();
       session.physicsStep(PHYSICS_STEP);
@@ -140,9 +155,22 @@ async function main() {
     followSun(sun, model.root.position);
     session.frame(dt, camera, rig.mode);
     const speedFrac = Math.abs(bus.speed) / (preset.topSpeedKmh / 3.6);
+    if (bus.boosting && !wasBoosting) audio.cue('nitro');
+    wasBoosting = bus.boosting;
     audio.update(input.hornHeld, speedFrac, drive.throttle);
     const t = bus.body.translation();
     hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, nearestRoad(city, { x: t.x, z: t.z })?.name ?? '');
+    // Backdrop first (sky, far hills, landmarks) through a matching long-range camera, then the city.
+    farCamera.position.copy(camera.position);
+    farCamera.quaternion.copy(camera.quaternion);
+    if (farCamera.fov !== camera.fov || farCamera.aspect !== camera.aspect) {
+      farCamera.fov = camera.fov;
+      farCamera.aspect = camera.aspect;
+      farCamera.updateProjectionMatrix();
+    }
+    renderer.clear();
+    renderer.render(backdrop, farCamera);
+    renderer.clearDepth();
     renderer.render(scene, camera);
   });
 }

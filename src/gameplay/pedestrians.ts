@@ -1,9 +1,10 @@
 import { Rng } from '../core/rng';
 import type { CityData, Vec2 } from '../world/cityData';
-import { forward, right } from '../world/cityData';
+import { forward, inPlayArea, right } from '../world/cityData';
 import { pointInPolygon } from '../world/geom';
 import { RoadIndex } from '../world/roadIndex';
-import { type Path, type RoadGraph, makePath, offsetPath, pointAt } from '../world/roadGraph';
+import { type Path, type RoadGraph, edgeLift, makePath, offsetPath, pointAt } from '../world/roadGraph';
+import { LIFTED } from '../world/elevation';
 
 export interface BusState {
   pos: Vec2;
@@ -106,11 +107,12 @@ export class PedestrianSim {
         };
         for (let d = 0; d <= line.len; d += 1) {
           const q = pointAt(line, Math.min(d, line.len));
-          if (idx.onAsphalt(q, 0.3)) flush();
+          // Nobody walks past the roadworks at the map edge, or along ramps, bridges and underpasses.
+          if (idx.onAsphalt(q, 0.3) || !inPlayArea(city, q, 2) || Math.abs(edgeLift(e, Math.min(d, e.len))) > LIFTED) flush();
           else run.push(q);
         }
         const last = pointAt(line, line.len);
-        if (!idx.onAsphalt(last, 0.3)) run.push(last);
+        if (!idx.onAsphalt(last, 0.3) && inPlayArea(city, last, 2)) run.push(last);
         flush();
       }
     }

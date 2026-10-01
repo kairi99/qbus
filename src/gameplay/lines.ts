@@ -11,6 +11,7 @@ export const LINES = {
   driverAngry: ['¡Aprenda a manejar!', '¡Chofer loco!', '¡Oiga, muévase pues!', '¡Qué le pasa, señor!'],
   carHit: ['¡Mi carro!', '¡Me va a pagar el choque!', '¡Ya me dañó el guardachoque!'],
   pedDive: ['¡Casi me mata!', '¡Ave María Purísima!', '¡Fíjese por dónde va!', '¡Bruto!'],
+  works: ['¡Ya mismo acaban esa obra, ya mismo!', '¡Otra vez cerrado! ¡Estos del Municipio!', '¡Por ahí no hay paso, maestro!', '¡Esa obra lleva años, veci!'],
 } as const;
 
 export type LineKind = keyof typeof LINES;
@@ -28,4 +29,5 @@ export const SPEAKER: Record<LineKind, string> = {
   driverAngry: 'Taxista',
   carHit: 'Conductor',
   pedDive: 'Peatón',
+  works: 'Ayudante',
 };

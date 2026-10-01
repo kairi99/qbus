@@ -1,15 +1,19 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
-import { RAPIER, addTerrainCollider } from '../physics/world';
+import { RAPIER, addTerrainCollider, markStatic } from '../physics/world';
 import type { Building, CityData, Feature, Stop, Vec2 } from './cityData';
 import { SIDEWALK_HEIGHT, forward, groundHeightAt, right, terrainAt } from './cityData';
 import { pointInPolygon } from './geom';
 import { ChunkedMeshBuilder, MeshBuilder, extrude, vertexColorMaterial, IDENTITY } from './meshBuilder';
-import { type Path, type RoadGraph, buildRoadGraph, dirAt, laneOffset, makePath, pointAt } from './roadGraph';
+import { type Path, type RoadGraph, buildRoadGraph, dirAt, edgeY, laneOffset, makePath, pointAt, projectOnPath } from './roadGraph';
 import type { Terrain } from './terrain';
 import { PropSystem } from './props';
 import { type SidewalkSection, sidewalkSections } from './sidewalks';
-import { buildMountains } from './mountains';
+import { addMetroEntrance, addStation, transitSigns } from './transitBuilder';
+import { addRoadworks, addWalls, worksSigns } from './boundaryBuilder';
+import { RoadIndex } from './roadIndex';
+import { profileAt, projectOnRoad, roadProfiles, surfaceY } from './elevation';
+import { buildGrades, planTrenches } from './gradeBuilder';
 
 // Draw order on the ground is enforced with polygon offsets, not height gaps, so layers stay
 // put at any distance: terrain < sidewalk < asphalt < paint.
@@ -50,12 +54,23 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   const paint = new ChunkedMeshBuilder(150);
   const solid = new ChunkedMeshBuilder(); // casts and receives shadows
 
+  // Underpasses cut through the terrain: a finer patch with the cut left open replaces it there.
+  const trenches = planTrenches(city, graph);
+  const groundColor = terrainColor(city);
   if (city.terrain) {
-    addTerrainCollider(world, city.terrain);
-    for (const m of terrainMeshes(city, city.terrain, layer(6))) scene.add(m);
+    addTerrainCollider(world, city.terrain, trenches ?? undefined);
+    for (const m of terrainMeshes(city, city.terrain, layer(6), groundColor, trenches?.cells)) scene.add(m);
   } else scene.add(countryside(city));
 
-  for (const road of city.roads) ribbon(asphalt, makePath(road.points), -road.width / 2, road.width / 2, hUp, Y.asphalt, ASPHALT);
+  // Roads on bridges, in underpasses and on their ramps follow their own profile, not the ground.
+  const profiles = roadProfiles(city);
+  const roadHeight = (i: number) => {
+    const prof = profiles[i];
+    if (!prof) return hUp;
+    const road = city.roads[i];
+    return (p: Vec2) => surfaceY(city, profileAt(prof, projectOnRoad(road, p).s), p, hUp(p));
+  };
+  city.roads.forEach((road, i) => ribbon(asphalt, makePath(road.points), -road.width / 2, road.width / 2, roadHeight(i), Y.asphalt, ASPHALT));
   // Real cities have no block slabs: sidewalks run along the roads, clipped wherever they'd
   // cover asphalt or a junction (divided avenues put carriageways side by side).
   if (!city.blocks.length)
@@ -63,7 +78,9 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
       strip(sidewalks, run, (s) => [s.from, s.to], hUp, Y.sidewalk, SIDEWALK_TOP);
       strip(sidewalks, run, (s) => [s.from, s.from + Math.sign(s.to - s.from) * 0.25], hUp, Y.curb, CURB);
     }
-  for (const n of graph.nodes) if (n.hull) asphalt.fan(n.hull, (p) => hUp(p) + Y.asphalt, ASPHALT, DRAPE);
+  // Junction paving drapes over the ground, raised or sunk by the junction's lift where it's
+  // really up on a deck or down in a cut (not where one of its roads is just starting a ramp).
+  for (const n of graph.nodes) if (n.hull) asphalt.fan(n.hull, (p) => hUp(p) + (Math.abs(n.lift) >= 1 ? n.lift : 0) + Y.asphalt, ASPHALT, DRAPE);
   addMarkings(paint, graph, (p) => hUp(p) + Y.paint);
 
   const fixed = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
@@ -104,18 +121,45 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     solid.at(f.pos.x, f.pos.z).add(new ConvexGeometry(pts), IDENTITY, f.kind === 'ramp' ? '#e39a2d' : MARK_YELLOW, f.kind === 'ramp' ? '#b8741c' : '#3a3a3a');
     collide(RAPIER.ColliderDesc.convexHull(new Float32Array(pts.flatMap((p) => [p.x, p.y, p.z]))));
   }
-  for (const s of city.stops) addShelter(solid.at(s.pos.x, s.pos.z), s, groundHeightAt(city, s.pos), world, fixed);
+  // Rapid-transit stops are served at their stations instead of a shelter.
+  for (const s of city.stops) if (!s.system) addShelter(solid.at(s.pos.x, s.pos.z), s, groundHeightAt(city, s.pos), world, fixed);
+  for (const s of city.stations ?? []) addStation(solid.at(s.pos.x, s.pos.z), s, h, world, fixed);
+  for (const e of city.metro ?? []) addMetroEntrance(solid.at(e.pos.x, e.pos.z), e, h, world, fixed);
+  addWalls(solid, city.walls ?? [], h, world, fixed);
+  for (const m of buildGrades(city, graph, trenches, solid, groundColor, world, fixed)) {
+    m.material = layer(6);
+    m.receiveShadow = true;
+    scene.add(m);
+  }
+  let works: ReturnType<typeof addRoadworks> = { cones: [], signs: [] };
+  if (city.playArea) {
+    const index = new RoadIndex(city.roads);
+    const hulls = graph.nodes.filter((n) => n.hull).map((n) => n.hull!);
+    const { min, max } = city.playArea;
+    const nearEdge = (b: Building) =>
+      b.footprint.some((p) => Math.min(Math.abs(p.x - min.x), Math.abs(p.x - max.x), Math.abs(p.z - min.z), Math.abs(p.z - max.z)) < 40);
+    const edgeBuildings = city.buildings.filter(nearEdge);
+    works = addRoadworks(
+      solid,
+      city,
+      h,
+      (p) => index.onAsphalt(p, 0.3) || hulls.some((hl) => pointInPolygon(p, hl)),
+      (p) => edgeBuildings.some((b) => pointInPolygon(p, b.footprint)),
+      world,
+      fixed,
+    );
+  }
   for (const t of city.trees) addTree(solid.at(t.x, t.z), t, groundHeightAt(city, t), world, fixed);
 
   const ground = [...sidewalks.build(layer(3)), ...asphalt.build(layer(0)), ...paint.build(layer(-3))];
   for (const m of ground) m.receiveShadow = true;
   const solidMeshes = solid.build(vertexColorMaterial({ side: THREE.DoubleSide }));
   for (const m of solidMeshes) m.castShadow = m.receiveShadow = true;
-  const { min, max } = city.bounds;
-  const radius = Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z))));
-  scene.add(...ground, ...solidMeshes, buildMountains(radius));
+  scene.add(...ground, ...solidMeshes, ...transitSigns(city.stations ?? [], city.metro ?? [], h), ...worksSigns(works.signs));
 
-  return { props: new PropSystem(world, scene, city) };
+  markStatic(world);
+  // The roadworks' cones can be knocked over like any other.
+  return { props: new PropSystem(world, scene, { ...city, props: [...city.props, ...works.cones] }) };
 }
 
 /** Flat grass around a generated city, with the city cut out so nothing is coplanar. */
@@ -130,9 +174,8 @@ function countryside(city: CityData): THREE.Mesh {
   return grass;
 }
 
-/** Terrain grid in tiles (so it can be culled): paving in the city, parks green, country outside. */
-function terrainMeshes(city: CityData, t: Terrain, material: THREE.Material): THREE.Mesh[] {
-  const TILE = 40;
+/** Ground color: paving in the city, parks green, country outside. */
+function terrainColor(city: CityData): (x: number, z: number, out: THREE.Color) => THREE.Color {
   const parks = (city.parks ?? []).map((poly) => {
     const xs = poly.map((p) => p.x);
     const zs = poly.map((p) => p.z);
@@ -142,12 +185,23 @@ function terrainMeshes(city: CityData, t: Terrain, material: THREE.Material): TH
   const cPave = new THREE.Color(PAVING);
   const cPark = new THREE.Color(PARK_TOP);
   const cCountry = new THREE.Color(COUNTRY);
-  const color = (x: number, z: number, out: THREE.Color) => {
+  return (x: number, z: number, out: THREE.Color) => {
     const q = { x, z };
     if (parks.some((p) => x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1 && pointInPolygon(q, p.poly))) return out.copy(cPark);
     const outside = Math.max(min.x - x, x - max.x, min.z - z, z - max.z);
     return out.copy(cPave).lerp(cCountry, Math.min(1, Math.max(0, outside / 40)));
   };
+}
+
+/** Terrain grid in tiles (so it can be culled), leaving out `skip` cells (row * (cols - 1) + col). */
+function terrainMeshes(
+  city: CityData,
+  t: Terrain,
+  material: THREE.Material,
+  color: (x: number, z: number, out: THREE.Color) => THREE.Color,
+  skip?: Set<number>,
+): THREE.Mesh[] {
+  const TILE = 40;
   const meshes: THREE.Mesh[] = [];
   const c = new THREE.Color();
   for (let r0 = 0; r0 < t.rows - 1; r0 += TILE)
@@ -168,6 +222,7 @@ function terrainMeshes(city: CityData, t: Terrain, material: THREE.Material): TH
       const idx: number[] = [];
       for (let r = 0; r < r1 - r0; r++)
         for (let cc = 0; cc < c1 - c0; cc++) {
+          if (skip?.has((r0 + r) * (t.cols - 1) + c0 + cc)) continue;
           const a = r * w + cc;
           idx.push(a, a + w, a + 1, a + 1, a + w, a + w + 1);
         }
@@ -253,10 +308,12 @@ function strip(
 }
 
 /** Lane lines and center lines along every road piece, zebra crossings where it meets a junction. */
-function addMarkings(mb: QuadSink, graph: RoadGraph, y: (p: Vec2) => number): void {
+function addMarkings(mb: QuadSink, graph: RoadGraph, ground: (p: Vec2) => number): void {
   for (const e of graph.edges) {
     if (e.reverse >= 0 && e.reverse < e.id) continue; // draw each piece once
     const path = e.center;
+    // On a ramp, bridge or underpass the paint follows the road's own surface.
+    const y = e.y ? (p: Vec2) => edgeY(e, projectOnPath(path, p).s)! + Y.paint : ground;
     const lines: { off: number; color: string; dash: boolean }[] = [];
     if (e.reverse < 0) {
       for (let k = 0; k < e.lanes - 1; k++) lines.push({ off: laneOffset(e, k) - e.laneWidth / 2, color: MARK_WHITE, dash: true });

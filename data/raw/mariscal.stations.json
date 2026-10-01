@@ -1,0 +1,500 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.4 2390de5a",
+  "osm3s": {
+    "timestamp_osm_base": "2026-09-24T03:23:36Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 267939888,
+  "lat": -0.2098400,
+  "lon": -78.4943352,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 345184394,
+  "lat": -0.2085249,
+  "lon": -78.5000462,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "El Ejido",
+    "public_transport": "stop_position",
+    "trolleybus": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 345184408,
+  "lat": -0.2085943,
+  "lon": -78.5002222,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "El Ejido",
+    "public_transport": "stop_position",
+    "trolleybus": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 345184584,
+  "lat": -0.2009742,
+  "lon": -78.4972326,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Santa Clara",
+    "public_transport": "stop_position",
+    "trolleybus": "yes",
+    "wikidata": "Q18419386",
+    "wikipedia": "es:Santa Clara (Trolebús de Quito)"
+  }
+},
+{
+  "type": "node",
+  "id": 345184585,
+  "lat": -0.2041831,
+  "lon": -78.4986088,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Mariscal",
+    "public_transport": "stop_position",
+    "trolleybus": "yes",
+    "wikidata": "Q18416273",
+    "wikipedia": "es:Mariscal (Trolebús de Quito)"
+  }
+},
+{
+  "type": "node",
+  "id": 345185011,
+  "lat": -0.1977674,
+  "lon": -78.4958390,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "La Colón",
+    "public_transport": "stop_position",
+    "trolleybus": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 345215226,
+  "lat": -0.2068857,
+  "lon": -78.4935103,
+  "tags": {
+    "highway": "bus_stop",
+    "name": "Galo Plaza",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 345215227,
+  "lat": -0.2091276,
+  "lon": -78.4960400,
+  "tags": {
+    "highway": "bus_stop",
+    "name": "Casa de la Cultura",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 345217670,
+  "lat": -0.2046436,
+  "lon": -78.4903889,
+  "tags": {
+    "highway": "bus_stop",
+    "name": "Manuela Cañizares",
+    "operator": "micro a rio coca",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 345218858,
+  "lat": -0.2024903,
+  "lon": -78.4867619,
+  "tags": {
+    "highway": "bus_stop",
+    "name": "Baca Ortiz",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 1625428017,
+  "lat": -0.1987913,
+  "lon": -78.4962563,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "La Colón",
+    "public_transport": "stop_position",
+    "trolleybus": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 1627375057,
+  "lat": -0.1963307,
+  "lon": -78.4996312,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 1627375061,
+  "lat": -0.1973137,
+  "lon": -78.5000335,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Seminario Mayor",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 1627569672,
+  "lat": -0.2034720,
+  "lon": -78.5019185,
+  "tags": {
+    "fixme": "yes",
+    "highway": "bus_stop",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 1630983212,
+  "lat": -0.2046070,
+  "lon": -78.4904346,
+  "tags": {
+    "highway": "bus_stop",
+    "name": "Manuela Cañizares",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 1630983228,
+  "lat": -0.2069345,
+  "lon": -78.4936415,
+  "tags": {
+    "highway": "bus_stop",
+    "name": "Galo Plaza",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 2483753580,
+  "lat": -0.1995138,
+  "lon": -78.5006331,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Universidad Central",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4227233925,
+  "lat": -0.2117874,
+  "lon": -78.4882523,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "andina",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4227583645,
+  "lat": -0.2084139,
+  "lon": -78.4887698,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "las universidades",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4227583647,
+  "lat": -0.2075471,
+  "lon": -78.4868933,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "La Moran",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4247032563,
+  "lat": -0.2124873,
+  "lon": -78.4942391,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4274866930,
+  "lat": -0.2119599,
+  "lon": -78.4884304,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "andina",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4309716468,
+  "lat": -0.2107024,
+  "lon": -78.5004329,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "El Ejido",
+    "operator": "CATAR-061",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4309907592,
+  "lat": -0.1977862,
+  "lon": -78.5002329,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "UCE",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4309989375,
+  "lat": -0.1961779,
+  "lon": -78.4997294,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Seminario Mayor",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4311608641,
+  "lat": -0.1962077,
+  "lon": -78.4994014,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Universidad Central",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4313535329,
+  "lat": -0.2116912,
+  "lon": -78.4933362,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Hospital Eugenio Espejo",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4317563114,
+  "lat": -0.2081349,
+  "lon": -78.4962143,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Ejido",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 4469420492,
+  "lat": -0.1999668,
+  "lon": -78.4909446,
+  "tags": {
+    "bench": "yes",
+    "covered": "yes",
+    "highway": "bus_stop",
+    "name": "La Colón 1",
+    "name:it": "La Colon 1",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 5217606501,
+  "lat": -0.2111822,
+  "lon": -78.4982171,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Ejido",
+    "operator": "AGUILA DORADA",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 6424496692,
+  "lat": -0.2075722,
+  "lon": -78.4958800,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Patria-6 de diciembre O-E",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 6424496800,
+  "lat": -0.2082238,
+  "lon": -78.4966860,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 7194255255,
+  "lat": -0.1950608,
+  "lon": -78.5016165,
+  "tags": {
+    "bus": "yes",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 7201879804,
+  "lat": -0.2078010,
+  "lon": -78.4974097,
+  "tags": {
+    "bus": "yes",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 8272129295,
+  "lat": -0.2082422,
+  "lon": -78.4904050,
+  "tags": {
+    "highway": "bus_stop",
+    "name": "De Las Universidades",
+    "public_transport": "stop_position"
+  }
+},
+{
+  "type": "node",
+  "id": 8275324267,
+  "lat": -0.1996592,
+  "lon": -78.5007752,
+  "tags": {
+    "bus": "yes",
+    "highway": "bus_stop",
+    "name": "Universidad Central",
+    "network": "Metro de Quito",
+    "operator": "EPM",
+    "public_transport": "stop_position",
+    "url": "http://www.metrodequito.gob.ec"
+  }
+},
+{
+  "type": "node",
+  "id": 11921675135,
+  "lat": -0.1987796,
+  "lon": -78.5004296,
+  "tags": {
+    "citylines:id": "16929",
+    "name": "Universidad Central",
+    "network": "Metro",
+    "public_transport": "station",
+    "railway": "station",
+    "station": "subway",
+    "subway": "yes",
+    "wikidata": "Q115943333",
+    "wikipedia": "es:Universidad Central (Metro de Quito)"
+  }
+},
+{
+  "type": "node",
+  "id": 11921675136,
+  "lat": -0.2094018,
+  "lon": -78.4971990,
+  "tags": {
+    "citylines:id": "16928",
+    "name": "El Ejido",
+    "network": "Metro",
+    "public_transport": "station",
+    "railway": "station",
+    "station": "subway",
+    "subway": "yes",
+    "wikidata": "Q115942808",
+    "wikipedia": "es:El Ejido (Metro de Quito)"
+  }
+},
+{
+  "type": "node",
+  "id": 13696323933,
+  "lat": -0.2080909,
+  "lon": -78.4974594,
+  "tags": {
+    "name": "El Ejido",
+    "railway": "subway_entrance"
+  }
+},
+{
+  "type": "node",
+  "id": 14020379133,
+  "lat": -0.2095878,
+  "lon": -78.4969468,
+  "tags": {
+    "name": "El Ejido",
+    "railway": "subway_entrance"
+  }
+}
+
+  ]
+}

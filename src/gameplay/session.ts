@@ -7,12 +7,12 @@ import type { BusAudio } from '../core/audio';
 import type { CameraMode } from '../camera/cameraRig';
 import { Rng } from '../core/rng';
 import { RouteGame, type GameEvent } from './routeGame';
-import { type RouteDef, routeStops } from './routes';
-import { snapToRoad } from '../world/roadSnap';
+import { type RouteDef, freeStartPose, routeStops, startPose } from './routes';
 import { type NavPath, Navigator } from './navigation';
 import { MiniMap } from '../ui/minimap';
-import { forward, type Vec2 } from '../world/cityData';
+import type { Vec2 } from '../world/cityData';
 import { TrickScorer, type TrickEvent } from './scoring';
+import { Nitro } from './nitro';
 import { NearMissDetector } from './nearMiss';
 import { PassengersView } from './passengersView';
 import { StopMarker } from './stopMarker';
@@ -20,14 +20,14 @@ import { NavArrow } from '../ui/arrow';
 import { GameHud, money, RATING_LABEL, TRICK_LABEL } from '../ui/gameHud';
 import { LINES, SPEAKER, type LineKind } from './lines';
 import type { RoadGraph } from '../world/roadGraph';
-import { groundHeightAt } from '../world/cityData';
+import { groundHeightAt, inPlayArea, nearestRoad } from '../world/cityData';
+import { pointInPolygon } from '../world/geom';
 import { TrafficSim, type Obstacle } from './traffic';
-import { TrafficBodies } from './trafficBodies';
+import { TrafficBodies, laneSurface } from './trafficBodies';
 import { PedestrianSim } from './pedestrians';
+import { MetroCrowd } from './metroCrowd';
 import { PedestrianView, TrafficView } from './trafficView';
 
-/** The shift starts this far before the route's first stop. */
-const LEAD_IN = 70;
 // Cars and people only live in a bubble around the bus (see TrafficSim.recycle), so these
 // numbers buy density near the player rather than traffic nobody sees.
 const MAX_CARS = 60;
@@ -47,16 +47,21 @@ export interface SessionDeps {
   audio: BusAudio;
   hudRoot: HTMLElement;
   graph: RoadGraph;
-  route: RouteDef;
+  /** The route of the shift; null for free roam (no stops, clock or fares). */
+  route: RouteDef | null;
 }
 
 /**
  * One shift on the route: wires the engine-agnostic rules (RouteGame, TrickScorer) to the
- * physics world, 3D markers, passenger figures, HUD and audio.
+ * physics world, 3D markers, passenger figures, HUD and audio. Without a route it's a free
+ * drive: the living city (traffic, people, nitro) and nothing to score.
  */
 export class GameSession {
-  game!: RouteGame;
+  /** The route game; null in free roam. */
+  game: RouteGame | null = null;
   scorer!: TrickScorer;
+  /** Starts full; drifting and close calls refill it. */
+  readonly nitro = new Nitro();
   private nearMiss: NearMissDetector;
   private passengers: PassengersView;
   private marker: StopMarker;
@@ -73,12 +78,16 @@ export class GameSession {
   private busPos = new THREE.Vector3();
   private runs = 0;
   private startedFlag = false;
-  private start0: { pos: Vec2; heading: number };
+  private start0: { pos: Vec2; heading: number; y: number };
   readonly traffic: TrafficSim;
   readonly trafficBodies: TrafficBodies;
   readonly peds: PedestrianSim;
   private trafficView: TrafficView;
   private pedView: PedestrianView;
+  private metro: MetroCrowd;
+  private metroView: PedestrianView;
+  private frustum = new THREE.Frustum();
+  private viewProj = new THREE.Matrix4();
   private dives = 0;
   private clock = 0;
   private budget = START_CARS;
@@ -90,15 +99,15 @@ export class GameSession {
     this.passengers = new PassengersView(d.scene, d.city);
     this.marker = new StopMarker(d.scene, d.city);
     this.arrow = new NavArrow(d.scene);
-    this.hud = new GameHud(d.hudRoot, d.route.name);
+    this.hud = new GameHud(d.hudRoot, d.route?.name ?? 'Paseo libre', !d.route);
     this.nav = new Navigator(d.graph);
     this.minimap = new MiniMap(d.hudRoot, d.city);
-    this.start0 = this.startPose();
+    this.start0 = d.route ? startPose(d.city, d.graph, d.route) : freeStartPose(d.city, d.graph);
     const spawn = this.start0.pos;
     const graph = d.graph;
     this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 } });
     this.traffic.setBudget(this.budget, spawn);
-    this.trafficBodies = new TrafficBodies(d.world, this.traffic, (p) => groundHeightAt(d.city, p));
+    this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic));
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
     this.nearMiss = new NearMissDetector(d.world, d.bus, (c) => this.trafficBodies.isCar(c));
     this.trafficView = new TrafficView(d.scene, this.traffic, this.trafficBodies);
@@ -107,6 +116,11 @@ export class GameSession {
     this.traffic.recycle(focus, true);
     this.peds.recycle(focus, true);
     this.pedView = new PedestrianView(d.scene, this.peds, d.city);
+    // Metro riders mill about in front of the entrances, off the asphalt and out of buildings.
+    this.metro = new MetroCrowd(d.city.metro ?? [], {
+      walkable: (p) => !nearestRoad(d.city, p) && !d.city.buildings.some((b) => pointInPolygon(p, b.footprint)),
+    });
+    this.metroView = new PedestrianView(d.scene, this.metro, d.city);
     this.restart();
   }
 
@@ -120,8 +134,9 @@ export class GameSession {
 
   /** Starts the clock (first throttle press). */
   start(): void {
-    if (this.startedFlag || this.game.over) return;
+    if (this.startedFlag || this.game?.over) return;
     this.startedFlag = true;
+    if (!this.game) return;
     this.game.start();
     this.say('board');
   }
@@ -130,26 +145,25 @@ export class GameSession {
     const { city, bus } = this.d;
     this.runs++;
     this.passengers.clear();
-    const { pos, heading } = this.start0;
-    this.game = new RouteGame(routeStops(city, this.d.route), {
-      seed: this.runs * 7919 + (Date.now() & 0xff),
-      capacity: bus.preset.capacity,
-      start: pos,
-    });
+    const { pos, heading, y } = this.start0;
     this.scorer = new TrickScorer();
+    this.nitro.reset();
     this.startedFlag = false;
-    this.game.route.forEach((r, i) => this.passengers.showWaiting(r, this.game.waitingAt(i)));
-    this.retarget();
+    if (this.d.route) {
+      const game = new RouteGame(routeStops(city, this.d.route), {
+        seed: this.runs * 7919 + (Date.now() & 0xff),
+        capacity: bus.preset.capacity,
+        start: pos,
+      });
+      this.game = game;
+      game.route.forEach((r, i) => this.passengers.showWaiting(r, game.waitingAt(i)));
+      this.retarget();
+    } else {
+      this.marker.visible = false;
+      this.arrow.point(null);
+    }
     this.hud.showResults(null);
-    bus.reset({ x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
-  }
-
-  /** On the road a little before the route's first stop, heading its way. */
-  private startPose(): { pos: Vec2; heading: number } {
-    const first = routeStops(this.d.city, this.d.route)[0];
-    const f = forward(first.stop.heading);
-    const back = { x: first.zone.x - f.x * LEAD_IN, z: first.zone.z - f.z * LEAD_IN };
-    return snapToRoad(this.d.city, back, first.stop.heading);
+    bus.reset({ x: pos.x, y, z: pos.z, heading });
   }
 
   /** The player honked: traffic ahead hurries, people on the crosswalk run. */
@@ -195,7 +209,7 @@ export class GameSession {
     const t0 = bus.body.translation();
     const hits = this.trafficBodies.afterStep(dt, bus.body.collider(0), { x: t0.x, z: t0.z });
     if (hits.length) this.say('carHit', 0.7);
-    if (!this.startedFlag || this.game.over) {
+    if (!this.startedFlag || this.game?.over) {
       this.dives = 0;
       return;
     }
@@ -209,8 +223,10 @@ export class GameSession {
     });
     this.knocked = 0;
     this.dives = 0;
+    if (this.scorer.sliding) this.nitro.drifting(dt);
     for (const t of tricks) this.onTrick(t);
 
+    if (!this.game) return;
     const p = bus.body.translation();
     for (const e of this.game.update(dt, { pos: { x: p.x, z: p.z }, speed: bus.speed })) this.onGame(e);
   }
@@ -221,22 +237,35 @@ export class GameSession {
     this.clock += dt;
     this.trafficView.sync();
     this.pedView.sync(this.clock);
+    // People may only appear or vanish off-screen (or far away).
+    this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.viewProj);
+    const eye = camera.position;
+    const hidden = (p: Vec2) => Math.hypot(p.x - eye.x, p.z - eye.z) > 120 || !this.frustum.containsPoint(new THREE.Vector3(p.x, groundHeightAt(this.d.city, p) + 1, p.z));
+    this.metro.update(dt, { x: bus.body.translation().x, z: bus.body.translation().z }, hidden);
+    this.metroView.sync(this.clock);
     this.knocked += this.d.props.consumeKnocked();
     const t = bus.body.translation();
     this.busPos.set(t.x, t.y, t.z);
-    this.passengers.update(dt, bus);
+    const game = this.game;
+    this.passengers.update(dt, bus, game?.activeStop.stop.side === 'left');
     this.marker.update(dt);
     this.guide(dt);
     this.arrow.update(camera, mode, this.busPos);
-    const zone = this.game.activeStop.zone;
-    this.hud.board(this.game.activeStop.stop.name, Math.hypot(zone.x - t.x, zone.z - t.z), this.gettingOff());
+    if (game) {
+      const zone = game.activeStop.zone;
+      this.hud.board(game.activeStop.stop.name, Math.hypot(zone.x - t.x, zone.z - t.z), this.gettingOff());
+    }
     this.hud.update(dt, {
-      timeLeft: this.game.timeLeft,
-      cents: this.game.cents,
-      onBoard: this.game.onBoard.length,
+      timeLeft: game?.timeLeft ?? 0,
+      cents: game?.cents ?? 0,
+      onBoard: game?.onBoard.length ?? 0,
       capacity: bus.preset.capacity,
       chain: this.scorer.chain,
       started: this.startedFlag,
+      nitro: this.nitro.level,
+      nitroReady: this.nitro.ready,
+      boosting: this.nitro.active,
     });
   }
 
@@ -254,11 +283,17 @@ export class GameSession {
   }
 
   private onTrick(t: TrickEvent): void {
+    if (t.kind === 'nearMiss') this.nitro.nearMiss();
     if (t.kind === 'crash') {
       this.d.audio.cue('crash');
-      if (this.game.onBoard.length) this.say('crash');
+      // Rammed the roadworks at the edge of the map.
+      const p = this.d.bus.body.translation();
+      if (this.d.city.playArea && !inPlayArea(this.d.city, { x: p.x, z: p.z }, 12)) return this.say('works');
+      if (this.game?.onBoard.length) this.say('crash');
       return;
     }
+    // Free roam: nothing to score.
+    if (!this.game) return;
     this.game.addTrickCents(t.cents);
     const mult = t.multiplier > 1 ? ` ×${t.multiplier}` : '';
     this.hud.popup(`+${money(t.cents)} ${TRICK_LABEL[t.kind]}${mult}`);
@@ -268,6 +303,8 @@ export class GameSession {
   }
 
   private onGame(e: GameEvent): void {
+    const game = this.game;
+    if (!game) return;
     switch (e.type) {
       case 'fare':
         this.d.audio.cue('coin');
@@ -276,9 +313,9 @@ export class GameSession {
         if (e.rating === 'slow') this.say('grumpy', 0.8);
         break;
       case 'arrive': {
-        this.passengers.alight(e.alighted, this.d.bus);
+        this.passengers.alight(e.alighted, this.d.bus, game.route[e.stopIndex].stop);
         this.passengers.board(e.boarded);
-        this.passengers.showWaiting(this.game.route[e.stopIndex], this.game.waitingAt(e.stopIndex));
+        this.passengers.showWaiting(game.route[e.stopIndex], game.waitingAt(e.stopIndex));
         this.d.audio.cue('time');
         this.hud.popup(`+${e.timeBonus} s ${RATING_LABEL[e.rating]}`, 'time');
         if (e.boarded.length) this.say('board', 0.7);
@@ -295,8 +332,8 @@ export class GameSession {
         this.marker.visible = false;
         this.arrow.point(null);
         this.hud.showResults({
-          cents: this.game.cents,
-          delivered: this.game.delivered,
+          cents: game.cents,
+          delivered: game.delivered,
           bestCombo: this.scorer.bestCombo,
           longestAir: this.scorer.longestAir,
         });
@@ -305,10 +342,12 @@ export class GameSession {
   }
 
   private gettingOff(): number {
-    return this.game.onBoard.filter((p) => p.to === this.game.activeIndex).length;
+    const game = this.game;
+    return game ? game.onBoard.filter((p) => p.to === game.activeIndex).length : 0;
   }
 
   private retarget(): void {
+    if (!this.game) return;
     const zone = this.game.activeStop.zone;
     const off = this.gettingOff() > 0;
     this.marker.visible = true;
@@ -328,18 +367,26 @@ export class GameSession {
   private guide(dt: number): void {
     const bus = this.d.bus;
     const here = { x: this.busPos.x, z: this.busPos.z };
+    this.minimapClock += dt;
+    // Free roam: just the streets around you.
+    if (!this.game) {
+      if (this.minimapClock >= 1 / 30) {
+        this.minimapClock = 0;
+        this.minimap.update(here, bus.heading, null, null, this.targetColor(), []);
+      }
+      return;
+    }
     const { zone, stop } = this.game.activeStop;
     this.sinceReplan += dt;
     const offPath = this.path && !this.path.points.some((p) => Math.hypot(p.x - here.x, p.z - here.z) < 20);
     if (!this.game.over && (this.sinceReplan > 0.5 || offPath)) {
       this.sinceReplan = 0;
-      const from = this.nav.locate(here, bus.heading);
+      const from = this.nav.locate(here, bus.heading, bus.body.translation().y - 1.5, (p) => groundHeightAt(this.d.city, p));
       const to = this.nav.locate(zone, stop.heading);
       this.path = from && to ? this.nav.route(from, to) : null;
     }
     const close = Math.hypot(zone.x - here.x, zone.z - here.z) < 45;
     if (!this.game.over) this.arrow.point(close || !this.path ? zone : this.nav.guidePoint(this.path, here, 35));
-    this.minimapClock += dt;
     if (this.minimapClock >= 1 / 30) {
       this.minimapClock = 0;
       const stops = this.game.route.map((r) => r.zone);

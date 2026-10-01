@@ -324,8 +324,16 @@ export class TrafficSim {
     } else {
       car.s += ds;
       if (car.s >= e.len) {
-        // Driving off the map: come back somewhere near the bus, out of sight.
-        if (car.next < 0) this.place(car, this.focus.pos, 0, (p) => hiddenFrom(this.focus, p));
+        // Driving off the map (or into the roadworks): come back somewhere near the bus, out of
+        // sight. Nobody vanishes in plain view: until the player looks away, wait at the line.
+        if (car.next < 0) {
+          if (outOfSight(this.focus, car.pos)) this.place(car, this.focus.pos, 0, (p) => hiddenFrom(this.focus, p));
+          else {
+            car.s = e.len - 0.01;
+            car.speed = 0;
+            car.wait += dt;
+          }
+        }
         else if (this.graph.nodes[e.to].junction && car.reserved !== e.to && !this.canEnter(car, e, external)) {
           // Couldn't stop in time and the junction is busy: hold at the line.
           car.s = e.len - 0.01;
@@ -542,6 +550,13 @@ export class TrafficSim {
 }
 
 /** Out of the player's sight: in the fog ahead, or somewhere behind. Not too far either way. */
+/** The player can't see `p`: in the fog, or behind the bus. */
+function outOfSight(focus: { pos: Vec2; heading: number }, p: Vec2): boolean {
+  const rel = { x: p.x - focus.pos.x, z: p.z - focus.pos.z };
+  const d = Math.hypot(rel.x, rel.z);
+  return d > SPAWN_HIDDEN_DIST || (dot(rel, forward(focus.heading)) < 0 && d > SPAWN_BEHIND_DIST);
+}
+
 function hiddenFrom(focus: { pos: Vec2; heading: number }, p: Vec2): boolean {
   const rel = { x: p.x - focus.pos.x, z: p.z - focus.pos.z };
   const d = Math.hypot(rel.x, rel.z);

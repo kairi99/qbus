@@ -109,3 +109,18 @@ test('Q looks back at the bus while held', async ({ page }) => {
   await expect.poll(camAhead, { timeout: 10_000 }).toBeLessThan(0);
 });
 
+
+test('Shift fires the nitro: flames, gauge drains, then it stays empty', async ({ page }) => {
+  await page.goto('/?city=grid');
+  await page.waitForFunction(() => (window as any).__qbus);
+  const nitro = () => page.evaluate(() => (window as any).__qbus.session.nitro.level as number);
+  expect(await nitro()).toBe(1);
+  await page.keyboard.down('KeyW');
+  await page.keyboard.down('ShiftLeft');
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.bus.boosting), { timeout: 20_000 }).toBe(true);
+  await page.screenshot({ path: `${shots}/05-nitro.png` });
+  await expect.poll(nitro, { timeout: 30_000 }).toBe(0);
+  await page.keyboard.up('ShiftLeft');
+  await page.keyboard.up('KeyW');
+  await expect(page.locator('.gh-nitro')).toBeVisible();
+});

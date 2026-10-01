@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { generateCity } from '../src/world/procCity';
 import { buildRoadGraph, lanePoint } from '../src/world/roadGraph';
 import { distToPolyline } from '../src/world/geom';
-import { right, type CityData } from '../src/world/cityData';
+import { inPlayArea, right, type CityData } from '../src/world/cityData';
 
 const grid = generateCity({ seed: 42 });
 const mariscal: CityData = JSON.parse(readFileSync('data/cities/mariscal.json', 'utf8'));
@@ -75,11 +75,13 @@ describe.each([
     }
   });
 
-  it('never strands a car: every drivable edge leads on, or off the map', () => {
+  it('never strands a car: every drivable edge leads on, off the map, or into the roadworks', () => {
     for (const e of g.edges.filter((e) => e.drivable)) {
       const node = g.nodes[e.to];
       const exits = node.out.filter((id) => g.edges[id].drivable);
-      expect(exits.length > 0 || node.out.length === 0, `${e.road} e${e.id}`).toBe(true);
+      // The roadworks close the streets past the play area: a car recycles at the last junction.
+      const atWorks = node.out.some((id) => g.edges[id].center.pts.some((p) => !inPlayArea(mariscal, p, -1)));
+      expect(exits.length > 0 || node.out.length === 0 || atWorks, `${e.road} e${e.id}`).toBe(true);
     }
   });
 });
@@ -94,8 +96,9 @@ describe('buildRoadGraph (La Mariscal)', () => {
   });
 
   it('keeps most of the network drivable and edges long enough to drive', () => {
+    const inside = g.edges.filter((e) => e.center.pts.every((p) => inPlayArea(mariscal, p)));
     const drivable = g.edges.filter((e) => e.drivable);
-    expect(drivable.length / g.edges.length).toBeGreaterThan(0.8);
+    expect(inside.filter((e) => e.drivable).length / inside.length).toBeGreaterThan(0.9);
     const short = drivable.filter((e) => e.len < 2).length;
     expect(short / drivable.length).toBeLessThan(0.02);
   });

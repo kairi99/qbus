@@ -1,9 +1,10 @@
-import type { CityData, Stop, Vec2 } from '../world/cityData';
-import { forward, right } from '../world/cityData';
+import type { CityData, Stop, TransitSystem, Vec2 } from '../world/cityData';
+import { forward, stopZone } from '../world/cityData';
 import { distToPolyline } from '../world/geom';
 import type { RouteStop } from './routeGame';
 import { type RoadGraph, buildRoadGraph } from '../world/roadGraph';
 import { type GraphSpot, Navigator } from './navigation';
+import { snapToRoad } from '../world/roadSnap';
 
 /** A route the player can pick: an ordered loop of stop ids. */
 export interface RouteDef {
@@ -16,6 +17,8 @@ export interface RouteDef {
   corridor?: string;
   /** OSM ref of the real bus line this follows, for real-line routes. */
   line?: string;
+  /** Trolebús/Ecovía/Metrobus route: stops at its stations, boarding on the left. */
+  system?: TransitSystem;
   lengthM: number;
 }
 
@@ -37,11 +40,10 @@ const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
 export function routesFor(city: CityData, graph: RoadGraph = buildRoadGraph(city)): RouteDef[] {
   const legal = new LegalLegs(city, graph);
   const routes: RouteDef[] = [circuit(city, legal)];
-  // Real bus lines, where the zone has them (their stretch through it, both directions).
-  const lines = (city.lines ?? [])
-    .map((l) => realLine(city, l, legal))
-    .filter((r): r is RouteDef => !!r)
-    .slice(0, MAX_LINES);
+  // Real bus lines, where the zone has them (their stretch through it, both directions), then
+  // the rapid-transit lines at their stations.
+  const all = (city.lines ?? []).map((l) => realLine(city, l, legal)).filter((r): r is RouteDef => !!r);
+  const lines = [...all.filter((r) => !r.system).slice(0, MAX_LINES), ...all.filter((r) => r.system)];
   if (lines.length) return routes.concat(lines);
   const avenues = [...new Set(city.roads.filter((r) => r.kind === 'avenue').map((r) => r.name))];
   const corridors = avenues
@@ -55,16 +57,24 @@ function realLine(city: CityData, l: import('../world/osm/lines').BusLine, legal
   const byId = new Map(city.stops.map((s) => [s.id, s]));
   const stops = legal.prune(l.stops.map((id) => byId.get(id)!).filter(Boolean));
   if (stops.length < MIN_CORRIDOR_STOPS) return null;
+  const system = l.system;
   const also = l.alsoServedBy.length ? ` · también ${l.alsoServedBy.slice(0, 2).join(', ')}${l.alsoServedBy.length > 2 ? '…' : ''}` : '';
   return {
     id: `linea-${l.ref.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     name: l.name,
-    blurb: `Su tramo por la zona (${l.endpoints})${also}`,
+    blurb: system ? `${SYSTEM_BLURB[system]} (${l.endpoints})${also}` : `Su tramo por la zona (${l.endpoints})${also}`,
     stops: stops.map((s) => s.id),
     line: l.ref,
+    system,
     lengthM: legalLength(stops, legal),
   };
 }
+
+const SYSTEM_BLURB: Record<TransitSystem, string> = {
+  trolebus: 'Paradas en las estaciones del Trolebús',
+  ecovia: 'Paradas en las estaciones de la Ecovía',
+  metrobus: 'Paradas en las estaciones del Metrobus',
+};
 
 /** A leg is acceptable when it can be driven legally without a silly detour. */
 const MAX_DETOUR = (straight: number) => straight * 2.5 + 400;
@@ -125,11 +135,7 @@ class LegalLegs {
   }
 }
 
-/** Where the bus stops for `s`: on the road beside the shelter. */
-function zone(s: Stop): Vec2 {
-  const r = right(s.heading);
-  return { x: s.pos.x - r.x * 4.2, z: s.pos.z - r.z * 4.2 };
-}
+const zone = stopZone;
 
 /** Stops of a route with the spot on the road where the bus has to stop. */
 export function routeStops(city: CityData, route: RouteDef): RouteStop[] {
@@ -140,13 +146,62 @@ export function routeStops(city: CityData, route: RouteDef): RouteStop[] {
   });
 }
 
+/** The bus starts this far before the first stop, driving along traffic toward it. */
+const LEAD_IN = 70;
+
+/**
+ * Where the bus starts a route: on the lane that leads into the first stop, `LEAD_IN` meters
+ * back along legal traffic flow, facing it (clear of ramps and humps).
+ */
+export function startPose(city: CityData, graph: RoadGraph, route: RouteDef): { pos: Vec2; heading: number; y: number } {
+  const nav = new Navigator(graph);
+  const first = routeStops(city, route)[0];
+  const spot = nav.locate(first.zone, first.stop.heading);
+  if (!spot) {
+    const f = forward(first.stop.heading);
+    return snapToRoad(city, { x: first.zone.x - f.x * LEAD_IN, z: first.zone.z - f.z * LEAD_IN }, first.stop.heading);
+  }
+  const { pos, heading, y } = nav.pose(nav.behind(spot, LEAD_IN));
+  return snapToRoad(city, pos, heading, y ?? undefined);
+}
+
+/** Where a free drive starts: in the curb lane of a street near the middle of the zone. */
+export function freeStartPose(city: CityData, graph: RoadGraph): { pos: Vec2; heading: number; y: number } {
+  const nav = new Navigator(graph);
+  const mid = { x: (city.bounds.min.x + city.bounds.max.x) / 2, z: (city.bounds.min.z + city.bounds.max.z) / 2 };
+  // The nearest long enough drivable street on the ground (not on a ramp) to the middle.
+  let best: { edge: number; d: number } | null = null;
+  for (const e of graph.edges) {
+    if (!e.drivable || e.len < 40 || e.lift) continue;
+    const d = Math.hypot(e.center.pts[0].x - mid.x, e.center.pts[0].z - mid.z);
+    if (!best || d < best.d) best = { edge: e.id, d };
+  }
+  if (!best) return snapToRoad(city, city.spawn.pos, city.spawn.heading);
+  const { pos, heading } = nav.pose({ edge: best.edge, s: graph.edges[best.edge].len / 2 });
+  return snapToRoad(city, pos, heading);
+}
+
+/** The streets a route drives along, one polyline per leg, following traffic rules. */
+export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = buildRoadGraph(city)): Vec2[][] {
+  const nav = new Navigator(graph);
+  const stops = routeStops(city, route);
+  const spots = stops.map((s) => nav.locate(s.zone, s.stop.heading));
+  return stops.map((s, i) => {
+    const next = stops[(i + 1) % stops.length];
+    const a = spots[i];
+    const b = spots[(i + 1) % stops.length];
+    const path = a && b ? nav.route(a, b) : null;
+    return path ? [s.zone, ...path.points, next.zone] : [s.zone, next.zone];
+  });
+}
+
 /**
  * Greedy tour from the stop nearest the spawn: each next stop is the closest one by *legal*
  * driving distance (one-way streets respected) that's far enough away, and the loop has to
  * be able to close back to the first stop without a big detour.
  */
 function circuit(city: CityData, legal: LegalLegs): RouteDef {
-  const left = city.stops.filter((s) => legal.usable(s));
+  const left = city.stops.filter((s) => !s.system && legal.usable(s));
   const first = left.reduce((a, b) => (dist(b.pos, city.spawn.pos) < dist(a.pos, city.spawn.pos) ? b : a));
   left.splice(left.indexOf(first), 1);
   const stops: Stop[] = [first];
@@ -166,7 +221,7 @@ function circuit(city: CityData, legal: LegalLegs): RouteDef {
 
 function corridor(city: CityData, name: string, legal: LegalLegs): RouteDef | null {
   const lines = city.roads.filter((r) => r.name === name).map((r) => r.points);
-  const on = city.stops.filter((s) => Math.min(...lines.map((l) => distToPolyline(s.pos, l))) < CORRIDOR_REACH);
+  const on = city.stops.filter((s) => !s.system && Math.min(...lines.map((l) => distToPolyline(s.pos, l))) < CORRIDOR_REACH);
   if (on.length < MIN_CORRIDOR_STOPS) return null;
 
   // Main axis of the stops (principal direction), then split by travel direction along it.

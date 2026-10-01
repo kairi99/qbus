@@ -60,10 +60,11 @@ export class BusAudio {
   }
 
   /** Short synthesized cue: coin for money, chime for bonus time, thud for crashes. */
-  cue(kind: 'coin' | 'time' | 'crash' | 'carHorn', volume = 1): void {
+  cue(kind: 'coin' | 'time' | 'crash' | 'carHorn' | 'nitro', volume = 1): void {
     if (!this.ctx || volume <= 0.01) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
+    if (kind === 'nitro') return this.whoosh(volume);
     const notes: [number, number][] =
       kind === 'coin' ? [[988, 0], [1319, 0.07]]
       : kind === 'time' ? [[660, 0], [880, 0.09], [1175, 0.18]]
@@ -84,6 +85,29 @@ export class BusAudio {
       o.start(now + at);
       o.stop(now + at + 0.5);
     }
+  }
+
+  /** Nitro: a burst of filtered noise sweeping up. */
+  private whoosh(volume: number): void {
+    const ctx = this.ctx!;
+    const now = ctx.currentTime;
+    const len = 0.9;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * len), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 1.2;
+    filter.frequency.setValueAtTime(300, now);
+    filter.frequency.exponentialRampToValueAtTime(2400, now + 0.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.5 * volume, now + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, now + len);
+    src.connect(filter).connect(g).connect(this.master);
+    src.start(now);
   }
 
   update(hornHeld: boolean, speedFrac: number, throttle: number): void {

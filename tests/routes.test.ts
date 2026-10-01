@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { generateCity } from '../src/world/procCity';
-import { routesFor, routeStops } from '../src/gameplay/routes';
-import type { CityData } from '../src/world/cityData';
+import { routePaths, routesFor, routeStops, startPose } from '../src/gameplay/routes';
+import { type CityData, forward } from '../src/world/cityData';
+import { buildRoadGraph } from '../src/world/roadGraph';
+import { Navigator } from '../src/gameplay/navigation';
 import { distToPolyline } from '../src/world/geom';
 
 const mariscal: CityData = JSON.parse(readFileSync('data/cities/mariscal.json', 'utf8'));
@@ -12,7 +14,8 @@ describe.each([
   ['La Mariscal', mariscal, 3],
   ['grid', grid, 2],
 ])('routesFor (%s)', (_, city, minRoutes) => {
-  const routes = routesFor(city);
+  const graph = buildRoadGraph(city);
+  const routes = routesFor(city, graph);
 
   it('offers a neighborhood circuit plus corridor or real-line routes', () => {
     expect(routes[0].id).toBe('circuito');
@@ -50,6 +53,40 @@ describe.each([
       expect(s.name, s.name).not.toMatch(/sin nombre|\b[SN]-[NS]\b/i);
       expect(s.name[0], s.name).toBe(s.name[0].toUpperCase());
     }
+  });
+
+  it('starts the bus facing the first stop, a short legal drive before it', () => {
+    const nav = new Navigator(graph);
+    for (const r of routes) {
+      const start = startPose(city, graph, r);
+      const first = routeStops(city, r)[0];
+      const f = forward(start.heading);
+      const dx = first.zone.x - start.pos.x;
+      const dz = first.zone.z - start.pos.z;
+      const d = Math.hypot(dx, dz);
+      expect(d, r.name).toBeGreaterThan(30);
+      expect((f.x * dx + f.z * dz) / d, `${r.name}: stop ahead`).toBeGreaterThan(0.5);
+      // No U-turn needed: driving on legally reaches the stop in about the lead-in distance.
+      const from = nav.locate(start.pos, start.heading)!;
+      const to = nav.locate(first.zone, first.stop.heading)!;
+      expect(nav.distanceTo(from, to), r.name).toBeLessThan(130);
+    }
+  });
+
+  it('draws each leg along the streets, not as a straight line', () => {
+    const edgePts = graph.edges.flatMap((e) => e.center.pts);
+    for (const r of routes) {
+      const legs = routePaths(city, r, graph);
+      expect(legs.length, r.name).toBe(r.stops.length);
+      for (const leg of legs) {
+        // Every vertex sits on a street (lane points are within a road width of a centerline).
+        for (const p of leg.slice(1, -1)) {
+          expect(graph.edges.some((e) => distToPolyline(p, e.center.pts) < e.roadWidth), r.name).toBe(true);
+        }
+        expect(leg.length, r.name).toBeGreaterThan(2);
+      }
+    }
+    expect(edgePts.length).toBeGreaterThan(0);
   });
 
   it('routeStops puts a stopping zone on the road beside each stop', () => {

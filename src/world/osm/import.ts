@@ -1,10 +1,14 @@
 import { Rng } from '../../core/rng';
-import type { Building, CityData, Feature, Prop, Road, Stop, Vec2 } from '../cityData';
-import { right } from '../cityData';
+import type { Building, CityData, Feature, Horizon, Prop, Road, Stop, Vec2 } from '../cityData';
+import { forward, inPlayArea, right, stopZone } from '../cityData';
 import { distToPolyline, pointInPolygon, polygonToPolylineDistance } from '../geom';
 import { type Terrain, smoothHeights } from '../terrain';
-import { buildRoadGraph } from '../roadGraph';
+import { buildRoadGraph, dirAt, projectOnPath } from '../roadGraph';
 import { importLines } from './lines';
+import { importStations, widenMedians } from './stations';
+import { importCampuses } from './campus';
+import { CLEARANCE, separateGrades } from './grades';
+import { liftAlong, projectOnRoad } from '../elevation';
 
 /** Subset of the Overpass JSON (`out geom;`) we use. */
 export interface OsmJson {
@@ -18,7 +22,7 @@ export interface OsmElement {
   lon?: number;
   tags?: Record<string, string>;
   geometry?: { lat: number; lon: number }[];
-  members?: { type: string; ref?: number; role: string; geometry?: { lat: number; lon: number }[] }[];
+  members?: { type: string; ref?: number; role: string; lat?: number; lon?: number; geometry?: { lat: number; lon: number }[] }[];
 }
 
 /** Elevation raster in lat/lon (row 0 = north edge). */
@@ -43,6 +47,8 @@ export interface ImportOptions {
   terrainMargin?: number;
   /** Gaussian-ish smoothing radius, meters (removes buildings/trees baked into the DSM). */
   smoothing?: number;
+  /** OSM way ids to leave out (known mapping errors). */
+  dropWays?: number[];
 }
 
 const SIDEWALK = 3;
@@ -82,7 +88,38 @@ export function makeProjection(bbox: [number, number, number, number]) {
 }
 
 /** Converts Overpass data + a DEM into a drivable CityData. */
-export function importOsm(osm: OsmJson, dem: Dem, opts: ImportOptions, routesOsm?: OsmJson): CityData {
+/** Optional extra data for a zone: Overpass downloads (see tools/fetch-osm.ts) and a wide DEM. */
+export interface ExtraData {
+  /** Bus route relations: real lines. */
+  routes?: OsmJson;
+  /** Rapid-transit stop positions and Metro stations (needs `routes`). */
+  stations?: OsmJson;
+  /** Campus grounds that get walls. */
+  areas?: OsmJson;
+  /** Elevation covering `HORIZON_HALF` meters around the zone: the view's far terrain. */
+  horizonDem?: Dem;
+}
+
+/** The far terrain reaches this far from the zone's center, in cells this big. */
+export const HORIZON_HALF = 13000;
+const HORIZON_CELL = 100;
+
+/** Landmarks seen from anywhere in Quito (`summit`: meters above sea level, for volcanoes). */
+const LANDMARKS: { kind: 'virgen' | 'volcano'; name: string; lat: number; lon: number; summit?: number }[] = [
+  // OSM way 302694122, "La Virgen de El Panecillo".
+  { kind: 'virgen', name: 'Virgen del Panecillo', lat: -0.22885, lon: -78.51858 },
+  { kind: 'volcano', name: 'Cotopaxi', lat: -0.6804, lon: -78.4378, summit: 5897 },
+  { kind: 'volcano', name: 'Antisana', lat: -0.4814, lon: -78.1414, summit: 5704 },
+  { kind: 'volcano', name: 'Cayambe', lat: 0.0292, lon: -77.9864, summit: 5790 },
+];
+
+/** The map edge is closed off this far in (roadworks), so its end is never in reach. */
+const EDGE_INSET = 70;
+
+export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra: ExtraData = {}): CityData {
+  const { routes: routesOsm, stations: stationsOsm, areas: areasOsm } = extra;
+  const drop = new Set(opts.dropWays ?? []);
+  const osm = drop.size ? { ...source, elements: source.elements.filter((e) => !(e.type === 'way' && drop.has(e.id))) } : source;
   const rng = new Rng(opts.seed ?? 1);
   const proj = makeProjection(opts.bbox);
   const sw = proj.toXZ(opts.bbox[0], opts.bbox[1]);
@@ -91,17 +128,68 @@ export function importOsm(osm: OsmJson, dem: Dem, opts: ImportOptions, routesOsm
   const inside = (p: Vec2, pad = 0) =>
     p.x >= bounds.min.x - pad && p.x <= bounds.max.x + pad && p.z >= bounds.min.z - pad && p.z <= bounds.max.z + pad;
 
-  const roads = importRoads(osm, proj.toXZ, bounds);
+  // Median stations need room between the carriageways: make it before anything else uses the roads.
+  const flat =
+    stationsOsm && routesOsm
+      ? widenMedians(importRoads(osm, proj.toXZ, bounds), stationsOsm, routesOsm, proj.toXZ, (p) => inside(p))
+      : importRoads(osm, proj.toXZ, bounds);
+  // Bridges go up and underpasses down, with ramps; roads on different levels don't meet.
+  const { roads, crossings } = separateGrades(flat);
+  for (const c of crossings)
+    if (c.gap < CLEARANCE * 0.8) console.warn(`grade crossing squeezed to ${c.gap.toFixed(1)} m: ${roads[c.upper].name} over ${roads[c.lower].name}`);
   // Junction areas are paved (the game draws them as asphalt): nothing may stand on them.
   const hulls = buildRoadGraph({ roads } as CityData)
     .nodes.filter((n) => n.hull)
     .map((n) => n.hull!);
   const onJunction = (p: Vec2) => hulls.some((h) => pointInPolygon(p, h));
-  const terrain = buildTerrain(dem, proj.toLatLon, bounds, roads, opts);
+  const { terrain, base } = buildTerrain(dem, proj.toLatLon, bounds, roads, opts);
+  const far = extra.horizonDem;
+  const horizon = far ? buildHorizon(far, proj.toLatLon, base) : undefined;
+  const landmarks = far
+    ? LANDMARKS.map((l) => ({ kind: l.kind, name: l.name, pos: proj.toXZ(l.lat, l.lon), y: round((l.summit ?? sampleDem(far, l.lat, l.lon)) - base, 1) }))
+    : undefined;
   const buildings = importBuildings(osm, proj.toXZ, inside, roads, rng).filter(
     (b) => !b.footprint.some(onJunction) && !hulls.some((h) => h.some((q) => pointInPolygon(q, b.footprint))),
   );
-  const stops = importStops(osm, proj.toXZ, inside, roads, buildings).filter((st) => !onJunction(st.pos));
+  const playArea = {
+    min: { x: bounds.min.x + EDGE_INSET, z: bounds.min.z + EDGE_INSET },
+    max: { x: bounds.max.x - EDGE_INSET, z: bounds.max.z - EDGE_INSET },
+  };
+  const playable = (p: Vec2) => inPlayArea({ playArea }, p, 15);
+  let stops = importStops(osm, proj.toXZ, inside, roads, buildings).filter((st) => !onJunction(st.pos) && playable(st.pos));
+  const transit =
+    stationsOsm && routesOsm ? importStations(stationsOsm, routesOsm, { toXZ: proj.toXZ, roads, buildings, onJunction, inside: playable }) : undefined;
+  // Keep station platforms and Metro canopies free of shelters, trees and street furniture.
+  const occupied = (p: Vec2, pad: number) =>
+    !!transit &&
+    (transit.stations.some((s) => inFootprint(p, s.pos, s.heading, s.length / 2 + pad, s.width / 2 + pad)) ||
+      transit.metro.some((m) => Math.hypot(p.x - m.pos.x, p.z - m.pos.z) < 4 + pad));
+  if (transit) stops = [...stops.filter((st) => !occupied(st.pos, 3)), ...transit.stops];
+  // Stops only count where a bus can get to them: on a lane going their way that traffic
+  // (and route planning) uses. Near the roadworks some streets are closed.
+  const graph = buildRoadGraph({ roads, playArea } as CityData);
+  const servable = (st: Stop) => {
+    const z = stopZone(st);
+    const f = forward(st.heading);
+    return graph.edges.some((e) => {
+      if (!e.drivable) return false;
+      const { s, d } = projectOnPath(e.center, z);
+      const dir = dirAt(e.center, s);
+      return d < 10 && dir.x * f.x + dir.z * f.z > 0.5;
+    });
+  };
+  // ...and not on a ramp, bridge or underpass (a shelter can't stand there).
+  stops = stops.filter((st) => servable(st) && !nearLifted(roads, stopZone(st), 6));
+  const walls = areasOsm
+    ? importCampuses(areasOsm, {
+        toXZ: proj.toXZ,
+        roads,
+        buildings,
+        onJunction,
+        inside: (p) => inside(p),
+        keepClear: (p) => occupied(p, 1) || stops.some((st) => Math.hypot(p.x - st.pos.x, p.z - st.pos.z) < 4.5),
+      })
+    : undefined;
   const parks = osm.elements
     .filter((e) => e.type === 'way' && e.geometry && (e.tags?.leisure || e.tags?.landuse))
     .map((e) => closedRing(e.geometry!.map((g) => proj.toXZ(g.lat, g.lon))))
@@ -111,10 +199,11 @@ export function importOsm(osm: OsmJson, dem: Dem, opts: ImportOptions, routesOsm
   const trees = osm.elements
     .filter((e) => e.type === 'node' && e.tags?.natural === 'tree')
     .map((e) => proj.toXZ(e.lat!, e.lon!))
-    .filter((p) => inside(p) && offRoad(p, 0.8) && !blockedByBuilding(p) && !onJunction(p));
-  const props = scatterProps(roads, stops, buildings, rng, inside).filter((pr) => !onJunction(pr.pos));
-  const features = placeFeatures(roads, rng);
-  const spawn = pickSpawn(roads, bounds);
+    .filter((p) => inside(p) && offRoad(p, 0.8) && !blockedByBuilding(p) && !onJunction(p) && !occupied(p, 2) && !nearLifted(roads, p, 4));
+  const props = scatterProps(roads, stops, buildings, rng, inside).filter((pr) => !onJunction(pr.pos) && !occupied(pr.pos, 1) && !nearLifted(roads, pr.pos, 4));
+  // Humps only where the game happens, and never on a ramp, bridge or underpass.
+  const features = placeFeatures(roads, rng).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20));
+  const spawn = pickSpawn(roads.filter((r) => !r.lift), bounds);
 
   return {
     name: opts.name,
@@ -130,8 +219,22 @@ export function importOsm(osm: OsmJson, dem: Dem, opts: ImportOptions, routesOsm
     terrain,
     parks,
     lines: routesOsm ? importLines(routesOsm, proj.toXZ, stops) : undefined,
+    stations: transit?.stations,
+    metro: transit?.metro,
+    playArea,
+    walls,
+    horizon,
+    landmarks,
     attribution: '© OpenStreetMap contributors (ODbL); elevation: Copernicus GLO-30 DEM',
   };
+}
+
+/** Inside a rectangle centered at `c`, `halfL` along `heading` and `halfW` across. */
+function inFootprint(p: Vec2, c: Vec2, heading: number, halfL: number, halfW: number): boolean {
+  const f = { x: Math.cos(heading), z: -Math.sin(heading) };
+  const dx = p.x - c.x;
+  const dz = p.z - c.z;
+  return Math.abs(dx * f.x + dz * f.z) <= halfL && Math.abs(dx * f.z - dz * f.x) <= halfW;
 }
 
 function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bounds: { min: Vec2; max: Vec2 }): Road[] {
@@ -139,7 +242,9 @@ function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bou
   for (const e of osm.elements) {
     const t = e.tags ?? {};
     const cls = ROAD_CLASSES[t.highway];
-    if (e.type !== 'way' || !cls || !e.geometry || t.tunnel === 'yes' || t.area === 'yes') continue;
+    if (e.type !== 'way' || !cls || !e.geometry || t.area === 'yes' || t.tunnel === 'building_passage') continue;
+    // Bridges and underpasses sit on their own level (see grades.ts); `layer` alone means nothing.
+    const layer = t.bridge && t.bridge !== 'no' ? Number(t.layer) || 1 : t.tunnel && t.tunnel !== 'no' ? Number(t.layer) || -1 : 0;
     let pts = e.geometry.map((g) => toXZ(g.lat, g.lon));
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.oneway === '-1' || t.junction === 'roundabout';
     if (t.oneway === '-1') pts.reverse();
@@ -154,6 +259,7 @@ function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bou
         width: round(width, 1),
         lanes,
         oneway,
+        ...(layer ? { layer } : {}),
       });
     }
   }
@@ -167,7 +273,7 @@ function buildTerrain(
   bounds: { min: Vec2; max: Vec2 },
   roads: Road[],
   opts: ImportOptions,
-): Terrain {
+): { terrain: Terrain; base: number } {
   const cell = opts.terrainCell ?? 8;
   const margin = opts.terrainMargin ?? 400;
   const minX = Math.floor((bounds.min.x - margin) / cell) * cell;
@@ -226,7 +332,27 @@ function buildTerrain(
       if (x >= bounds.min.x && x <= bounds.max.x && z >= bounds.min.z && z <= bounds.max.z) base = Math.min(base, carved[r * cols + c]);
     }
   t.heights = carved.map((h) => round(h - base, 2));
-  return t;
+  return { terrain: t, base };
+}
+
+/** Coarse real terrain around the zone, lightly averaged (the DSM has buildings in it). */
+function buildHorizon(dem: Dem, toLatLon: (p: Vec2) => { lat: number; lon: number }, base: number): Horizon {
+  const cell = HORIZON_CELL;
+  const n = Math.round((2 * HORIZON_HALF) / cell) + 1;
+  const heights: number[] = [];
+  for (let r = 0; r < n; r++)
+    for (let c = 0; c < n; c++) {
+      const x = -HORIZON_HALF + c * cell;
+      const z = -HORIZON_HALF + r * cell;
+      let sum = 0;
+      for (const dx of [-cell / 3, 0, cell / 3])
+        for (const dz of [-cell / 3, 0, cell / 3]) {
+          const { lat, lon } = toLatLon({ x: x + dx, z: z + dz });
+          sum += sampleDem(dem, lat, lon);
+        }
+      heights.push(Math.round(sum / 9 - base));
+    }
+  return { minX: -HORIZON_HALF, minZ: -HORIZON_HALF, cell, cols: n, rows: n, heights };
 }
 
 function importBuildings(
@@ -375,6 +501,15 @@ function scatterProps(roads: Road[], stops: Stop[], buildings: Building[], rng: 
 }
 
 /** A few speed humps on side streets and ramps on long straight ones (it's an arcade game). */
+/** Within `margin` of a road's asphalt where it's off the ground (ramps, bridges, underpasses). */
+function nearLifted(roads: Road[], p: Vec2, margin: number): boolean {
+  return roads.some((r) => {
+    if (!r.lift) return false;
+    const { s, d } = projectOnRoad(r, p);
+    return d < r.width / 2 + margin && Math.abs(liftAlong(r, s)) > 0.05;
+  });
+}
+
 function placeFeatures(roads: Road[], rng: Rng): Feature[] {
   const out: Feature[] = [];
   for (const road of roads) {

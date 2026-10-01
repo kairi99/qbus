@@ -23,6 +23,7 @@
     "handbrakeFrictionSlip": 0.28
   },
   "drift": { "maxAngleDeg": 38, "gripRecovery": 2.2 },
+  "nitro": { "accel": 8, "topSpeedBonusKmh": 35 },
   "suspension": {
     "restLength": 0.45,
     "maxTravel": 0.4,

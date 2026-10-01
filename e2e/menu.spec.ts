@@ -71,3 +71,39 @@ test('settings are saved and applied', async ({ page }) => {
   const s = await page.evaluate(() => ({ cam: (window as any).__qbus.rig.mode, hills: (window as any).__qbus.city.terrain.scale }));
   expect(s).toEqual({ cam: 'cockpit', hills: 2 });
 });
+
+test('free roam: pick the AE86, drive around with no route, clock or fares', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole('button', { name: 'Jugar' }).click();
+  // The AE86 is only offered in free roam.
+  await expect(page.locator('[data-bus="ae86"]')).toHaveCount(0);
+  await page.locator('[data-mode="free"]').click();
+  await expect(page.locator('.mn-step-route')).toBeHidden();
+  await page.locator('[data-bus="ae86"]').click();
+  await expect(page.locator('.mn-summary')).toHaveText('Toyota Sprinter Trueno AE86, La Mariscal, Paseo libre');
+  await page.screenshot({ path: `${shots}/66-setup-free.png`, fullPage: true });
+
+  await page.getByRole('button', { name: '¡Arranca!' }).click();
+  await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  const state = await page.evaluate(() => {
+    const q = (window as any).__qbus;
+    return { bus: q.bus.preset.id, route: q.route, game: q.session.game };
+  });
+  expect(state).toEqual({ bus: 'ae86', route: null, game: null });
+  await expect(page.locator('.gh-timer')).toBeHidden();
+  await expect(page.locator('.gh-money')).toBeHidden();
+  await expect(page.locator('.gh-minimap')).toBeVisible();
+
+  await page.keyboard.down('KeyW');
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.bus.speed), { timeout: 20_000 }).toBeGreaterThan(8);
+  await page.screenshot({ path: `${shots}/67-free-ae86.png` });
+  await page.keyboard.press('KeyC');
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${shots}/68-free-ae86-cockpit.png` });
+  await page.keyboard.up('KeyW');
+  expect(errors).toEqual([]);
+});

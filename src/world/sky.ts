@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 
 const SKY_TOP = new THREE.Color('#5d9be0');
-const SKY_HORIZON = new THREE.Color('#dfe9ee');
+export const SKY_HORIZON = new THREE.Color('#dfe9ee');
 
-/** Slowroads-style look: vertical gradient sky, matching distance fog, soft sun + sky light. */
-export function setupSky(scene: THREE.Scene): THREE.DirectionalLight {
-  scene.background = SKY_HORIZON;
-  scene.fog = new THREE.Fog(SKY_HORIZON, 120, 560);
-
+/**
+ * Vertical gradient sky dome that follows the camera. It belongs to the backdrop pass
+ * (`backdrop.ts`), drawn before the city.
+ */
+export function skyDome(): THREE.Mesh {
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(900, 24, 12),
     new THREE.ShaderMaterial({
@@ -23,8 +23,13 @@ export function setupSky(scene: THREE.Scene): THREE.DirectionalLight {
   );
   sky.renderOrder = -1;
   sky.frustumCulled = false;
-  scene.add(sky);
+  sky.onBeforeRender = (_r, _s, camera) => sky.position.copy(camera.position);
+  return sky;
+}
 
+/** Slowroads-style look: distance fog matching the sky's horizon, soft sun + sky light. */
+export function setupSky(scene: THREE.Scene): THREE.DirectionalLight {
+  scene.fog = new THREE.Fog(SKY_HORIZON, 120, 560);
   scene.add(new THREE.HemisphereLight('#cfe6ff', '#6b7a4a', 1.4));
   const sun = new THREE.DirectionalLight('#fff3dc', 2.2);
   sun.castShadow = true;
@@ -38,8 +43,6 @@ export function setupSky(scene: THREE.Scene): THREE.DirectionalLight {
   c.far = 300;
   scene.add(sun, sun.target);
 
-  // The sky dome and shadow frustum follow whatever the camera is looking at.
-  sky.onBeforeRender = (_r, _s, camera) => sky.position.copy(camera.position);
   return sun;
 }
 

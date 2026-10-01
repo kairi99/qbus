@@ -1,5 +1,5 @@
 import type { Vec2 } from '../world/cityData';
-import { type RoadGraph, dirAt, lanePoint, projectOnPath } from '../world/roadGraph';
+import { type LaneEdge, type RoadGraph, dirAt, edgeY, lanePoint, projectOnPath } from '../world/roadGraph';
 
 /** A spot on the lane graph: an edge and a distance along it. */
 export interface GraphSpot {
@@ -27,16 +27,21 @@ export class Navigator {
   /**
    * Nearest drivable edge to `p` whose direction agrees with `heading`; if none is close,
    * the nearest drivable edge regardless (the bus may be going the wrong way down a one-way).
+   * With `y` (and `ground`, the terrain height), a bridge or underpass passing over or under
+   * `p` doesn't count unless it's at about that height.
    */
-  locate(p: Vec2, heading: number): GraphSpot | null {
+  locate(p: Vec2, heading: number, y?: number, ground?: (p: Vec2) => number): GraphSpot | null {
     const fx = Math.cos(heading);
     const fz = -Math.sin(heading);
     let best: (GraphSpot & { d: number }) | null = null;
     let any: (GraphSpot & { d: number }) | null = null;
     for (const e of this.graph.edges) {
       if (!e.drivable) continue;
-      const { s, d } = projectOnPath(e.center, p);
+      const proj = projectOnPath(e.center, p);
+      const { s } = proj;
+      let d = proj.d;
       if (d > SEARCH) continue;
+      if (y !== undefined && ground) d += 1.5 * Math.abs((edgeY(e, s) ?? ground(p)) - y);
       if (!any || d < any.d) any = { edge: e.id, s, d };
       const dir = dirAt(e.center, s);
       if (dir.x * fx + dir.z * fz < 0.3) continue;
@@ -95,6 +100,43 @@ export class Navigator {
       for (const nx of this.graph.nodes[e.to].out) if (edges[nx].drivable) relax(nx, d + e.len + gap(id, nx), id);
     }
     return { dist, prev };
+  }
+
+  /**
+   * The spot `back` meters before `to` against the flow of traffic, taking the straightest
+   * street into each junction, and kept `margin` clear of the junctions at the edge ends.
+   * It only goes back around a corner when the straight run before `to` is too short, so
+   * that `to` is usually dead ahead. Driving forward from it reaches `to` legally.
+   */
+  behind(to: GraphSpot, back: number, margin = 8, minRun = 30): GraphSpot {
+    const edges = this.graph.edges;
+    const straightness = (p: LaneEdge, e: LaneEdge) => p.endDir.x * e.dir.x + p.endDir.z * e.dir.z;
+    let e = edges[to.edge];
+    let s = to.s - back;
+    // Distance from the start of `e` to `to`.
+    let run = to.s;
+    for (let guard = 0; guard < 20 && s < margin; guard++) {
+      let prev: LaneEdge | null = null;
+      for (const id of this.graph.nodes[e.from].in) {
+        const p = edges[id];
+        if (!p.drivable || p.id === e.reverse) continue;
+        if (!prev || straightness(p, e) > straightness(prev, e)) prev = p;
+      }
+      if (!prev || (straightness(prev, e) < 0.7 && run - margin >= minRun)) break;
+      s = Math.min(prev.len + s, prev.len - margin);
+      run += prev.len;
+      e = prev;
+    }
+    s = Math.max(Math.min(margin, e.len / 2), Math.min(s, Math.max(e.len - margin, e.len / 2)));
+    return { edge: e.id, s };
+  }
+
+  /** Position and heading of a spot, in its curb lane. */
+  /** Position, heading, and surface height (null on the ground) of a spot, in its curb lane. */
+  pose(spot: GraphSpot): { pos: Vec2; heading: number; y: number | null } {
+    const e = this.graph.edges[spot.edge];
+    const d = dirAt(e.center, spot.s);
+    return { pos: lanePoint(e, spot.s, 0), heading: Math.atan2(-d.z, d.x), y: edgeY(e, spot.s) };
   }
 
   /** The point `ahead` meters along the path past where `p` projects onto it. */

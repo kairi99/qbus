@@ -1,5 +1,6 @@
 import type { CityData, Road, Vec2 } from './cityData';
 import { segmentIntersection } from './geom';
+import { profileAt, projectOnRoad, roadProfiles } from './elevation';
 
 export interface GraphNode {
   id: number;
@@ -14,6 +15,10 @@ export interface GraphNode {
   corner: boolean;
   /** Paved area of a junction/corner: convex hull of the road ends meeting there. */
   hull: Vec2[] | null;
+  /** Surface height where it's on a ramp, bridge or underpass (null on the ground). */
+  y: number | null;
+  /** Height off the ground there (0 on the ground). */
+  lift: number;
 }
 
 /** A polyline with cumulative distances. */
@@ -52,6 +57,15 @@ export interface LaneEdge {
   oneway: boolean;
   /** Part of the strongly connected core: a car can always drive on from here. */
   drivable: boolean;
+  /** Index of the road in `city.roads` this edge runs along. */
+  roadIndex: number;
+  /**
+   * Surface height at each `center.pts` point, on bridges, underpasses and their ramps (null
+   * on the ground: use the terrain). See `edgeY`.
+   */
+  y: number[] | null;
+  /** Lift off the ground at each `center.pts` point (null on the ground). */
+  lift: number[] | null;
 }
 
 export interface RoadGraph {
@@ -60,6 +74,8 @@ export interface RoadGraph {
 }
 
 const MERGE = 1;
+/** Roads whose surfaces are this far apart vertically pass over each other rather than meet. */
+const LEVEL_GAP = 2;
 const CELL = 40;
 const MIN_EDGE = 3;
 /** Trims never exceed this; intersections never grow wider than MAX_CLUSTER. */
@@ -81,21 +97,23 @@ interface Piece {
 export function buildRoadGraph(city: CityData): RoadGraph {
   const roads = city.roads;
 
-  // 1. Raw nodes at road ends and crossings, found through a segment hash.
-  const raw: { pos: Vec2; halfWidth: number }[] = [];
+  // 1. Raw nodes at road ends and crossings, found through a segment hash. Roads on different
+  // levels (a bridge and the street under it) don't meet.
+  const liftOn = (r: Road, i: number, t: number) => (r.lift ? r.lift[i] + (r.lift[i + 1] - r.lift[i]) * t : 0);
+  const raw: { pos: Vec2; halfWidth: number; lift: number }[] = [];
   const nodeHash = new Map<string, number[]>();
-  const nodeAt = (p: Vec2, halfWidth: number): number => {
+  const nodeAt = (p: Vec2, halfWidth: number, lift: number): number => {
     const kx = Math.floor(p.x / MERGE);
     const kz = Math.floor(p.z / MERGE);
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
         for (const id of nodeHash.get(`${kx + dx},${kz + dz}`) ?? []) {
-          if (Math.hypot(raw[id].pos.x - p.x, raw[id].pos.z - p.z) < MERGE) {
+          if (Math.hypot(raw[id].pos.x - p.x, raw[id].pos.z - p.z) < MERGE && Math.abs(raw[id].lift - lift) < LEVEL_GAP) {
             raw[id].halfWidth = Math.max(raw[id].halfWidth, halfWidth);
             return id;
           }
         }
-    raw.push({ pos: { ...p }, halfWidth });
+    raw.push({ pos: { ...p }, halfWidth, lift });
     const key = `${kx},${kz}`;
     nodeHash.set(key, [...(nodeHash.get(key) ?? []), raw.length - 1]);
     return raw.length - 1;
@@ -112,8 +130,8 @@ export function buildRoadGraph(city: CityData): RoadGraph {
     const cuts: { i: number; t: number; node: number; pos: Vec2 }[] = [];
     const first = r.points[0];
     const last = r.points[r.points.length - 1];
-    cuts.push({ i: 0, t: 0, node: nodeAt(first, r.width / 2), pos: first });
-    cuts.push({ i: r.points.length - 2, t: 1, node: nodeAt(last, r.width / 2), pos: last });
+    cuts.push({ i: 0, t: 0, node: nodeAt(first, r.width / 2, liftOn(r, 0, 0)), pos: first });
+    cuts.push({ i: r.points.length - 2, t: 1, node: nodeAt(last, r.width / 2, liftOn(r, r.points.length - 2, 1)), pos: last });
     for (let i = 0; i < r.points.length - 1; i++) {
       const a = r.points[i];
       const b = r.points[i + 1];
@@ -126,7 +144,13 @@ export function buildRoadGraph(city: CityData): RoadGraph {
           const hit = segmentIntersection(a, b, o.points[j], o.points[j + 1]);
           if (!hit) continue;
           const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-          cuts.push({ i, t: Math.hypot(hit.x - a.x, hit.z - a.z) / len, node: nodeAt(hit, Math.max(r.width, o.width) / 2), pos: hit });
+          const t = Math.hypot(hit.x - a.x, hit.z - a.z) / len;
+          const oa = o.points[j];
+          const ob = o.points[j + 1];
+          const ot = Math.hypot(hit.x - oa.x, hit.z - oa.z) / (Math.hypot(ob.x - oa.x, ob.z - oa.z) || 1);
+          const lift = liftOn(r, i, t);
+          if (Math.abs(lift - liftOn(o, j, ot)) >= LEVEL_GAP) continue; // one passes over the other
+          cuts.push({ i, t, node: nodeAt(hit, Math.max(r.width, o.width) / 2, lift), pos: hit });
         }
     }
     cuts.sort((x, y) => x.i + x.t - (y.i + y.t));
@@ -226,7 +250,7 @@ export function buildRoadGraph(city: CityData): RoadGraph {
       const pos = { x: ms.reduce((s, m) => s + raw[m].pos.x, 0) / ms.length, z: ms.reduce((s, m) => s + raw[m].pos.z, 0) / ms.length };
       const k = kind.get(c);
       id = nodes.length;
-      nodes.push({ id, pos, out: [], in: [], junction: k === 'junction', corner: k === 'corner', hull: null });
+      nodes.push({ id, pos, out: [], in: [], junction: k === 'junction', corner: k === 'corner', hull: null, y: null, lift: 0 });
       clusterId.set(c, id);
     }
     return id;
@@ -234,8 +258,10 @@ export function buildRoadGraph(city: CityData): RoadGraph {
 
   // 4. Directed edges along each external piece, trimmed where they meet a junction.
   const edges: LaneEdge[] = [];
+  const profiles = roadProfiles(city);
   external.forEach((p, pieceId) => {
     const r = roads[p.road];
+    const profile = profiles[p.road];
     const A = nodeOf(p.a);
     const B = nodeOf(p.b);
     const [trimA, trimB] = trims.get(p)!;
@@ -264,7 +290,16 @@ export function buildRoadGraph(city: CityData): RoadGraph {
         road: r.name,
         oneway: !!r.oneway,
         drivable: false,
+        roadIndex: p.road,
+        y: null,
+        lift: null,
       };
+      if (profile) {
+        // Heights come from the road's own profile, at the same point of its centerline.
+        const at = path.pts.map((q) => profileAt(profile, projectOnRoad(r, q).s));
+        e.y = at.map((h) => h.y);
+        e.lift = at.map((h) => h.lift);
+      }
       e.heading = Math.atan2(-e.dir.z, e.dir.x);
       e.endHeading = Math.atan2(-e.endDir.z, e.endDir.x);
       for (let k = 0; k < lanesDir; k++) e.lanePaths.push(offsetPath(path, laneOffset(e, k)));
@@ -284,6 +319,24 @@ export function buildRoadGraph(city: CityData): RoadGraph {
     }
   });
 
+  // A node's height is that of the roads meeting there, at the node itself (edges are trimmed
+  // back from it, where a ramp may already have climbed): a junction at the foot of a ramp is
+  // on the ground; a node in the middle of an underpass is down in it.
+  for (const n of nodes) {
+    const ids = new Set([...n.in, ...n.out].map((id) => edges[id].roadIndex));
+    let lift = 0;
+    let y = 0;
+    for (const ri of ids) {
+      const prof = profiles[ri];
+      const at = prof ? profileAt(prof, projectOnRoad(roads[ri], n.pos).s) : null;
+      lift += at?.lift ?? 0;
+      y += at && Math.abs(at.lift) > 0.02 ? at.y : NaN;
+    }
+    lift /= ids.size || 1;
+    n.lift = Math.abs(lift) > 0.05 ? lift : 0;
+    if (n.lift && Number.isFinite(y)) n.y = y / ids.size;
+  }
+
   for (const n of nodes) {
     if (!n.junction && !n.corner) continue;
     const pts: Vec2[] = [];
@@ -292,7 +345,7 @@ export function buildRoadGraph(city: CityData): RoadGraph {
     for (const id of n.out) add(edges[id].a, edges[id].dir, edges[id].roadWidth);
     n.hull = convexHull(pts);
   }
-  markDrivable(nodes, edges);
+  markDrivable(nodes, edges, city.playArea);
   return { nodes, edges };
 }
 
@@ -323,6 +376,28 @@ export function projectOnPath(p: Path, q: Vec2): { s: number; d: number } {
     if (d < best.d) best = { s: p.cum[i] + u * Math.sqrt(l2), d };
   }
   return best;
+}
+
+/** Surface height `s` meters along an edge on a ramp, bridge or underpass; null on the ground. */
+export function edgeY(e: LaneEdge, s: number): number | null {
+  if (!e.y) return null;
+  const { cum } = e.center;
+  if (s <= 0) return e.y[0];
+  if (s >= e.center.len) return e.y[e.y.length - 1];
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < s) i++;
+  const t = (s - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
+  return e.y[i - 1] + (e.y[i] - e.y[i - 1]) * t;
+}
+
+/** Lift off the ground `s` meters along an edge (0 on the ground). */
+export function edgeLift(e: LaneEdge, s: number): number {
+  if (!e.lift) return 0;
+  const { cum } = e.center;
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < s) i++;
+  const t = Math.max(0, Math.min(1, (s - cum[i - 1]) / (cum[i] - cum[i - 1] || 1)));
+  return e.lift[i - 1] + (e.lift[i] - e.lift[i - 1]) * t;
 }
 
 /** Travel direction `s` meters along the edge. */
@@ -450,13 +525,22 @@ function cellsOf(a: Vec2, b: Vec2): string[] {
 /**
  * Marks edges inside the largest strongly connected component (Tarjan, iterative). Roads that
  * leave the map (one-way exits) are joined to the ones that enter it through a virtual portal
- * node, because traffic leaving the map is recycled to an entry anyway.
+ * node, because traffic leaving the map is recycled to an entry anyway. With a play area,
+ * nothing reaching past it counts (roadworks close the streets there): its exits and entries
+ * are the junctions just inside it.
  */
-function markDrivable(nodes: GraphNode[], edges: LaneEdge[]): void {
+function markDrivable(nodes: GraphNode[], edges: LaneEdge[], playArea?: { min: Vec2; max: Vec2 }): void {
+  const inArea = (p: Vec2) => !playArea || (p.x >= playArea.min.x && p.x <= playArea.max.x && p.z >= playArea.min.z && p.z <= playArea.max.z);
+  const closedNode = nodes.map((n) => !inArea(n.pos) || !!n.hull?.some((p) => !inArea(p)));
+  const open = (e: LaneEdge) => !closedNode[e.from] && !closedNode[e.to] && e.center.pts.every(inArea);
   const portal = nodes.length;
-  const out = nodes.map((n) => n.out.map((id) => edges[id].to));
-  out.push(nodes.filter((n) => n.out.length && !n.in.length).map((n) => n.id));
-  for (const n of nodes) if (n.in.length && !n.out.length) out[n.id].push(portal);
+  const out = nodes.map((n) => n.out.filter((id) => open(edges[id])).map((id) => edges[id].to));
+  // Exits lead off the map, or into the roadworks at the play area's edge; entries come back.
+  // (Dead ends inside the map count too: OSM has streets that just stop.)
+  const exit = (n: GraphNode) => !closedNode[n.id] && ((n.in.length > 0 && !n.out.length) || n.out.some((id) => !open(edges[id])));
+  const entry = (n: GraphNode) => !closedNode[n.id] && ((n.out.length > 0 && !n.in.length) || n.in.some((id) => !open(edges[id])));
+  out.push(nodes.filter(entry).map((n) => n.id));
+  for (const n of nodes) if (exit(n)) out[n.id].push(portal);
   const count = nodes.length + 1;
   const index = new Array(count).fill(-1);
   const low = new Array(count).fill(0);
@@ -502,7 +586,7 @@ function markDrivable(nodes: GraphNode[], edges: LaneEdge[]): void {
   const size = new Array(comps).fill(0);
   for (const c of comp) size[c]++;
   const biggest = size.indexOf(Math.max(...size));
-  for (const e of edges) e.drivable = comp[e.from] === biggest && comp[e.to] === biggest;
+  for (const e of edges) e.drivable = open(e) && comp[e.from] === biggest && comp[e.to] === biggest;
 }
 
 export type { Road };

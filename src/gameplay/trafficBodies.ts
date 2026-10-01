@@ -1,6 +1,26 @@
-import { RAPIER } from '../physics/world';
-import type { Vec2 } from '../world/cityData';
+import { GROUP, RAPIER, groups } from '../physics/world';
+
+/** In its lane a car only meets the bus and other cars (the sim keeps it on the road); a freed wreck meets everything. */
+const IN_LANE = groups(GROUP.TRAFFIC, GROUP.ALL & ~GROUP.STATIC);
+const WRECK = groups(GROUP.ALL, GROUP.ALL);
+import type { CityData, Vec2 } from '../world/cityData';
+import { groundHeightAt } from '../world/cityData';
+import { type RoadGraph, edgeY, projectOnPath } from '../world/roadGraph';
 import type { Obstacle, TrafficSim } from './traffic';
+
+/**
+ * Road surface under car `i` at `p`: its lane's own height on a ramp, bridge or underpass (or
+ * the junction's, mid-turn), else the ground.
+ */
+export function laneSurface(city: CityData, graph: RoadGraph, sim: TrafficSim): (p: Vec2, i: number) => number {
+  return (p, i) => {
+    const car = sim.cars[i];
+    const e = graph.edges[car.edge];
+    if (car.turn) return graph.nodes[car.turn.node].y ?? groundHeightAt(city, p);
+    if (!e.y) return groundHeightAt(city, p);
+    return edgeY(e, projectOnPath(e.center, p).s)!;
+  };
+}
 
 /** Chasing a sim pose that drifts this far away means something physical is in the way. */
 const MAX_DEVIATION = 1.5;
@@ -24,7 +44,8 @@ export class TrafficBodies {
   constructor(
     private world: RAPIER.World,
     private sim: TrafficSim,
-    private groundAt: (p: Vec2) => number = () => 0,
+    /** Road surface height under car `i` at `p` (the ground, or a bridge/underpass it's on). */
+    private groundAt: (p: Vec2, i: number) => number = () => 0,
   ) {
     this.bodies = sim.cars.map((c) => {
       const body = world.createRigidBody(
@@ -38,7 +59,7 @@ export class TrafficBodies {
     });
     this.colliders = sim.cars.map((c, i) => {
       const col = world.createCollider(
-        RAPIER.ColliderDesc.cuboid(c.kind.length / 2, c.kind.height / 2, c.kind.width / 2).setMass(c.kind.mass).setFriction(0),
+        RAPIER.ColliderDesc.cuboid(c.kind.length / 2, c.kind.height / 2, c.kind.width / 2).setMass(c.kind.mass).setFriction(0).setCollisionGroups(IN_LANE),
         this.bodies[i],
       );
       this.byHandle.set(col.handle, i);
@@ -64,8 +85,8 @@ export class TrafficBodies {
       // Ride on the ground: height and nose-up/down pitch come from the terrain under the car.
       const f = { x: Math.cos(c.heading), z: -Math.sin(c.heading) };
       const half = c.kind.length / 2;
-      const front = this.groundAt({ x: c.pos.x + f.x * half, z: c.pos.z + f.z * half });
-      const back = this.groundAt({ x: c.pos.x - f.x * half, z: c.pos.z - f.z * half });
+      const front = this.groundAt({ x: c.pos.x + f.x * half, z: c.pos.z + f.z * half }, i);
+      const back = this.groundAt({ x: c.pos.x - f.x * half, z: c.pos.z - f.z * half }, i);
       const y = (front + back) / 2 + c.kind.height / 2 + 0.02;
       b.setLinvel({ x: vx, y: (y - t.y) / dt, z: vz }, true);
       b.setRotation(yawPitch(c.heading, Math.atan2(front - back, c.kind.length)), true);
@@ -128,6 +149,7 @@ export class TrafficBodies {
     b.setLinearDamping(0.4);
     b.setAngularDamping(0.4);
     this.colliders[i].setFriction(0.8);
+    this.colliders[i].setCollisionGroups(WRECK);
   }
 
   /** Snap a (re)spawned car onto its sim pose, upright and under lane control. */
@@ -136,7 +158,7 @@ export class TrafficBodies {
     this.generation[i] = c.generation;
     const b = this.bodies[i];
     b.setEnabled(true);
-    b.setTranslation({ x: c.pos.x, y: this.groundAt(c.pos) + c.kind.height / 2 + 0.02, z: c.pos.z }, true);
+    b.setTranslation({ x: c.pos.x, y: this.groundAt(c.pos, i) + c.kind.height / 2 + 0.02, z: c.pos.z }, true);
     b.setRotation(yaw(c.heading), true);
     b.setLinvel({ x: 0, y: 0, z: 0 }, true);
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -144,6 +166,7 @@ export class TrafficBodies {
     b.setLinearDamping(0);
     b.setAngularDamping(0);
     this.colliders[i].setFriction(0);
+    this.colliders[i].setCollisionGroups(IN_LANE);
   }
 
   /** Parked cars (over the performance budget) are taken out of the physics world. */
