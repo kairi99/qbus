@@ -25,6 +25,9 @@ test('boots, drives, steers and toggles camera', async ({ page }) => {
   await expect.poll(async () => (await busState(page)).heading - start.heading, { timeout: 20_000 }).toBeGreaterThan(0.2);
   await page.keyboard.up('KeyA');
 
+  // The first key press started the audio: every recording fetches and decodes.
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.audio.loaded.length), { timeout: 20_000 }).toBe(9);
+
   await page.keyboard.press('KeyC');
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${shots}/03-cockpit.png` });

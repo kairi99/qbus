@@ -315,6 +315,7 @@ export class GameSession {
       case 'arrive': {
         this.passengers.alight(e.alighted, this.d.bus, game.route[e.stopIndex].stop);
         this.passengers.board(e.boarded);
+        this.d.audio.doors();
         this.passengers.showWaiting(game.route[e.stopIndex], game.waitingAt(e.stopIndex));
         this.d.audio.cue('time');
         this.hud.popup(`+${e.timeBonus} s ${RATING_LABEL[e.rating]}`, 'time');

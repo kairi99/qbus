@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { initRapier, createWorld, addGround, PHYSICS_STEP } from './physics/world';
 import { Input } from './core/input';
 import { BusAudio } from './core/audio';
+import { engineLoad, isBraking } from './core/soundModel';
 import { BusPhysics } from './vehicle/bus';
 import { BusModel } from './vehicle/busModel';
 import { CameraRig } from './camera/cameraRig';
@@ -81,7 +82,7 @@ async function main() {
   scene.add(model.root);
 
   const input = new Input();
-  const audio = new BusAudio();
+  const audio = new BusAudio(preset.kind === 'car' ? 'car' : 'bus');
   const rig = new CameraRig(camera);
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
   const hud = new Hud(hudRoot, city.attribution);
@@ -105,7 +106,7 @@ async function main() {
     }
   };
 
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session, route, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, rig, input, city, props, renderer, scene, session, route, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();
@@ -162,7 +163,16 @@ async function main() {
     const speedFrac = Math.abs(bus.speed) / (preset.topSpeedKmh / 3.6);
     if (bus.boosting && !wasBoosting) audio.cue('nitro');
     wasBoosting = bus.boosting;
-    audio.update(input.hornHeld, speedFrac, drive.throttle);
+    audio.update(
+      {
+        hornHeld: input.hornHeld,
+        speedFrac,
+        speed: Math.abs(bus.speed),
+        load: engineLoad(drive.throttle, bus.speed, bus.boosting),
+        braking: isBraking(drive.throttle, bus.speed, drive.handbrake),
+      },
+      paused ? 0 : dt,
+    );
     const t = bus.body.translation();
     hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, nearestRoad(city, { x: t.x, z: t.z })?.name ?? '');
     // Backdrop first (sky, far hills, landmarks) through a matching long-range camera, then the city.
