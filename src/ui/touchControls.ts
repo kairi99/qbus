@@ -37,8 +37,10 @@ export class TouchControls {
       <div class="tc-rotate">Gira el celular para manejar 📱↻</div>`;
     root.appendChild(el);
 
+    stopBrowserGestures(el);
     // Full screen on the first touch (browsers only allow it from a gesture), sideways if the
-    // phone lets a page lock its orientation.
+    // phone lets a page lock its orientation. (iPhones have neither: there the page saved to
+    // the home screen opens full screen.)
     const goFull = () => {
       el.removeEventListener('pointerdown', goFull);
       const doc = document.documentElement;
@@ -113,4 +115,32 @@ function capture(el: HTMLElement, pointerId: number): void {
   } catch {
     // The pointer already ended (or was never a live one): nothing to follow.
   }
+}
+
+/**
+ * Safari on iPhone ignores the page's "no zooming" setting: two thumbs on the controls (steering
+ * and gas) look like a pinch, and quick taps like a double-tap, and the game zooms in. Cancel the
+ * browser's own handling of touches on the controls, and if a zoom still gets through, undo it.
+ */
+function stopBrowserGestures(controls: HTMLElement): void {
+  const cancel = (e: Event) => {
+    if (e.cancelable) e.preventDefault();
+  };
+  // Touches that start on a control never scroll, zoom or select (the pointer events still fire).
+  for (const type of ['touchstart', 'touchmove', 'touchend'] as const) controls.addEventListener(type, cancel, { passive: false });
+  // Safari's pinch gesture events, and any two-finger move anywhere on the game.
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(type, cancel, { passive: false });
+  document.addEventListener('touchmove', (e) => e.touches.length > 1 && cancel(e), { passive: false });
+
+  const vv = window.visualViewport;
+  const meta = document.querySelector<HTMLMetaElement>('meta[name=viewport]');
+  if (!vv || !meta) return;
+  const content = meta.content;
+  const unzoom = () => {
+    if (vv.scale <= 1.01) return;
+    // Changing the viewport tag makes Safari drop back to scale 1.
+    meta.content = `${content}, minimum-scale=1`;
+    requestAnimationFrame(() => (meta.content = content));
+  };
+  vv.addEventListener('resize', unzoom);
 }

@@ -47,12 +47,17 @@ async function main() {
   const farCamera = new THREE.PerspectiveCamera(68, 1, 20, 120000);
   renderer.autoClear = false;
   renderer.setClearColor(SKY_HORIZON);
+  // Size to what the canvas actually covers (CSS keeps it on the whole window): on phones the
+  // window's size is briefly wrong while rotating, and a stale size leaves bars at the sides.
   const resize = () => {
-    renderer.setSize(innerWidth, innerHeight, false);
-    camera.aspect = innerWidth / innerHeight;
+    const w = canvas.clientWidth || innerWidth;
+    const h = canvas.clientHeight || innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
-  addEventListener('resize', resize);
+  new ResizeObserver(resize).observe(canvas);
+  addEventListener('orientationchange', () => setTimeout(resize, 300));
   resize();
 
   const sun = setupSky(scene);

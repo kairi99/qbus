@@ -3,14 +3,20 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #dfe9ee;
+  /* Dark like the game's edges, in case a phone ever shows a strip beside the canvas. */
+  background: #0c0a06;
   font-family: system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
+/* Pinned to the window (not 100vw/100vh, which phones size wrong after rotating or zooming). */
 #game {
   display: block;
-  width: 100vw;
-  height: 100vh;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 #hud {
@@ -913,6 +919,13 @@ body {
   z-index: 6;
 }
 
+/* Phones with a notch or a home bar (landscape iPhones): keep everything clear of them. */
+.touch {
+  --sl: env(safe-area-inset-left, 0px);
+  --sr: env(safe-area-inset-right, 0px);
+  --sb: env(safe-area-inset-bottom, 0px);
+}
+
 .touch,
 .touch #game {
   touch-action: none;
@@ -959,7 +972,7 @@ body {
 
 .tc-wheel {
   position: absolute;
-  left: 110px;
+  left: calc(110px + var(--sl, 0px));
   top: 62%;
   width: 180px;
   height: 56px;
@@ -992,6 +1005,9 @@ body {
   --tc-w: 80px;
   --tc-gap: 8px;
   --tc-pedal: min(120px, 34vh);
+  /* Clear of the notch and the home bar (see .touch). */
+  --tc-r: calc(10px + var(--sr, 0px));
+  --tc-b: calc(10px + var(--sb, 0px) * 0.5);
 }
 
 .tc-btn {
@@ -1003,36 +1019,36 @@ body {
 }
 
 .tc-gas {
-  right: 10px;
-  bottom: 10px;
+  right: var(--tc-r);
+  bottom: var(--tc-b);
   height: var(--tc-pedal);
   background: rgb(46 125 79 / 55%);
 }
 
 .tc-brake {
-  right: calc(10px + var(--tc-w) + var(--tc-gap));
-  bottom: 10px;
+  right: calc(var(--tc-r) + var(--tc-w) + var(--tc-gap));
+  bottom: var(--tc-b);
   height: calc(var(--tc-pedal) * 0.75);
   background: rgb(190 50 40 / 50%);
 }
 
 .tc-nitro {
-  right: 10px;
-  bottom: calc(10px + var(--tc-pedal) + var(--tc-gap));
+  right: var(--tc-r);
+  bottom: calc(var(--tc-b) + var(--tc-pedal) + var(--tc-gap));
   height: min(52px, 15vh);
   background: rgb(31 95 191 / 55%);
 }
 
 .tc-hand {
-  right: calc(10px + var(--tc-w) + var(--tc-gap));
-  bottom: calc(10px + var(--tc-pedal) * 0.75 + var(--tc-gap));
+  right: calc(var(--tc-r) + var(--tc-w) + var(--tc-gap));
+  bottom: calc(var(--tc-b) + var(--tc-pedal) * 0.75 + var(--tc-gap));
   height: min(52px, 15vh);
 }
 
 .tc-top {
   position: absolute;
   top: 8px;
-  right: 10px;
+  right: var(--tc-r);
   display: flex;
   gap: 8px;
 }
@@ -1048,15 +1064,15 @@ body {
 .tc-horn,
 .tc-look {
   position: absolute;
-  right: calc(10px + 2 * (var(--tc-w) + var(--tc-gap)));
+  right: calc(var(--tc-r) + 2 * (var(--tc-w) + var(--tc-gap)));
 }
 
 .tc-horn {
-  bottom: 10px;
+  bottom: var(--tc-b);
 }
 
 .tc-look {
-  bottom: 58px;
+  bottom: calc(var(--tc-b) + 48px);
 }
 
 /* Phones held upright: driving needs it sideways. */
@@ -1085,7 +1101,7 @@ body {
    but the controls. Talk, combos and popups stay small, between the thumbs. */
 .touch .gh-minimap {
   top: 8px;
-  left: 8px;
+  left: calc(8px + var(--sl));
   right: auto;
   bottom: auto;
   width: 88px !important;
@@ -1099,7 +1115,7 @@ body {
 }
 
 .touch .gh-money {
-  left: 104px;
+  left: calc(104px + var(--sl));
   top: 8px;
   font-size: 22px;
 }
@@ -1109,14 +1125,14 @@ body {
 }
 
 .touch .gh-riders {
-  left: 104px;
+  left: calc(104px + var(--sl));
   right: auto;
   top: 36px;
   font-size: 13px;
 }
 
 .touch .gh-combo {
-  left: 104px;
+  left: calc(104px + var(--sl));
   right: auto;
   top: 56px;
   font-size: 16px;
@@ -1204,7 +1220,7 @@ body {
 .touch .hud-speed {
   right: auto;
   left: 50%;
-  bottom: 4px;
+  bottom: calc(4px + var(--sb) * 0.5);
   transform: translateX(-50%);
   font-size: 30px;
 }
@@ -1215,8 +1231,8 @@ body {
 
 .touch .hud-credit {
   right: auto;
-  left: 8px;
-  bottom: 2px;
+  left: calc(8px + var(--sl));
+  bottom: calc(2px + var(--sb) * 0.5);
   font-size: 9px;
 }
 

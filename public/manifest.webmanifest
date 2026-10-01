@@ -1,0 +1,25 @@
+{
+  "name": "QBus",
+  "short_name": "QBus",
+  "description": "Maneje como chofer quiteño: rápido, sin frenar y pitando.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0c0a06",
+  "theme_color": "#0c0a06",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

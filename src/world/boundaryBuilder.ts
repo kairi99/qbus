@@ -33,6 +33,8 @@ export function addRoadworks(
   sink: Sink,
   city: CityData,
   ground: Ground,
+  /** Heights of the road surfaces at a point (several where an underpass runs under a street). */
+  surfaces: (p: Vec2) => number[],
   paved: (p: Vec2) => boolean,
   blocked: (p: Vec2) => boolean,
   world: RAPIER.World,
@@ -44,6 +46,16 @@ export function addRoadworks(
   const cones: Prop[] = [];
   const signs: WorksSign[] = [];
   let crossing = 0;
+  /** Every level traffic could use at `p`: each road surface there (one per level), or the ground. */
+  const levels = (p: Vec2): number[] => {
+    const out: number[] = [];
+    for (const y of surfaces(p).sort((u, v) => u - v)) if (!out.length || y - out[out.length - 1] > 1.5) out.push(y);
+    return out.length ? out : [ground(p)];
+  };
+  /** Where things stand at `p`: the top road surface (the street over an underpass), else the ground. */
+  const top = (p: Vec2) => Math.max(...levels(p));
+  /** On the ground, not over (or in) an underpass cut: cones are props that stand on the terrain. */
+  const atGrade = (p: Vec2) => levels(p).every((y) => Math.abs(y - ground(p)) < 0.5);
 
   for (let side = 0; side < 4; side++) {
     const a = corners[side];
@@ -65,7 +77,7 @@ export function addRoadworks(
       const mid = at(t + STEP / 2);
       if (paved(mid)) {
         run.push(t);
-        barrier(sink, mid, heading, ground(mid), run.length % 2 ? ORANGE : HOARDING);
+        for (const y of levels(mid)) barrier(sink, mid, heading, y, run.length % 2 ? ORANGE : HOARDING);
         continue;
       }
       flushRun();
@@ -74,11 +86,14 @@ export function addRoadworks(
     }
     flushRun();
 
-    // The wall that actually stops the bus, in 20 m pieces that follow the ground.
+    // The wall that actually stops the bus, in 20 m pieces that follow the ground, reaching
+    // down past any underpass floor (a road in a cut would otherwise drive out under it).
     for (let t = 0; t < len; t += 20) {
       const t1 = Math.min(len, t + 20);
       const hs = [t, (t + t1) / 2, t1].map((u) => ground(at(u)));
-      const lo = Math.min(...hs) - 2;
+      let floor = Math.min(...hs);
+      for (let u = t; u <= t1; u += 1) floor = Math.min(floor, ...levels(at(u)));
+      const lo = floor - 2;
       const hi = Math.max(...hs) + WALL_TOP;
       const c = at((t + t1) / 2);
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), heading);
@@ -99,21 +114,21 @@ export function addRoadworks(
     const mid = at((t0 + t1) / 2);
     const off = (p: Vec2, k: number): Vec2 => ({ x: p.x + inward.x * k, z: p.z + inward.z * k });
     const signAt = off(mid, 1.6);
-    signs.push({ pos: signAt, heading: Math.atan2(inward.x, inward.z), base: ground(signAt) });
-    const part = framer(sink.at(signAt.x, signAt.z), signAt, ground(signAt), heading);
+    signs.push({ pos: signAt, heading: Math.atan2(inward.x, inward.z), base: top(signAt) });
+    const part = framer(sink.at(signAt.x, signAt.z), signAt, top(signAt), heading);
     for (const x of [-1.1, 1.1]) part(0.1, 2.2, 0.1, x, 1.1, 0, '#555');
     part(2.6, 1.3, 0.06, 0, 1.75, -0.04, '#f2f2f2'); // back of the board (the face is a texture)
     // Cones in a staggered line a few meters in front of the barrier.
     for (let t = t0 + 1; t < t1; t += 3.2) {
       const p = off(at(t), 3 + ((t * 7.3) % 1.5));
-      if (paved(p)) cones.push({ kind: 'cone', pos: p, heading: 0 });
+      if (paved(p) && atGrade(p)) cones.push({ kind: 'cone', pos: p, heading: 0 });
     }
     crossing++;
     // Past the barrier: an excavator on every other closed street, a couple of workers on break.
     if (t1 - t0 >= 6) {
-      if (crossing % 2) excavator(sink, off(at(t0 + (t1 - t0) * 0.3), -7), heading + (crossing % 4 ? 0.4 : -0.3), ground);
-      worker(sink, off(at(t0 + (t1 - t0) * 0.7), -2.2), heading - Math.PI / 2 + 0.3, ground, true);
-      worker(sink, off(at(t0 + (t1 - t0) * 0.7 + 1.4), -3.4), heading + 2.2, ground, false);
+      if (crossing % 2) excavator(sink, off(at(t0 + (t1 - t0) * 0.3), -7), heading + (crossing % 4 ? 0.4 : -0.3), top);
+      worker(sink, off(at(t0 + (t1 - t0) * 0.7), -2.2), heading - Math.PI / 2 + 0.3, top, true);
+      worker(sink, off(at(t0 + (t1 - t0) * 0.7 + 1.4), -3.4), heading + 2.2, top, false);
     }
   }
 }

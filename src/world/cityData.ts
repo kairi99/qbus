@@ -89,6 +89,13 @@ export interface Horizon {
   heights: number[];
 }
 
+/** A monument modeled by hand where it really stands (see `world/monuments.ts`). */
+export interface Monument {
+  kind: 'relojSolar';
+  name: string;
+  pos: Vec2;
+}
+
 /** A far-off landmark drawn in the view: the Virgen on El Panecillo, the snow volcanoes. */
 export interface Landmark {
   kind: 'virgen' | 'volcano';
@@ -155,6 +162,7 @@ export interface CityData {
   walls?: Wall[];
   horizon?: Horizon;
   landmarks?: Landmark[];
+  monuments?: Monument[];
 }
 
 export const SIDEWALK_HEIGHT = 0.15;

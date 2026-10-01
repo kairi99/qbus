@@ -19,6 +19,8 @@ const PILLAR_CLEARANCE = 5.3;
 /** Lift at which a road counts as dug in (an underpass) or up on a deck. */
 const DUG = -0.03;
 const RAISED = 0.05;
+/** How far an underpass's shoulders and walls reach past the end of their road, into the next road's. */
+const JOINT_OVERLAP = 1.2;
 const FINE = 1;
 const CONCRETE = '#b9b5ad';
 const CONCRETE_DARK = '#8e8a83';
@@ -429,10 +431,15 @@ export function buildGrades(
       // road is right there (divided avenues drawn close together).
       const w2 = l.road.width / 2;
       // Each vertex at the road surface under it (follows the ground's cross slope near the top).
-      const fv = (s: Sec, o: number, lift = 0) => {
-        const q = edge(s, o);
+      const fv = (s: Sec, o: number, lift = 0, along = 0) => {
+        const e = edge(s, o);
+        const q = { x: e.x + s.d.x * along, z: e.z + s.d.z * along };
         return v3(q, surfaceY(city, s, q) + lift);
       };
+      // The shoulders and walls reach a little past the road's two ends, into the next road's:
+      // where two ways meet at an angle, pieces that stop exactly at the joint leave a slit.
+      const back = k === 1 ? -JOINT_OVERLAP : 0;
+      const fore = k === secs.length - 1 ? JOINT_OVERLAP : 0;
       deck.quad(fv(a, -w2), fv(b, -w2), fv(b, w2), fv(a, w2));
       for (const side of [-1, 1]) {
         const o0 = side * w2;
@@ -440,7 +447,7 @@ export function buildGrades(
         const shoulderMid = { x: (edge(a, (o0 + o1) / 2).x + edge(b, (o0 + o1) / 2).x) / 2, z: (edge(a, (o0 + o1) / 2).z + edge(b, (o0 + o1) / 2).z) / 2 };
         if (otherFloor(lowered, l, shoulderMid)) continue;
         deck.quad(fv(a, o0), fv(b, o0), fv(b, o1), fv(a, o1));
-        mb.quad(fv(a, o0, 0.01), fv(b, o0, 0.01), fv(b, o1, 0.01), fv(a, o1, 0.01), CONCRETE);
+        mb.quad(fv(a, o0, 0.01, back), fv(b, o0, 0.01, fore), fv(b, o1, 0.01, fore), fv(a, o1, 0.01, back), CONCRETE);
         // Retaining wall just outside the shoulder, or halfway to a street alongside, unless the
         // neighboring carriageway shares the cut.
         const reach = (sec: Sec) => {
@@ -472,8 +479,9 @@ export function buildGrades(
         if (other !== null && other < Math.min(ga, gb) - 0.6) continue;
         if (other !== null) top = -0.05;
         const flush = roof || other !== null;
-        const inner = { a: edge(a, side * (ra - WALL)), b: edge(b, side * (rb - WALL)) };
-        const outer = { a: edge(a, side * ra), b: edge(b, side * rb) };
+        const reachOut = (q: Vec2, sec: Sec, along: number) => ({ x: q.x + sec.d.x * along, z: q.z + sec.d.z * along });
+        const inner = { a: reachOut(edge(a, side * (ra - WALL)), a, back), b: reachOut(edge(b, side * (rb - WALL)), b, fore) };
+        const outer = { a: reachOut(edge(a, side * ra), a, back), b: reachOut(edge(b, side * rb), b, fore) };
         mb.quad(v3(inner.a, a.y - 0.2), v3(inner.b, b.y - 0.2), v3(inner.b, gb + top), v3(inner.a, ga + top), CONCRETE);
         mb.quad(v3(inner.a, ga + top), v3(inner.b, gb + top), v3(outer.b, gb + top), v3(outer.a, ga + top), CONCRETE_DARK);
         // The back and the ends too, even when buried: next to another cut (a link splitting
@@ -762,7 +770,7 @@ class Tris {
 const v3 = (p: Vec2, y: number) => ({ x: p.x, y, z: p.z });
 
 /** Convex area covered by the ends of the edges meeting at a node (for nodes without a hull). */
-function nodeArea(graph: RoadGraph, id: number): Vec2[] {
+export function nodeArea(graph: RoadGraph, id: number): Vec2[] {
   const n = graph.nodes[id];
   const pts: Vec2[] = [];
   const add = (p: Vec2, d: Vec2, w: number) => pts.push({ x: p.x - d.z * (w / 2), z: p.z + d.x * (w / 2) }, { x: p.x + d.z * (w / 2), z: p.z - d.x * (w / 2) });

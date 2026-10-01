@@ -13,8 +13,8 @@ export const ZONE_LIST = [
 ];
 
 export const DEFAULT_ZONE = 'mariscal';
-/** Mild exaggeration: the steepest street (Francisco Salazar, 14% for real) becomes ~19%. */
-export const DEFAULT_HILLS = 1.3;
+/** True to life (the menu also offers 1.3, "un poquito más", and 2, "Quito extremo"). */
+export const DEFAULT_HILLS = 1;
 
 /**
  * Picks the city from the URL: `?city=mariscal` (default), `?city=grid` or `?seed=N` for the

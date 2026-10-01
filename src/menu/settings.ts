@@ -1,4 +1,5 @@
 import type { CameraMode } from '../camera/cameraRig';
+import { DEFAULT_HILLS } from '../world/loadCity';
 
 /** What the player picked last time, and their preferences. Saved in localStorage. */
 export interface Settings {
@@ -16,7 +17,7 @@ export interface Settings {
   hills: number;
 }
 
-export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: 1.3 };
+export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS };
 export const HILLS_OPTIONS = [
   { value: 1, label: 'Reales' },
   { value: 1.3, label: 'Un poquito más' },
@@ -25,6 +26,12 @@ export const HILLS_OPTIONS = [
 
 export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>;
 const KEY = 'qbus';
+/**
+ * Bumped when a default changes in a way saved settings must follow. Version 2: hills default
+ * to "Reales" (1). Before, every save stored the old default (1.3) whether or not the player
+ * picked it, so a 1.3 saved under version 1 is taken as "never chosen".
+ */
+const VERSION = 2;
 
 export function loadSettings(store: KeyValueStore = localStorage): Settings {
   let raw: Record<string, unknown> = {};
@@ -47,10 +54,10 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     route: str('route'),
     camera: raw.camera === 'cockpit' || raw.camera === 'chase' ? raw.camera : DEFAULTS.camera,
     volume: num('volume', 0, 1),
-    hills: num('hills', 0.5, 3),
+    hills: raw.v !== VERSION && raw.hills === 1.3 ? DEFAULTS.hills : num('hills', 0.5, 3),
   };
 }
 
 export function saveSettings(s: Settings, store: KeyValueStore = localStorage): void {
-  store.setItem(KEY, JSON.stringify(s));
+  store.setItem(KEY, JSON.stringify({ ...s, v: VERSION }));
 }

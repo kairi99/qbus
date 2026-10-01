@@ -3,17 +3,18 @@ import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js'
 import { RAPIER, addTerrainCollider, markStatic } from '../physics/world';
 import type { Building, CityData, Feature, Stop, Vec2 } from './cityData';
 import { SIDEWALK_HEIGHT, forward, groundHeightAt, right, terrainAt } from './cityData';
-import { pointInPolygon } from './geom';
+import { bbox, pointInPolygon } from './geom';
 import { ChunkedMeshBuilder, MeshBuilder, extrude, vertexColorMaterial, IDENTITY } from './meshBuilder';
 import { type Path, type RoadGraph, buildRoadGraph, dirAt, edgeY, laneOffset, makePath, pointAt, projectOnPath } from './roadGraph';
 import type { Terrain } from './terrain';
 import { PropSystem } from './props';
+import { addMonument } from './monuments';
 import { type SidewalkSection, sidewalkSections } from './sidewalks';
 import { addMetroEntrance, addStation, transitSigns } from './transitBuilder';
 import { addRoadworks, addWalls, worksSigns } from './boundaryBuilder';
 import { RoadIndex } from './roadIndex';
 import { profileAt, projectOnRoad, roadProfiles, surfaceY } from './elevation';
-import { buildGrades, planTrenches } from './gradeBuilder';
+import { buildGrades, nodeArea, planTrenches } from './gradeBuilder';
 
 // Draw order on the ground is enforced with polygon offsets, not height gaps, so layers stay
 // put at any distance: terrain < sidewalk < asphalt < paint.
@@ -81,6 +82,9 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   // Junction paving drapes over the ground, raised or sunk by the junction's lift where it's
   // really up on a deck or down in a cut (not where one of its roads is just starting a ramp).
   for (const n of graph.nodes) if (n.hull) asphalt.fan(n.hull, (p) => hUp(p) + (Math.abs(n.lift) >= 1 ? n.lift : 0) + Y.asphalt, ASPHALT, DRAPE);
+  // Where two pieces of a bridge or underpass meet at an angle, their ribbons leave a wedge open
+  // on the outside of the bend: pave it (at street level the terrain under it hides the gap).
+  for (const n of graph.nodes) if (!n.hull && n.y !== null && Math.abs(n.lift) >= 0.3) asphalt.fan(nodeArea(graph, n.id), () => n.y! + Y.asphalt, ASPHALT, DRAPE);
   addMarkings(paint, graph, (p) => hUp(p) + Y.paint);
 
   const fixed = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
@@ -126,6 +130,7 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   for (const s of city.stations ?? []) addStation(solid.at(s.pos.x, s.pos.z), s, h, world, fixed);
   for (const e of city.metro ?? []) addMetroEntrance(solid.at(e.pos.x, e.pos.z), e, h, world, fixed);
   addWalls(solid, city.walls ?? [], h, world, fixed);
+  for (const m of city.monuments ?? []) addMonument(solid.at(m.pos.x, m.pos.z), m, h, world, fixed);
   for (const m of buildGrades(city, graph, trenches, solid, groundColor, world, fixed)) {
     m.material = layer(6);
     m.receiveShadow = true;
@@ -139,10 +144,25 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     const nearEdge = (b: Building) =>
       b.footprint.some((p) => Math.min(Math.abs(p.x - min.x), Math.abs(p.x - max.x), Math.abs(p.z - min.z), Math.abs(p.z - max.z)) < 40);
     const edgeBuildings = city.buildings.filter(nearEdge);
+    // Road surfaces at a point: an underpass crossing the edge is closed down on its floor.
+    const boxes = city.roads.map((r) => {
+      const b = bbox(r.points);
+      return { x0: b.min.x - r.width, x1: b.max.x + r.width, z0: b.min.z - r.width, z1: b.max.z + r.width };
+    });
+    const surfaces = (p: Vec2) => {
+      const ys: number[] = [];
+      city.roads.forEach((road, i) => {
+        const b = boxes[i];
+        if (p.x < b.x0 || p.x > b.x1 || p.z < b.z0 || p.z > b.z1) return;
+        if (projectOnRoad(road, p).d < road.width / 2) ys.push(roadHeight(i)(p));
+      });
+      return ys;
+    };
     works = addRoadworks(
       solid,
       city,
       h,
+      surfaces,
       (p) => index.onAsphalt(p, 0.3) || hulls.some((hl) => pointInPolygon(p, hl)),
       (p) => edgeBuildings.some((b) => pointInPolygon(p, b.footprint)),
       world,

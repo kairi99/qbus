@@ -9,6 +9,8 @@ export const ZONES: Record<
     dem: string;
     /** OSM ways to leave out: mapping errors confirmed on the ground (why, in a comment). */
     dropWays?: number[];
+    /** Famous monuments modeled by hand, at their real position. */
+    monuments?: { kind: 'relojSolar'; name: string; lat: number; lon: number }[];
   }
 > = {
   mariscal: {
@@ -21,5 +23,9 @@ export const ZONES: Record<
     // tunnel up to the roundabout that doesn't exist there. The underpass only allows 12 de
     // Octubre in both directions and north-to-south onto Queseras del Medio (checked by a local).
     dropWays: [24650066, 425195365, 420861081, 24650067],
+    // The Jesuits' stone sundial (1766/1786) in Plaza Indoamérica, at the Universidad Central's
+    // entrance on Av. América: OSM node 2907866129 ("Plaza Indoamerica", historic=monument).
+    // Just past the roadworks at the map edge, in view from Av. América.
+    monuments: [{ kind: 'relojSolar', name: 'Reloj Solar de la Universidad Central', lat: -0.2013468, lon: -78.5017621 }],
   },
 };

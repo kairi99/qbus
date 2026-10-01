@@ -6,7 +6,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fromFile } from 'geotiff';
-import { HORIZON_HALF, importOsm, type Dem } from '../src/world/osm/import';
+import { HORIZON_HALF, importOsm, makeProjection, type Dem } from '../src/world/osm/import';
 import { ZONES } from './zones';
 
 const zone = ZONES[process.argv[2] ?? 'mariscal'];
@@ -47,6 +47,8 @@ const extra = (kind: string) => {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : undefined;
 };
 const city = importOsm(osm, dem, { name: zone.name, bbox: zone.bbox, seed: 7, dropWays: zone.dropWays }, { routes, stations: extra('stations'), areas: extra('areas'), horizonDem });
+const { toXZ } = makeProjection(zone.bbox);
+if (zone.monuments) city.monuments = zone.monuments.map((m) => ({ kind: m.kind, name: m.name, pos: toXZ(m.lat, m.lon) }));
 const ms = performance.now() - t0;
 
 const out = `data/cities/${zone.id}.json`;
