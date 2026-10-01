@@ -1,5 +1,8 @@
 import type { Rating } from '../gameplay/routeGame';
 import type { TrickKind } from '../gameplay/scoring';
+import { type MissionState, progressText } from '../gameplay/missions';
+import type { Placing } from '../gameplay/records';
+import type { StarThresholds } from '../gameplay/stars';
 
 export type HudAction = 'again' | 'menu' | 'resume';
 
@@ -21,7 +24,18 @@ export interface Results {
   delivered: number;
   bestCombo: number;
   longestAir: number;
+  stars: number;
+  thresholds: StarThresholds | null;
+  /** Where the shift landed in the route's saved table. */
+  placing: Placing;
+  missions: MissionState[];
 }
+
+/** "★★☆" */
+export const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+const shortDate = (ms: number) => new Date(ms).toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit' });
 
 /** Route/score overlay: timer, money, destination board, combo, popups, speech and results. */
 export class GameHud {
@@ -44,6 +58,8 @@ export class GameHud {
       </div>
       <div class="gh-money" data-k="money">$0.00</div>
       <div class="gh-route">${routeName}</div>
+      <ul class="gh-missions" data-k="missions" aria-label="Misiones"></ul>
+      <div class="gh-toast" data-k="toast"></div>
       <div class="gh-riders" data-k="riders"></div>
       <div class="gh-combo" data-k="combo"></div>
       <div class="gh-nitro" data-k="nitro"><div class="gh-nitro-fill" data-k="nitroFill"></div><i class="gh-nitro-mark"></i><span>NITRO</span></div>
@@ -52,12 +68,25 @@ export class GameHud {
       <div class="gh-results" data-k="results" hidden>
         <div class="gh-results-card">
           <h2>Fin del turno</h2>
-          <div class="gh-results-total" data-k="rTotal"></div>
-          <dl>
-            <dt>Pasajeros entregados</dt><dd data-k="rDelivered"></dd>
-            <dt>Mejor combo</dt><dd data-k="rCombo"></dd>
-            <dt>Mayor vuelo</dt><dd data-k="rAir"></dd>
-          </dl>
+          <div class="gh-results-body">
+            <div class="gh-results-main">
+              <div class="gh-stars" data-k="rStars"></div>
+              <div class="gh-results-total" data-k="rTotal"></div>
+              <div class="gh-record" data-k="rRecord" hidden>¡Nuevo récord!</div>
+              <p class="gh-next" data-k="rNext"></p>
+              <dl>
+                <dt>Pasajeros entregados</dt><dd data-k="rDelivered"></dd>
+                <dt>Mejor combo</dt><dd data-k="rCombo"></dd>
+                <dt>Mayor vuelo</dt><dd data-k="rAir"></dd>
+              </dl>
+            </div>
+            <div class="gh-results-side">
+              <h3>Misiones</h3>
+              <ul class="gh-rmissions" data-k="rMissions"></ul>
+              <h3>Mejores turnos</h3>
+              <ol class="gh-top5" data-k="rTop"></ol>
+            </div>
+          </div>
           <div class="gh-actions">
             <button class="gh-btn gh-btn-go" data-act="again">Otra vuelta <small>Enter</small></button>
             <button class="gh-btn" data-act="menu">Menú</button>
@@ -111,6 +140,31 @@ export class GameHud {
     if (this.clock > this.speechUntil) this.el.speech.classList.remove('on');
   }
 
+  /** The shift's missions, in the corner under the route name. */
+  showMissions(list: MissionState[]): void {
+    this.el.missions.innerHTML = list.map((m) => `<li><i aria-hidden="true"></i><span>${esc(m.def.text)}</span> <b></b></li>`).join('');
+    this.updateMissions(list);
+  }
+
+  updateMissions(list: MissionState[]): void {
+    list.forEach((m, i) => {
+      const li = this.el.missions.children[i] as HTMLElement | undefined;
+      if (!li) return;
+      li.classList.toggle('done', m.done);
+      li.querySelector('b')!.textContent = m.done ? `+${money(m.def.reward)}` : progressText(m);
+    });
+  }
+
+  /** "¡Misión cumplida!" for a few seconds. */
+  missionDone(m: MissionState): void {
+    const t = this.el.toast;
+    t.innerHTML = `<small>¡Misión cumplida!</small>${esc(m.def.text)} <b>+${money(m.def.reward)}</b>`;
+    // Restart the animation even if a toast is still showing.
+    t.classList.remove('on');
+    void t.offsetWidth;
+    t.classList.add('on');
+  }
+
   board(stopName: string, meters: number, gettingOff: number): void {
     this.el.stop.textContent = stopName;
     this.el.dist.textContent = `${Math.round(meters / 10) * 10} m`;
@@ -143,6 +197,21 @@ export class GameHud {
     this.el.speech.classList.remove('on');
     this.speechUntil = 0;
     this.el.rTotal.textContent = money(r.cents);
+    this.el.rStars.textContent = starText(r.stars);
+    this.el.rStars.setAttribute('aria-label', `${r.stars} de 3 estrellas`);
+    this.el.rRecord.hidden = !r.placing.newRecord;
+    const next = r.thresholds?.[r.stars];
+    this.el.rNext.textContent = next !== undefined ? `${starText(r.stars + 1)} con ${money(next)}` : '¡Turno perfecto!';
+    const missionRow = (m: MissionState) =>
+      `<li class="${m.done ? 'done' : ''}"><i aria-hidden="true"></i><span>${esc(m.def.text)}</span> <b>${m.done ? `+${money(m.def.reward)}` : progressText(m)}</b></li>`;
+    this.el.rMissions.innerHTML = r.missions.map(missionRow).join('');
+    this.el.rTop.innerHTML = r.placing.route.top
+      .map(
+        (s, i) =>
+          `<li class="${i === r.placing.rank ? 'mine' : ''}"><b>${money(s.cents)}</b> <span>${starText(s.stars)}</span> <small>${s.delivered} pas. · ${shortDate(s.date)}</small></li>`,
+      )
+      .join('');
+    this.el.toast.classList.remove('on');
     this.el.rDelivered.textContent = String(r.delivered);
     this.el.rCombo.textContent = r.bestCombo >= 2 ? `×${r.bestCombo}` : '—';
     this.el.rAir.textContent = r.longestAir > 0 ? `${r.longestAir.toFixed(1)} s` : '—';

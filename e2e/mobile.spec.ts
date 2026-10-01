@@ -65,8 +65,29 @@ test('the menu fits a phone', async ({ page }) => {
 });
 
 test('a route shift on a phone', async ({ page }) => {
+  // Loads La Mariscal, then plays out a shift: slow with software WebGL.
+  test.setTimeout(180_000);
   await page.goto('/?city=mariscal&play=1');
   await page.waitForFunction(() => (window as any).__qbus?.session?.game, null, { timeout: 60_000 });
   await expect(page.locator('.tc-gas')).toBeVisible();
+  await expect(page.locator('.gh-missions li')).toHaveCount(3);
   await page.screenshot({ path: `${shots}/86-phone-route.png` });
+
+  // A mission done, then the end of the shift: the toast and results fit the small screen.
+  await page.evaluate(() => {
+    const { session } = (window as any).__qbus;
+    session.start();
+    const m = session.missions.list[0];
+    m.done = false;
+    m.progress = m.def.goal - 1e-6;
+    const events = [{ type: 'nitro' }, { type: 'fare', rating: 'fast' }, { type: 'arrive', rating: 'fast' }, { type: 'trick', kind: 'drift', cents: 100, duration: 3, chain: 5 }];
+    for (const k of ['nearMiss', 'knock', 'speed']) events.push({ type: 'trick', kind: k, cents: 100, chain: 5 } as any);
+    for (const e of events) if (!m.done) session.mission(e);
+  });
+  await expect(page.locator('.gh-toast.on')).toBeVisible();
+  await page.screenshot({ path: `${shots}/87-phone-mission.png` });
+  await page.evaluate(() => ((window as any).__qbus.session.game.timeLeft = 0.2));
+  await expect(page.locator('[data-k="results"]')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('[data-act="again"]').first()).toBeInViewport();
+  await page.screenshot({ path: `${shots}/88-phone-results.png` });
 });

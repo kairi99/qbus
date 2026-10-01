@@ -158,7 +158,7 @@ describe('RouteGame', () => {
 
   it('adds trick money to the score', () => {
     const { game } = newGame();
-    game.addTrickCents(40);
+    game.addCents(40);
     expect(game.cents).toBe(40);
   });
 });

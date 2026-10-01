@@ -107,3 +107,19 @@ test('free roam: pick the AE86, drive around with no route, clock or fares', asy
   await page.keyboard.up('KeyW');
   expect(errors).toEqual([]);
 });
+
+test('the route picker shows saved records and missions', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.clear();
+    const shift = (cents: number, stars: number) => ({ cents, delivered: 6, bestCombo: 4, stars, bus: 'popular', date: Date.now() });
+    const routes = { 'mariscal/circuito': { top: [shift(395, 2), shift(120, 1)], stars: 2 } };
+    localStorage.setItem('qbus.records', JSON.stringify({ v: 1, routes, missions: { nitro: 3, combo: 1 } }));
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Jugar' }).click();
+  await expect(page.locator('[data-route="circuito"] .mn-placard-best')).toHaveText('★★☆ $3.95', { timeout: 30_000 });
+  await expect(page.locator('.mn-placard-best')).toHaveCount(1);
+  await expect(page.locator('.mn-missions-done')).toHaveText(/Misiones cumplidas: 2 de \d+/);
+  await page.locator('.mn-step-route').screenshot({ path: `${shots}/69-setup-records.png` });
+});

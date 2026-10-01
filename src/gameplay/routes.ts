@@ -195,6 +195,21 @@ export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = b
   });
 }
 
+/** Legal driving distance into each stop from the one before it (`legs[0]`: from the last stop). */
+export function routeLegs(city: CityData, route: RouteDef, graph: RoadGraph): number[] {
+  const nav = new Navigator(graph);
+  const stops = routeStops(city, route);
+  const spots = stops.map((s) => nav.locate(s.zone, s.stop.heading));
+  return stops.map((s, i) => {
+    const j = (i + stops.length - 1) % stops.length;
+    const a = spots[j];
+    const b = spots[i];
+    const d = a && b ? nav.distanceTo(a, b) : Infinity;
+    // Unreachable (shouldn't happen on a pruned route): the straight line, with a grid detour.
+    return isFinite(d) ? d : Math.hypot(s.zone.x - stops[j].zone.x, s.zone.z - stops[j].zone.z) * 1.3;
+  });
+}
+
 /**
  * Greedy tour from the stop nearest the spawn: each next stop is the closest one by *legal*
  * driving distance (one-way streets respected) that's far enough away, and the loop has to

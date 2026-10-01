@@ -109,7 +109,7 @@ export class RouteGame {
     this.started = true;
   }
 
-  addTrickCents(c: number): void {
+  addCents(c: number): void {
     this.cents += c;
   }
 
