@@ -5,6 +5,9 @@ import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routePaths, routesFor } from '../gameplay/routes';
 import { buildRoadGraph } from '../world/roadGraph';
 import { HILLS_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
+import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
+import { MISSIONS } from '../gameplay/missions';
+import { money, starText } from '../ui/gameHud';
 
 export interface Selection {
   mode: 'route' | 'free';
@@ -85,7 +88,7 @@ export class Menu {
           <div class="mn-row" role="radiogroup" aria-label="Zona">${ZONE_LIST.map((z) => zoneCard(z, z.id === s.zone)).join('')}</div>
         </section>
         <section class="mn-step mn-step-route">
-          <h2>La ruta</h2>
+          <h2>La ruta <small class="mn-missions-done"></small></h2>
           <div class="mn-routes">
             <div class="mn-placards" role="radiogroup" aria-label="Ruta"><p class="mn-loading">Cargando rutas…</p></div>
             <canvas class="mn-map" width="360" height="360" aria-label="Mapa de la ruta"></canvas>
@@ -208,7 +211,10 @@ export class Menu {
     };
     if (!routes.some((r) => r.id === this.settings.route)) this.pick('route', routes[0].id);
     const names = new Map(city.stops.map((st) => [st.id, st.name]));
-    box.innerHTML = routes.map((r) => placard(r, names, r.id === this.settings.route)).join('');
+    const records = loadRecords();
+    box.innerHTML = routes.map((r) => placard(r, names, r.id === this.settings.route, records.routes[routeKey(zone, r.id)])).join('');
+    const done = MISSIONS.filter((m) => records.missions[m.id]).length;
+    this.root.querySelector('.mn-missions-done')!.textContent = done ? `Misiones cumplidas: ${done} de ${MISSIONS.length}` : '';
     box.querySelectorAll<HTMLElement>('[data-route]').forEach((el) =>
       el.addEventListener('click', () => {
         this.pick('route', el.dataset.route!);
@@ -319,13 +325,16 @@ function zoneCard(z: { id: string; name: string; blurb: string }, checked: boole
 }
 
 /** Route as a windshield placard: route name on top, main stops underneath. */
-function placard(r: RouteDef, names: Map<string, string>, checked: boolean): string {
+function placard(r: RouteDef, names: Map<string, string>, checked: boolean, best?: RouteRecords): string {
   const stops = r.stops.map((id) => names.get(id) ?? '');
   const shown = [...new Set(stops)];
   const list = shown.length > 4 ? [...shown.slice(0, 3), '…', shown[shown.length - 1]] : shown;
   return `
     <button class="mn-placard" role="radio" aria-checked="${checked}" data-route="${r.id}">
-      <span class="mn-placard-name">${r.name}</span>
+      <span class="mn-placard-head">
+        <span class="mn-placard-name">${r.name}</span>
+        ${best ? `<span class="mn-placard-best" title="Su mejor turno"><span class="mn-stars" aria-label="${best.stars} de 3 estrellas">${starText(best.stars)}</span>${best.top.length ? ` ${money(best.top[0].cents)}` : ''}</span>` : ''}
+      </span>
       <span class="mn-placard-stops">${list.join(' · ')}</span>
       <span class="mn-placard-meta">${r.stops.length} paradas · ${(r.lengthM / 1000).toFixed(1)} km · ${r.blurb}</span>
     </button>`;

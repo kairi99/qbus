@@ -350,11 +350,208 @@ body {
   color: #d9c79a;
 }
 
+/* Results: stars and money on the left, missions and the route's best shifts on the right. */
+.gh-results-body {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.gh-results-side {
+  min-width: 260px;
+  text-align: left;
+}
+
+.gh-results-side h3 {
+  margin: 4px 0 6px;
+  font-size: 15px;
+  color: #d9c79a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.gh-stars {
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: 6px;
+  color: #ffd23f;
+  text-shadow: 0 0 10px rgb(255 210 63 / 60%);
+}
+
+.gh-record {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: #ffd23f;
+  color: #0c0a06;
+  text-shadow: none;
+  font-weight: 800;
+  animation: gh-blink 0.9s steps(2) 4;
+}
+
+.gh-record[hidden] {
+  display: none;
+}
+
+.gh-results-card p.gh-next {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+
+.gh-results-card ul,
+.gh-results-card ol {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.gh-top5 {
+  counter-reset: place;
+}
+
+.gh-top5 li {
+  counter-increment: place;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.gh-top5 li::before {
+  content: counter(place) '. ';
+  opacity: 0.6;
+}
+
+.gh-top5 li.mine {
+  background: rgb(255 176 0 / 18%);
+}
+
+.gh-top5 span {
+  color: #ffd23f;
+}
+
+.gh-top5 small {
+  opacity: 0.7;
+}
+
+/* Missions, in the HUD corner and on the results screen: a ring, ticked when done. */
+.gh-missions {
+  position: absolute;
+  left: 24px;
+  top: 124px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
+}
+
+.gh-missions:empty {
+  display: none;
+}
+
+.gh-missions li,
+.gh-rmissions li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.gh-missions b,
+.gh-rmissions b {
+  margin-left: auto;
+  padding-left: 8px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.gh-missions i,
+.gh-rmissions i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.gh-missions li.done,
+.gh-rmissions li.done {
+  color: #9dff7a;
+}
+
+.gh-missions li.done span {
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.gh-missions li.done i,
+.gh-rmissions li.done i {
+  background: currentColor;
+}
+
+.gh-toast {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  padding: 8px 18px 10px;
+  border: 2px solid #9dff7a;
+  border-radius: 8px;
+  background: rgb(12 10 6 / 85%);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gh-toast small {
+  display: block;
+  font-size: 13px;
+  color: #9dff7a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.gh-toast b {
+  color: #9dff7a;
+}
+
+.gh-toast.on {
+  animation: gh-toast 3.5s ease-out forwards;
+}
+
+@keyframes gh-toast {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.8);
+  }
+  8%,
+  80% {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gh-timer.low,
   .gh-board.dropoff .gh-board-meta span:last-child,
-  .gh-pop {
+  .gh-pop,
+  .gh-record {
     animation: none;
+  }
+
+  .gh-toast.on {
+    animation: none;
+    opacity: 1;
   }
 }
 
@@ -653,6 +850,33 @@ body {
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+}
+
+.mn-placard-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* The player's best on the route: stars and money, like a sticker on the placard. */
+.mn-placard-best {
+  flex: none;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.mn-stars {
+  color: #d98a00;
+  letter-spacing: 1px;
+}
+
+.mn-missions-done {
+  margin-left: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.75;
 }
 
 .mn-placard-stops {
@@ -1139,6 +1363,43 @@ body {
   transform: none;
 }
 
+/* Under the minimap, above the steering thumb. */
+.touch .gh-missions {
+  left: calc(8px + var(--sl));
+  top: 104px;
+  width: 220px;
+  font-size: 11px;
+}
+
+.touch .gh-missions li {
+  line-height: 1.35;
+}
+
+.touch .gh-missions span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.touch .gh-missions b {
+  padding-left: 4px;
+}
+
+.touch .gh-missions i {
+  width: 7px;
+  height: 7px;
+}
+
+.touch .gh-toast {
+  top: 26%;
+  font-size: 13px;
+  padding: 4px 10px 5px;
+}
+
+.touch .gh-toast small {
+  font-size: 10px;
+}
+
 .touch .gh-top {
   top: 6px;
   max-width: 40vw;
@@ -1425,6 +1686,50 @@ body {
 
   .gh-results-total {
     font-size: 36px;
+  }
+
+  .gh-results-card h2 {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+
+  .gh-results-card dl {
+    margin: 8px 0;
+    font-size: 13px;
+  }
+
+  .gh-results-body {
+    gap: 20px;
+  }
+
+  .gh-results-side {
+    min-width: 230px;
+  }
+
+  .gh-results-side h3 {
+    font-size: 12px;
+    margin: 0 0 3px;
+  }
+
+  .gh-results-card ul,
+  .gh-results-card ol {
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+
+  .gh-stars {
+    font-size: 28px;
+  }
+
+  .gh-missions {
+    top: 118px;
+    left: 16px;
+    font-size: 12px;
+  }
+
+  .gh-toast {
+    font-size: 14px;
+    padding: 5px 12px 6px;
   }
 
   .hud-flipped {

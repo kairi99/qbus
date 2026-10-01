@@ -7,7 +7,10 @@ import type { BusAudio } from '../core/audio';
 import type { CameraMode } from '../camera/cameraRig';
 import { Rng } from '../core/rng';
 import { RouteGame, type GameEvent } from './routeGame';
-import { type RouteDef, freeStartPose, routeStops, startPose } from './routes';
+import { type RouteDef, freeStartPose, routeLegs, routeStops, startPose } from './routes';
+import { type StarThresholds, starThresholds, starsFor } from './stars';
+import { Missions, pickMissions, type MissionEvent } from './missions';
+import { recordMissions, recordShift } from './records';
 import { type NavPath, Navigator } from './navigation';
 import { MiniMap } from '../ui/minimap';
 import type { Vec2 } from '../world/cityData';
@@ -49,6 +52,8 @@ export interface SessionDeps {
   graph: RoadGraph;
   /** The route of the shift; null for free roam (no stops, clock or fares). */
   route: RouteDef | null;
+  /** Zone id, for the route's saved records. */
+  zone: string;
 }
 
 /**
@@ -60,6 +65,11 @@ export class GameSession {
   /** The route game; null in free roam. */
   game: RouteGame | null = null;
   scorer!: TrickScorer;
+  /** This shift's optional objectives; null in free roam. */
+  missions: Missions | null = null;
+  /** Money for 1, 2 and 3 stars on this route (null in free roam). */
+  readonly stars: StarThresholds | null = null;
+  private wasBoosting = false;
   /** Starts full; drifting and close calls refill it. */
   readonly nitro = new Nitro();
   private nearMiss: NearMissDetector;
@@ -103,6 +113,7 @@ export class GameSession {
     this.nav = new Navigator(d.graph);
     this.minimap = new MiniMap(d.hudRoot, d.city);
     this.start0 = d.route ? startPose(d.city, d.graph, d.route) : freeStartPose(d.city, d.graph);
+    if (d.route) this.stars = starThresholds(routeStops(d.city, d.route), routeLegs(d.city, d.route, d.graph), this.start0.pos);
     const spawn = this.start0.pos;
     const graph = d.graph;
     this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 } });
@@ -156,6 +167,8 @@ export class GameSession {
         start: pos,
       });
       this.game = game;
+      this.missions = new Missions(pickMissions(this.rng.int(0, 0xffff)));
+      this.hud.showMissions(this.missions.list);
       game.route.forEach((r, i) => this.passengers.showWaiting(r, game.waitingAt(i)));
       this.retarget();
     } else {
@@ -225,6 +238,8 @@ export class GameSession {
     this.dives = 0;
     if (this.scorer.sliding) this.nitro.drifting(dt);
     for (const t of tricks) this.onTrick(t);
+    if (this.nitro.active && !this.wasBoosting) this.mission({ type: 'nitro' });
+    this.wasBoosting = this.nitro.active;
 
     if (!this.game) return;
     const p = bus.body.translation();
@@ -289,12 +304,14 @@ export class GameSession {
       // Rammed the roadworks at the edge of the map.
       const p = this.d.bus.body.translation();
       if (this.d.city.playArea && !inPlayArea(this.d.city, { x: p.x, z: p.z }, 12)) return this.say('works');
+      this.mission({ type: 'crash' });
       if (this.game?.onBoard.length) this.say('crash');
       return;
     }
     // Free roam: nothing to score.
     if (!this.game) return;
-    this.game.addTrickCents(t.cents);
+    this.game.addCents(t.cents);
+    this.mission({ type: 'trick', kind: t.kind, cents: t.cents, duration: t.duration, chain: this.scorer.chain });
     const mult = t.multiplier > 1 ? ` ×${t.multiplier}` : '';
     this.hud.popup(`+${money(t.cents)} ${TRICK_LABEL[t.kind]}${mult}`);
     if (!this.game.onBoard.length) return;
@@ -311,6 +328,7 @@ export class GameSession {
         this.hud.popup(`+${money(e.cents)} ${RATING_LABEL[e.rating]}`, e.rating === 'slow' ? 'bad' : 'money');
         if (e.rating === 'fast') this.say('happy', 0.6);
         if (e.rating === 'slow') this.say('grumpy', 0.8);
+        this.mission({ type: 'fare', rating: e.rating });
         break;
       case 'arrive': {
         this.passengers.alight(e.alighted, this.d.bus, game.route[e.stopIndex].stop);
@@ -321,6 +339,7 @@ export class GameSession {
         this.hud.popup(`+${e.timeBonus} s ${RATING_LABEL[e.rating]}`, 'time');
         if (e.boarded.length) this.say('board', 0.7);
         this.retarget();
+        this.mission({ type: 'arrive', rating: e.rating });
         break;
       }
       case 'approach':
@@ -332,14 +351,47 @@ export class GameSession {
       case 'gameOver':
         this.marker.visible = false;
         this.arrow.point(null);
-        this.hud.showResults({
-          cents: game.cents,
-          delivered: game.delivered,
-          bestCombo: this.scorer.bestCombo,
-          longestAir: this.scorer.longestAir,
-        });
+        this.finish(game);
         break;
     }
+  }
+
+  /** Feeds a shift event to the missions; a finished one pays its bonus. */
+  private mission(e: MissionEvent): void {
+    const game = this.game;
+    if (!game || !this.missions || game.over) return;
+    for (const m of this.missions.feed(e)) {
+      game.addCents(m.def.reward);
+      this.d.audio.cue('coin');
+      this.hud.missionDone(m);
+    }
+    this.hud.updateMissions(this.missions.list);
+  }
+
+  /** End of the shift: stars, the route's records, missions, and the results screen. */
+  private finish(game: RouteGame): void {
+    const stars = this.stars ? starsFor(game.cents, this.stars) : 0;
+    const done = this.missions?.completed ?? [];
+    const route = this.d.route!;
+    const placing = recordShift(this.d.zone, route.id, {
+      cents: game.cents,
+      delivered: game.delivered,
+      bestCombo: this.scorer.bestCombo,
+      stars,
+      bus: this.d.bus.preset.id,
+      date: Date.now(),
+    });
+    recordMissions(done.map((m) => m.def.id));
+    this.hud.showResults({
+      cents: game.cents,
+      delivered: game.delivered,
+      bestCombo: this.scorer.bestCombo,
+      longestAir: this.scorer.longestAir,
+      stars,
+      thresholds: this.stars,
+      placing,
+      missions: this.missions?.list ?? [],
+    });
   }
 
   private gettingOff(): number {

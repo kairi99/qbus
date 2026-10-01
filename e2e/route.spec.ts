@@ -24,6 +24,7 @@ const SHIFTS: [string, string][] = [
 ];
 
 for (const [city, url] of SHIFTS) test(`a shift on ${city}: start, pick up, drop off, results, restart`, async ({ page }) => {
+  test.setTimeout(180_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(url);
@@ -69,14 +70,45 @@ for (const [city, url] of SHIFTS) test(`a shift on ${city}: start, pick up, drop
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${shots}/33-arrow-${city}.png` });
 
-  // Time runs out -> results; Enter -> new shift.
+  // Three missions in the corner; finishing one pays a bonus and shows a toast.
+  await expect(page.locator('.gh-missions li')).toHaveCount(3);
+  const bonus = await page.evaluate(() => {
+    const { session } = (window as any).__qbus;
+    // Teleporting between stops may have finished some already: one step short of the goal again.
+    const m = session.missions.list[0];
+    const before = session.game.cents;
+    m.done = false;
+    m.progress = m.def.goal - 1e-6;
+    // Whatever the mission, one of these events moves it on.
+    const events = [{ type: 'nitro' }, { type: 'fare', rating: 'fast' }, { type: 'arrive', rating: 'fast' }, { type: 'trick', kind: 'drift', cents: 100, duration: 3, chain: 5 }];
+    for (const k of ['nearMiss', 'knock', 'speed']) events.push({ type: 'trick', kind: k, cents: 100, chain: 5 } as any);
+    for (const e of events) if (!m.done) session.mission(e);
+    return { done: m.done, paid: session.game.cents - before, reward: m.def.reward };
+  });
+  expect(bonus.done).toBe(true);
+  expect(bonus.paid).toBeGreaterThanOrEqual(bonus.reward);
+  await expect(page.locator('.gh-toast.on')).toBeVisible();
+  await expect(page.locator('.gh-missions li.done')).not.toHaveCount(0);
+  await page.screenshot({ path: `${shots}/35-mission-${city}.png` });
+
+  // Time runs out -> results with stars, missions and the route's best shifts (this one first).
   await page.evaluate(() => ((window as any).__qbus.session.game.timeLeft = 0.2));
   await expect(page.locator('[data-k="results"]')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.gh-stars')).toHaveText(/^[★☆]{3}$/);
+  await expect(page.locator('.gh-record')).toBeVisible();
+  await expect(page.locator('.gh-rmissions li')).toHaveCount(3);
+  await expect(page.locator('.gh-rmissions li.done')).not.toHaveCount(0);
+  await expect(page.locator('.gh-top5 li.mine')).toHaveCount(1);
   await page.screenshot({ path: `${shots}/34-results-${city}.png` });
   await page.keyboard.press('Enter');
   await expect(page.locator('[data-k="results"]')).toBeHidden();
   const s2 = await state(page);
   expect(s2.over).toBe(false);
   expect(s2.cents).toBe(0);
+
+  // The shift and its missions were saved (the menu shows them: menu.spec.ts).
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('qbus.records') ?? '{}'));
+  expect(Object.values(saved.routes ?? {})).toHaveLength(1);
+  expect(Object.keys(saved.missions ?? {}).length).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });

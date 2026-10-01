@@ -11,7 +11,7 @@ import { buildBackdrop } from './world/backdrop';
 import { buildCity } from './world/cityBuilder';
 import { groundHeightAt, nearestRoad } from './world/cityData';
 import { buildRoadGraph } from './world/roadGraph';
-import { loadCity } from './world/loadCity';
+import { DEFAULT_ZONE, loadCity } from './world/loadCity';
 import { snapToRoad } from './world/roadSnap';
 import { Hud } from './ui/hud';
 import { TouchControls, isTouchDevice } from './ui/touchControls';
@@ -86,7 +86,9 @@ async function main() {
   const rig = new CameraRig(camera);
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
   const hud = new Hud(hudRoot, city.attribution);
-  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph, route });
+  // Records are kept per zone and route (a generated city other than the default seed is its own zone).
+  const zone = params.get('city') ?? (params.has('seed') ? `grid-${params.get('seed')}` : DEFAULT_ZONE);
+  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph, route, zone });
   if (touch) new TouchControls(document.body, input);
   audio.setVolume(settings.volume);
   if (settings.camera === 'cockpit') rig.toggle();
