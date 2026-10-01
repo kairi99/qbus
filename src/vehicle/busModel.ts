@@ -108,17 +108,29 @@ export class BusModel {
   private busCockpit(preset: BusPreset): void {
     const { length: L, width: W, height: H, color } = preset.body;
     const frame = flat(color);
-    const dash = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, W * 0.95), flat('#2a2a2a'));
-    dash.position.set(L / 2 - 0.5, 0.15, 0);
-    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, W), new THREE.MeshBasicMaterial({ color: '#bfc3c7' }));
-    ceiling.position.set(L / 2 - 1.25, H * 0.5, 0);
-    this.cockpit.add(dash, ceiling);
+    const trim = flat('#3a3d42');
+    const part = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      this.cockpit.add(m);
+    };
+    // The front few meters of the cabin, closed all round below the windows: at speed the view
+    // widens and would show the road through any gap.
+    const D = 3.4;
+    const back = L / 2 - D;
+    const floor = -H * 0.32;
+    const sill = H * 0.01; // side windows start here (busExterior)
+    const roof = H * 0.45;
+    part(0.8, 0.5, W * 0.95, L / 2 - 0.5, 0.15, 0, flat('#2a2a2a')); // dashboard
+    part(0.1, 0.15 - floor, W, L / 2 - 0.05, (0.15 + floor) / 2, 0, trim); // under the dash
+    part(D, 0.06, W, L / 2 - D / 2, floor, 0, trim); // floor
+    part(D, 0.1, W, L / 2 - D / 2, roof + 0.05, 0, new THREE.MeshBasicMaterial({ color: '#bfc3c7' })); // ceiling
+    part(0.2, roof + 0.1 - H * 0.4, W, L / 2 - 0.1, (roof + 0.1 + H * 0.4) / 2, 0, frame); // header joining the pillars to the ceiling
     for (const z of [-W / 2 + 0.06, W / 2 - 0.06]) {
-      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.15, H * 0.8, 0.12), frame);
-      pillar.position.set(L / 2 - 0.1, H * 0.05, z);
-      const sill = new THREE.Mesh(new THREE.BoxGeometry(L * 0.5, 0.5, 0.1), frame);
-      sill.position.set(L / 4, -0.55, z);
-      this.cockpit.add(pillar, sill);
+      part(0.15, roof + 0.1 - floor, 0.12, L / 2 - 0.1, (roof + 0.1 + floor) / 2, z, frame); // pillars, floor to ceiling
+      part(D, sill - floor, 0.1, L / 2 - D / 2, (sill + floor) / 2, z, frame); // side wall under the windows
+      // Window posts down the side, into the ceiling.
+      for (let x = L / 2 - 1.4; x > back; x -= 1.3) part(0.1, roof + 0.1 - sill, 0.1, x, (roof + 0.1 + sill) / 2, z, frame);
     }
     const wheelMount = new THREE.Group();
     wheelMount.position.set(L / 2 - 0.9, 0.55, -W / 2 + 0.75);

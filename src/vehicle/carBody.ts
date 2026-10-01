@@ -124,7 +124,12 @@ export function carCockpit(preset: BusPreset): { parts: THREE.Object3D[]; wheelM
     pillar.rotation.z = Math.atan2(bx - tx, ty - by);
     parts.push(pillar);
     parts.push(box(1.6, 0.14, 0.06, x1 - 2.2, belt - 0.02, s * w * 0.95, paint)); // door tops
+    // Door trim down to the floor: at speed the view widens and would show the road beside the seats.
+    parts.push(box(2.6, belt - floor, 0.04, x1 - 2.5, (belt + floor) / 2, s * w * 0.93, flat('#2f2f31')));
   }
+  // Footwell: the dash's lower face down to the floor, and the floor itself.
+  parts.push(box(0.06, belt - floor, W * 0.9, x1 - 1.26, (belt + floor) / 2, 0, flat('#1d1d1f')));
+  parts.push(box(2.6, 0.04, W * 0.9, x1 - 2.5, floor + 0.12, 0, flat('#1d1d1f')));
   const wheelMount = new THREE.Group();
   wheelMount.position.set(x1 - 1.66, belt + 0.02, -w * 0.43);
   wheelMount.rotation.z = -0.35;

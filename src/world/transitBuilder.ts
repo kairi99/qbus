@@ -103,8 +103,12 @@ export function addMetroEntrance(mb: MeshBuilder, e: MetroEntrance, ground: Grou
   for (const v of [-W / 2 + 0.12, W / 2 - 0.12]) part(0.14, up + roof, 0.14, L / 2 - 0.1, (up + roof) / 2, v, '#4a525a'); // front posts
   part(L + 0.5, 0.16, W + 0.5, 0, up + roof + 0.08, 0, '#3b4652'); // canopy
   part(0.1, 0.35, W + 0.5, L / 2 + 0.25, up + roof, 0, METRO_RED, METRO_RED); // red fascia over the mouth
-  // Totem beside the mouth.
-  part(0.12, 3.2, 0.12, L / 2 + 0.6, up + 1.6, W / 2 + 0.6, '#4a525a');
+  // Totem beside the mouth: a post holding a board, whose faces carry the sign (`transitSigns`).
+  const t = totemSpot(e);
+  const board = ground(t) + TOTEM_SIGN_Y - (low - 0.3);
+  const postTop = board - TOTEM_SIGN / 2;
+  part(0.12, postTop, 0.12, L / 2 + 0.6, postTop / 2, W / 2 + 0.6, '#4a525a');
+  part(TOTEM_DEPTH, TOTEM_SIGN + 0.08, TOTEM_SIGN + 0.08, L / 2 + 0.6, board, W / 2 + 0.6, '#3b4652');
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), e.heading);
   world.createCollider(
     RAPIER.ColliderDesc.cuboid(L / 2, (up + roof) / 2, W / 2)
@@ -112,6 +116,19 @@ export function addMetroEntrance(mb: MeshBuilder, e: MetroEntrance, ground: Grou
       .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
     fixed,
   );
+}
+
+const TOTEM_SIGN = 1.1;
+const TOTEM_SIGN_Y = 3.3;
+const TOTEM_DEPTH = 0.16;
+
+/** Where a Metro entrance's totem stands: past the mouth, beside it. */
+function totemSpot(e: MetroEntrance): Vec2 {
+  const fw = forward(e.heading);
+  const rt = right(e.heading);
+  const k = ENTRANCE.length / 2 + 0.6;
+  const s = ENTRANCE.width / 2 + 0.6;
+  return { x: e.pos.x + fw.x * k + rt.x * s, z: e.pos.z + fw.z * k + rt.z * s };
 }
 
 /** Name boards (canvas textures): on top of each BRT station, and on each Metro totem. */
@@ -136,15 +153,15 @@ export function transitSigns(stations: Station[], metro: MetroEntrance[], ground
     }
   }
   for (const e of metro) {
+    const p = totemSpot(e);
     const fw = forward(e.heading);
-    const rt = right(e.heading);
-    const k = ENTRANCE.length / 2 + 0.6;
-    const p = { x: e.pos.x + fw.x * k + rt.x * (ENTRANCE.width / 2 + 0.6), z: e.pos.z + fw.z * k + rt.z * (ENTRANCE.width / 2 + 0.6) };
     const tex = signTexture(METRO_RED, 'M', e.name, true);
-    for (const side of [0, Math.PI]) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: tex }));
-      m.position.set(p.x, ground(p) + 3.3, p.z);
-      m.rotation.y = e.heading + Math.PI / 2 + side;
+    for (const side of [1, -1]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(TOTEM_SIGN, TOTEM_SIGN), new THREE.MeshBasicMaterial({ map: tex }));
+      // On the board's faces, just clear of it, so nothing passes in front of the sign.
+      const off = (TOTEM_DEPTH / 2 + 0.01) * side;
+      m.position.set(p.x + fw.x * off, ground(p) + TOTEM_SIGN_Y, p.z + fw.z * off);
+      m.rotation.y = e.heading + Math.PI / 2 + (side > 0 ? 0 : Math.PI);
       out.push(m);
     }
   }
