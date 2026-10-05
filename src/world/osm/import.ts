@@ -54,6 +54,8 @@ export interface ImportOptions {
 const SIDEWALK = 3;
 const LANE = 3.3;
 const FLOOR = 3.2;
+/** One tree per this many square meters of park. */
+const PARK_TREE_AREA = 110;
 const BUILDING_CLEARANCE = 1.5;
 
 /** Drivable road classes and their defaults. */
@@ -190,16 +192,33 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
         keepClear: (p) => occupied(p, 1) || stops.some((st) => Math.hypot(p.x - st.pos.x, p.z - st.pos.z) < 4.5),
       })
     : undefined;
-  const parks = osm.elements
-    .filter((e) => e.type === 'way' && e.geometry && (e.tags?.leisure || e.tags?.landuse))
-    .map((e) => closedRing(e.geometry!.map((g) => proj.toXZ(g.lat, g.lon))))
-    .filter((ring) => ring.length >= 3 && ring.some((p) => inside(p)));
+  const greens = osm.elements.filter((e) => e.type === 'way' && e.geometry && (e.tags?.leisure || e.tags?.landuse));
+  const ringOf = (e: OsmElement) => closedRing(e.geometry!.map((g) => proj.toXZ(g.lat, g.lon)));
+  const parks = greens.map(ringOf).filter((ring) => ring.length >= 3 && ring.some((p) => inside(p)));
   const blockedByBuilding = (p: Vec2) => buildings.some((b) => pointInPolygon(p, b.footprint));
   const offRoad = (p: Vec2, margin: number) => roads.every((r) => distToPolyline(p, r.points) > r.width / 2 + margin);
-  const trees = osm.elements
-    .filter((e) => e.type === 'node' && e.tags?.natural === 'tree')
-    .map((e) => proj.toXZ(e.lat!, e.lon!))
-    .filter((p) => inside(p) && offRoad(p, 0.8) && !blockedByBuilding(p) && !onJunction(p) && !occupied(p, 2) && !nearLifted(roads, p, 4));
+  const treeSpots = osm.elements.filter((e) => e.type === 'node' && e.tags?.natural === 'tree').map((e) => proj.toXZ(e.lat!, e.lon!));
+  // Parks and gardens get trees scattered over them (not pitches or courts), from their own
+  // seed so nothing else in the city moves.
+  const parkRng = new Rng((opts.seed ?? 1) + 7919);
+  for (const e of greens) {
+    const t = e.tags!;
+    if (!(t.leisure === 'park' || t.leisure === 'garden' || t.landuse === 'grass' || t.landuse === 'recreation_ground')) continue;
+    const ring = ringOf(e);
+    if (ring.length < 3) continue;
+    const xs = ring.map((p) => p.x);
+    const zs = ring.map((p) => p.z);
+    const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+    const n = Math.min(200, Math.round(Math.abs(area(ring)) / PARK_TREE_AREA));
+    for (let i = 0; i < n; i++) {
+      const p = { x: parkRng.range(x0, x1), z: parkRng.range(z0, z1) };
+      if (pointInPolygon(p, ring) && distToPolyline(p, [...ring, ring[0]]) > 2) treeSpots.push(p);
+    }
+  }
+  const trees: Vec2[] = [];
+  for (const p of treeSpots)
+    if (inside(p) && offRoad(p, 0.8) && !blockedByBuilding(p) && !onJunction(p) && !occupied(p, 2) && !nearLifted(roads, p, 4) && trees.every((q) => Math.hypot(p.x - q.x, p.z - q.z) > 2.5))
+      trees.push(p);
   const props = scatterProps(roads, stops, buildings, rng, inside).filter((pr) => !onJunction(pr.pos) && !occupied(pr.pos, 1) && !nearLifted(roads, pr.pos, 4));
   // Humps only where the game happens, and never on a ramp, bridge or underpass.
   const features = placeFeatures(roads, rng).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20));
@@ -388,6 +407,8 @@ function importBuildings(
         height: round(!isNaN(height) ? height : floors * FLOOR, 1),
         color: rng.pick(WALLS),
         roof: floors <= 3 ? TERRACOTTA : CONCRETE_ROOF,
+        ...(t.building !== 'yes' ? { use: t.building } : {}),
+        ...(t.shop || t.amenity ? { shop: t.shop || t.amenity } : {}),
       });
     }
   }

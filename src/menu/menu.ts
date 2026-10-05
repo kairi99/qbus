@@ -4,7 +4,7 @@ import { ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routePaths, routesFor } from '../gameplay/routes';
 import { buildRoadGraph } from '../world/roadGraph';
-import { HILLS_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
+import { HILLS_OPTIONS, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
 
 export interface Selection {
   mode: 'route' | 'free';
@@ -157,6 +157,10 @@ export class Menu {
             <legend>Cuestas (zonas reales)</legend>
             ${HILLS_OPTIONS.map((o) => choice('hills', String(o.value), o.label, s.hills === o.value)).join('')}
           </fieldset>
+          <fieldset>
+            <legend>Hora</legend>
+            ${TIME_OPTIONS.map((o) => choice('timeOfDay', o.value, o.label, s.timeOfDay === o.value)).join('')}
+          </fieldset>
           <label class="mn-volume">
             <span>Volumen</span>
             <input type="range" min="0" max="100" step="5" value="${Math.round(s.volume * 100)}" name="volume" />
@@ -169,6 +173,7 @@ export class Menu {
       el.addEventListener('change', () => {
         if (el.name === 'camera') this.settings.camera = el.value as Settings['camera'];
         if (el.name === 'hills') this.settings.hills = Number(el.value);
+        if (el.name === 'timeOfDay') this.settings.timeOfDay = el.value as Settings['timeOfDay'];
         saveSettings(this.settings);
       }),
     );

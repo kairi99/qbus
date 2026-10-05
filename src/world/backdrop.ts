@@ -1,36 +1,75 @@
 import * as THREE from 'three';
 import type { CityData, Horizon, Landmark } from './cityData';
 import { buildMountains } from './mountains';
-import { SKY_HORIZON, skyDome } from './sky';
+import { LIGHTING, type TimeOfDay, skyDome } from './sky';
 
 /**
  * The Virgen is drawn this many times life size (≈45 m with her base): from La Mariscal, 4 km
  * away, true size is a speck; this keeps her readable on the skyline like she feels in person.
  */
 const VIRGEN_SCALE = 3.5;
-const HAZE = SKY_HORIZON;
 
 /**
  * Everything far away, drawn in its own pass before the city with its own long-range camera
  * (so the city keeps its fog and depth precision): the sky, and either the real terrain around
  * an imported city with its landmarks, or a made-up mountain ring around a generated one.
  */
-export function buildBackdrop(city: CityData, cityRadius: number): THREE.Scene {
+export function buildBackdrop(city: CityData, cityRadius: number, tod: TimeOfDay = 'day'): THREE.Scene {
+  const light = LIGHTING[tod];
   const scene = new THREE.Scene();
   // Linear haze that starts "behind" the camera: even the nearest hills are a little hazy.
-  scene.fog = new THREE.Fog(HAZE, -8000, 80000);
-  scene.add(skyDome());
-  scene.add(new THREE.HemisphereLight('#cfe6ff', '#6b7a4a', 1.4));
-  const sun = new THREE.DirectionalLight('#fff3dc', 2.2);
-  sun.position.set(60, 110, 40);
+  scene.fog = new THREE.Fog(light.horizon, -8000, 80000);
+  scene.add(skyDome(tod));
+  scene.add(new THREE.HemisphereLight(light.hemiSky, light.hemiGround, light.hemi));
+  const sun = new THREE.DirectionalLight(light.sunColor, light.sun);
+  sun.position.copy(light.sunOffset);
   scene.add(sun);
 
   const scale = city.terrain?.scale ?? 1;
   if (city.horizon) {
-    scene.add(horizonMesh(city.horizon, scale));
+    scene.add(horizonMesh(city.horizon, scale, light.horizon));
+    if (tod === 'night') scene.add(cityLights(city.horizon, scale));
     for (const l of city.landmarks ?? []) scene.add(l.kind === 'virgen' ? virgen(l, scale) : volcano(l, scale));
   } else scene.add(buildMountains(cityRadius));
   return scene;
+}
+
+/**
+ * Quito at night from inside it: the valley floor and the lower slopes around the zone are
+ * dotted with lights (one draw call of points), the páramo above stays dark.
+ */
+function cityLights(h: Horizon, scale: number): THREE.Points {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const warm = new THREE.Color('#ffc874');
+  const cool = new THREE.Color('#e8eeff');
+  const c = new THREE.Color();
+  let seed = 1;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  for (let r = 0; r < h.rows - 1; r++)
+    for (let k = 0; k < h.cols - 1; k++) {
+      const y = h.heights[r * h.cols + k];
+      const x = h.minX + k * h.cell;
+      const z = h.minZ + r * h.cell;
+      const d = Math.hypot(x, z);
+      // Built-up: the valley and up to ~350 m above it, thinning out with height and distance.
+      const density = Math.max(0, 1 - Math.max(0, y - 80) / 300) * Math.min(1, Math.max(0, (d - 1100) / 400)) * Math.max(0.15, 1 - d / 14000);
+      const n = Math.floor(density * 2.5 + rnd());
+      for (let i = 0; i < n; i++) {
+        const u = rnd();
+        const v = rnd();
+        const i0 = r * h.cols + k;
+        // Bilinear height inside the cell, a little over the ground.
+        const hy = (h.heights[i0] * (1 - u) + h.heights[i0 + 1] * u) * (1 - v) + (h.heights[i0 + h.cols] * (1 - u) + h.heights[i0 + h.cols + 1] * u) * v;
+        pos.push(x + u * h.cell, hy * scale + 4, z + v * h.cell);
+        c.copy(rnd() < 0.7 ? warm : cool).multiplyScalar(0.6 + rnd() * 0.4);
+        col.push(c.r, c.g, c.b);
+      }
+    }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return new THREE.Points(geo, new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true, fog: false }));
 }
 
 /** Ground color by height above the city (true meters): city, green hills, páramo, rock. */
@@ -55,7 +94,7 @@ function bandColor(h: number, out: THREE.Color): THREE.Color {
  * The far terrain as one low-poly grid. Low ground near the city fades into the same haze as
  * the city's own fog, so the two meet without a seam; hills stand clear of it.
  */
-function horizonMesh(h: Horizon, scale: number): THREE.Mesh {
+function horizonMesh(h: Horizon, scale: number, haze: THREE.Color): THREE.Mesh {
   const pos = new Float32Array(h.cols * h.rows * 3);
   const col = new Float32Array(h.cols * h.rows * 3);
   const c = new THREE.Color();
@@ -73,7 +112,7 @@ function horizonMesh(h: Horizon, scale: number): THREE.Mesh {
       // out of it, like El Panecillo, stay clear.
       const near = Math.max(0, Math.min(1, 1 - (Math.hypot(x, z) - 1400) / 2200));
       const low = Math.max(0, Math.min(1, 1 - (y - 60) / 160));
-      c.lerp(HAZE, 0.85 * near * low);
+      c.lerp(haze, 0.85 * near * low);
       col.set([c.r, c.g, c.b], i * 3);
     }
   const index: number[] = [];

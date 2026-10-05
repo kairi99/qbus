@@ -65,11 +65,12 @@ test('settings are saved and applied', async ({ page }) => {
   await page.getByRole('button', { name: 'Ajustes' }).click();
   await page.getByText('Conductor').click();
   await page.getByText('Quito extremo').click();
+  await page.getByText('Noche').click();
   await page.screenshot({ path: `${shots}/65-settings.png` });
   await page.goto('/?play=1&city=mariscal');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
-  const s = await page.evaluate(() => ({ cam: (window as any).__qbus.rig.mode, hills: (window as any).__qbus.city.terrain.scale }));
-  expect(s).toEqual({ cam: 'cockpit', hills: 2 });
+  const s = await page.evaluate(() => ({ cam: (window as any).__qbus.rig.mode, hills: (window as any).__qbus.city.terrain.scale, tod: (window as any).__qbus.timeOfDay }));
+  expect(s).toEqual({ cam: 'cockpit', hills: 2, tod: 'night' });
 });
 
 test('free roam: pick the AE86, drive around with no route, clock or fares', async ({ page }) => {

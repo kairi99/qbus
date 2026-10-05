@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { MeshBuilder, vertexColorMaterial } from '../world/meshBuilder';
+import { LIGHTING, timeOfDayOf } from '../world/sky';
+import { glowTexture } from '../world/streetscape';
 import { type CityData, groundHeightAt } from '../world/cityData';
 import { CAR_KINDS, type CarKind, type TrafficSim } from './traffic';
 import type { TrafficBodies } from './trafficBodies';
@@ -49,9 +51,28 @@ function carGeometry(k: CarKind): THREE.BufferGeometry {
   return mb.build();
 }
 
+/** Head and tail lamps (unshaded: they shine at night), in the car's frame. */
+function lampGeometry(k: CarKind): THREE.BufferGeometry {
+  const { length: L, width: W, height: H } = k;
+  const mb = new MeshBuilder();
+  const y = k.name === 'buseta' ? -0.35 : -H / 2 + 0.55;
+  for (const z of [-W * 0.34, W * 0.34]) {
+    mb.add(new THREE.BoxGeometry(0.06, 0.16, 0.32), at(L / 2 + 0.02, y, z), '#fff4d6');
+    mb.add(new THREE.BoxGeometry(0.06, 0.14, 0.28), at(-L / 2 - 0.02, y + 0.05, z), '#d01818');
+  }
+  return mb.build();
+}
+
+/** Headlight beam on the road ahead of a car: a soft additive patch, for the dark. */
+function beamGeometry(k: CarKind): THREE.BufferGeometry {
+  const g = new THREE.PlaneGeometry(9, 4.2).rotateX(-Math.PI / 2);
+  g.translate(k.length / 2 + 3.8, -k.height / 2 + 0.12, 0);
+  return g;
+}
+
 /** Instanced cars (one draw call per kind) that copy their physics bodies every frame. */
 export class TrafficView {
-  private meshes = new Map<CarKind['name'], { mesh: THREE.InstancedMesh; ids: number[] }>();
+  private meshes = new Map<CarKind['name'], { mesh: THREE.InstancedMesh; ids: number[]; extras: THREE.InstancedMesh[] }>();
   private m = new THREE.Matrix4();
   private p = new THREE.Vector3();
   private q = new THREE.Quaternion();
@@ -64,6 +85,11 @@ export class TrafficView {
     private bodies: TrafficBodies,
   ) {
     const material = vertexColorMaterial();
+    const lamps = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const night = LIGHTING[timeOfDayOf(scene)].headlights;
+    const beam = night
+      ? new THREE.MeshBasicMaterial({ map: glowTexture(), color: '#fff0c8', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 })
+      : null;
     for (const kind of Object.values(CAR_KINDS)) {
       const ids = sim.cars.filter((c) => c.kind.name === kind.name).map((c) => c.id);
       if (!ids.length) continue;
@@ -75,13 +101,19 @@ export class TrafficView {
         const palette = PAINT[kind.name];
         mesh.setColorAt(i, c.set(palette[Math.floor(sim.cars[id].paint * palette.length)]));
       });
-      scene.add(mesh);
-      this.meshes.set(kind.name, { mesh, ids });
+      const extras = [new THREE.InstancedMesh(lampGeometry(kind), lamps, ids.length)];
+      if (beam) extras.push(new THREE.InstancedMesh(beamGeometry(kind), beam, ids.length));
+      for (const x of extras) {
+        x.frustumCulled = false;
+        x.renderOrder = 1;
+      }
+      scene.add(mesh, ...extras);
+      this.meshes.set(kind.name, { mesh, ids, extras });
     }
   }
 
   sync(): void {
-    for (const { mesh, ids } of this.meshes.values()) {
+    for (const { mesh, ids, extras } of this.meshes.values()) {
       ids.forEach((id, i) => {
         const b = this.bodies.bodies[id];
         if (this.sim.cars[id].state === 'parked') {
@@ -92,8 +124,10 @@ export class TrafficView {
           this.m.compose(this.p.set(t.x, t.y, t.z), this.q.set(r.x, r.y, r.z, r.w), this.one);
         }
         mesh.setMatrixAt(i, this.m);
+        for (const x of extras) x.setMatrixAt(i, this.m);
       });
       mesh.instanceMatrix.needsUpdate = true;
+      for (const x of extras) x.instanceMatrix.needsUpdate = true;
     }
   }
 }

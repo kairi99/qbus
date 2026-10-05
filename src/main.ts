@@ -5,7 +5,7 @@ import { BusAudio } from './core/audio';
 import { BusPhysics } from './vehicle/bus';
 import { BusModel } from './vehicle/busModel';
 import { CameraRig } from './camera/cameraRig';
-import { SKY_HORIZON, setupSky, followSun } from './world/sky';
+import { LIGHTING, parseTimeOfDay, setupSky, followSun } from './world/sky';
 import { buildBackdrop } from './world/backdrop';
 import { buildCity } from './world/cityBuilder';
 import { groundHeightAt, nearestRoad } from './world/cityData';
@@ -31,6 +31,7 @@ async function main() {
   }
   const settings = loadSettings();
   if (!params.has('hills')) params.set('hills', String(settings.hills));
+  const tod = parseTimeOfDay(params.get('tod')) ?? settings.timeOfDay;
   await initRapier();
 
   const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
@@ -46,7 +47,7 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 3000);
   const farCamera = new THREE.PerspectiveCamera(68, 1, 20, 120000);
   renderer.autoClear = false;
-  renderer.setClearColor(SKY_HORIZON);
+  renderer.setClearColor(LIGHTING[tod].horizon);
   // Size to what the canvas actually covers (CSS keeps it on the whole window): on phones the
   // window's size is briefly wrong while rotating, and a stale size leaves bars at the sides.
   const resize = () => {
@@ -60,14 +61,14 @@ async function main() {
   addEventListener('orientationchange', () => setTimeout(resize, 300));
   resize();
 
-  const sun = setupSky(scene);
+  const sun = setupSky(scene, tod);
   const world = createWorld();
   const city = await loadCity(params);
   if (!city.terrain) addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
   const graph = buildRoadGraph(city);
   const { props } = buildCity(city, world, scene, graph);
   const { min, max } = city.bounds;
-  const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))));
+  const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))), tod);
 
   // Free roam (?mode=free) has no route; a route shift is always driven in a bus.
   const free = params.get('mode') === 'free';
@@ -78,6 +79,7 @@ async function main() {
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const model = new BusModel(preset);
+  model.setHeadlights(LIGHTING[tod].headlights);
   scene.add(model.root);
 
   const input = new Input();
@@ -105,7 +107,7 @@ async function main() {
     }
   };
 
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session, route, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, rig, input, city, props, renderer, scene, session, route, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();
