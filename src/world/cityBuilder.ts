@@ -4,7 +4,7 @@ import { RAPIER, addTerrainCollider, markStatic } from '../physics/world';
 import type { Building, CityData, Feature, Stop, Vec2 } from './cityData';
 import { SIDEWALK_HEIGHT, forward, groundHeightAt, right, terrainAt } from './cityData';
 import { bbox, pointInPolygon } from './geom';
-import { ChunkedMeshBuilder, MeshBuilder, extrude, vertexColorMaterial, IDENTITY } from './meshBuilder';
+import { ChunkedMeshBuilder, ChunkedUVQuadBuilder, MeshBuilder, extrude, vertexColorMaterial, IDENTITY, withinRange } from './meshBuilder';
 import { type Path, type RoadGraph, buildRoadGraph, dirAt, edgeY, laneOffset, makePath, pointAt, projectOnPath } from './roadGraph';
 import type { Terrain } from './terrain';
 import { PropSystem } from './props';
@@ -15,6 +15,11 @@ import { addRoadworks, addWalls, worksSigns } from './boundaryBuilder';
 import { RoadIndex } from './roadIndex';
 import { profileAt, projectOnRoad, roadProfiles, surfaceY } from './elevation';
 import { buildGrades, nodeArea, planTrenches } from './gradeBuilder';
+import { BuildingIndex, type FacadeContext, addFacades, buildingLook, centroid } from './facades';
+import { addStreetscape } from './streetscape';
+import { WHITE_UV, signAtlas } from './signAtlas';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { LIGHTING, timeOfDayOf } from './sky';
 
 // Draw order on the ground is enforced with polygon offsets, not height gaps, so layers stay
 // put at any distance: terrain < sidewalk < asphalt < paint.
@@ -26,7 +31,6 @@ const CURB = '#a19d94';
 const PARK_TOP = '#79a651';
 const PAVING = '#b9b2a3';
 const COUNTRY = '#8aa266';
-const FLOOR_HEIGHT = 3.2;
 /** Size of the ground layers' tiles (m). */
 const GROUND_TILE = 450;
 /** Ground layers are draped vertex by vertex, with vertices at most this far apart. */
@@ -41,8 +45,12 @@ export interface BuiltCity {
   props: PropSystem;
 }
 
-/** Turns CityData into merged low-poly meshes (a few dozen draw calls) and static colliders. */
+/**
+ * Turns CityData into merged low-poly meshes (a few dozen draw calls) and static colliders,
+ * lit for the scene's time of day (`setupSky`; day if none): windows lit from inside, lamps.
+ */
 export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scene, graph = buildRoadGraph(city)): BuiltCity {
+  const light = LIGHTING[timeOfDayOf(scene)];
   const h = (p: Vec2) => terrainAt(city, p);
   // Draped layers take the highest ground within half a drape step, so a flat quad spanning a
   // crease in the terrain rides over it instead of cutting under the ridge.
@@ -57,6 +65,11 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   const asphalt = new ChunkedMeshBuilder(GROUND_TILE);
   const paint = new ChunkedMeshBuilder(GROUND_TILE);
   const solid = new ChunkedMeshBuilder(); // casts and receives shadows
+  // Facade detail and street furniture, in coarser tiles that aren't drawn past the fog.
+  const detail = new ChunkedMeshBuilder(250); // casts and receives shadows
+  const glow = new ChunkedMeshBuilder(250); // lit from inside at night: unshaded
+  const atlas = signAtlas();
+  const signs = atlas ? new ChunkedUVQuadBuilder(250) : null;
 
   // Underpasses cut through the terrain: a finer patch with the cut left open replaces it there.
   const trenches = planTrenches(city, graph);
@@ -77,8 +90,9 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   city.roads.forEach((road, i) => ribbon(asphalt, makePath(road.points), -road.width / 2, road.width / 2, roadHeight(i), Y.asphalt, ASPHALT));
   // Real cities have no block slabs: sidewalks run along the roads, clipped wherever they'd
   // cover asphalt or a junction (divided avenues put carriageways side by side).
+  const sections = sidewalkSections(city, graph);
   if (!city.blocks.length)
-    for (const run of sidewalkSections(city, graph)) {
+    for (const run of sections) {
       strip(sidewalks, run, (s) => [s.from, s.to], hUp, Y.sidewalk, SIDEWALK_TOP);
       strip(sidewalks, run, (s) => [s.from, s.from + Math.sign(s.to - s.from) * 0.25], hUp, Y.curb, CURB);
     }
@@ -100,6 +114,10 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   }
 
   // Buildings sit on the lowest ground under them (sunk a little) and rise from the highest.
+  const roadIndex = new RoadIndex(city.roads);
+  const avenues = new RoadIndex(city.roads.filter((r) => r.kind === 'avenue' || /^Av\.? /.test(r.name)));
+  const buildingIndex = new BuildingIndex(city.buildings.map((b) => b.footprint));
+  const facades: FacadeContext = { detail, glow, signs, ground: h, roads: roadIndex, avenues, buildings: buildingIndex, light };
   const walls = new Map<string, number[]>();
   for (const b of city.buildings) {
     const hs = b.footprint.map(h);
@@ -107,8 +125,9 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     const base = Math.min(...hs) - 0.3;
     const c = centroid(b.footprint);
     const prism = extrude(b.footprint, base, ground + b.height);
-    solid.at(c.x, c.z).add(prism, IDENTITY, b.roof, b.color);
-    addWindows(solid.at(c.x, c.z), b, ground);
+    const look = buildingLook(facades, b);
+    solid.at(c.x, c.z).add(prism, IDENTITY, look.roof, look.wall);
+    addFacades(facades, b, look, ground);
     const key = `${Math.floor(c.x / 150)},${Math.floor(c.z / 150)}`;
     const pos = prism.getAttribute('position').array as ArrayLike<number>;
     const list = walls.get(key) ?? [];
@@ -141,7 +160,7 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   }
   let works: ReturnType<typeof addRoadworks> = { cones: [], signs: [] };
   if (city.playArea) {
-    const index = new RoadIndex(city.roads);
+    const index = roadIndex;
     const hulls = graph.nodes.filter((n) => n.hull).map((n) => ({ poly: n.hull!, box: bbox(n.hull!) }));
     const inBox = (p: Vec2, b: { min: Vec2; max: Vec2 }) => p.x >= b.min.x && p.x <= b.max.x && p.z >= b.min.z && p.z <= b.max.z;
     const { min, max } = city.playArea;
@@ -173,17 +192,72 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
       fixed,
     );
   }
-  for (const t of city.trees) addTree(solid.at(t.x, t.z), t, groundHeightAt(city, t), world, fixed);
+  const streets = addStreetscape({
+    city,
+    graph,
+    sections,
+    roads: roadIndex,
+    avenues,
+    lifted: new RoadIndex(city.roads.filter((r) => r.lift?.some((l) => Math.abs(l) > 0.3))),
+    buildings: buildingIndex,
+    ground: hUp,
+    bulbs: light.lamps ? glow : detail,
+    light,
+    world,
+    fixed,
+  });
 
   const ground = [...sidewalks.build(layer(3)), ...asphalt.build(layer(0)), ...paint.build(layer(-3))];
   for (const m of ground) m.receiveShadow = true;
+  const solidMaterial = vertexColorMaterial({ side: THREE.DoubleSide });
   // Drawn in 3 × 3 blocks of tiles; the shadow pass still culls tile by tile.
-  const solidMeshes = solid.build(vertexColorMaterial({ side: THREE.DoubleSide }), { merge: 3, shadows: true });
-  scene.add(...ground, ...solidMeshes, ...transitSigns(city.stations ?? [], city.metro ?? [], h), ...worksSigns(works.signs));
+  const solidMeshes = solid.build(solidMaterial, { merge: 3, shadows: true });
+  const decor = detail.build(solidMaterial);
+  // Facade detail lies flat on the walls (or barely out of them): it takes shadows but casting
+  // them would only double its cost in the shadow pass.
+  for (const m of decor) m.receiveShadow = true;
+  // Small things fade into the fog well before its far end: don't draw them out there. Lit
+  // windows and signs are what the night is about, so they go all the way.
+  const far = [
+    ...decor.map((m) => withinRange(m, light.fogFar * 0.6)),
+    ...streets.map((m) => withinRange(m, light.fogFar * 0.75)),
+    ...lights(glow, signs, atlas).map((m) => withinRange(m, light.fogFar)),
+  ];
+  scene.add(...ground, ...solidMeshes, ...far, ...transitSigns(city.stations ?? [], city.metro ?? [], h), ...worksSigns(works.signs));
 
   markStatic(world);
   // The roadworks' cones can be knocked over like any other.
   return { props: new PropSystem(world, scene, { ...city, props: [...city.props, ...works.cones] }) };
+}
+
+/**
+ * Unshaded layers: windows lit from inside and lamp bulbs (`glow`), and shop signs. By day
+ * the signs are painted boards (shaded); when it's dark they're lit and share each tile's
+ * draw call with the glow (the atlas has a white texel for the untextured quads).
+ */
+function lights(glow: ChunkedMeshBuilder, signs: ChunkedUVQuadBuilder | null, atlas: THREE.Texture | null): THREE.Mesh[] {
+  const glowing = glow.geometries();
+  if (!signs || !atlas) return [...glowing.values()].map((g) => new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+  if (!glowing.size) return signs.build(new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide }));
+  const material = new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, side: THREE.DoubleSide });
+  const tiles = signs.geometries();
+  for (const k of glowing.keys()) if (!tiles.has(k)) tiles.set(k, new THREE.BufferGeometry());
+  return [...tiles].map(([k, sg]) => {
+    const parts: THREE.BufferGeometry[] = [];
+    const g = glowing.get(k);
+    if (g) {
+      const n = g.getAttribute('position').count;
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2).map((_, i) => WHITE_UV[i % 2]), 2));
+      parts.push(g);
+    }
+    if (sg.getAttribute('position')) {
+      sg.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(sg.getAttribute('position').count * 3).fill(1), 3));
+      parts.push(sg);
+    }
+    const merged = parts.length > 1 ? mergeGeometries(parts)! : parts[0];
+    merged.computeBoundingSphere();
+    return new THREE.Mesh(merged, material);
+  });
 }
 
 /** Flat grass around a generated city, with the city cut out so nothing is coplanar. */
@@ -374,41 +448,6 @@ function addMarkings(mb: QuadSink, graph: RoadGraph, ground: (p: Vec2) => number
   }
 }
 
-function addWindows(mb: MeshBuilder, b: Building, ground: number): void {
-  const floors = Math.round(b.height / FLOOR_HEIGHT);
-  const tall = floors > 3;
-  const glass = tall ? '#7d97ad' : '#4f5a63';
-  const { x: cx, z: cz } = centroid(b.footprint);
-  for (let i = 0; i < b.footprint.length; i++) {
-    const p0 = b.footprint[i];
-    const p1 = b.footprint[(i + 1) % b.footprint.length];
-    const len = Math.hypot(p1.x - p0.x, p1.z - p0.z);
-    if (len < 3) continue;
-    const d = { x: (p1.x - p0.x) / len, z: (p1.z - p0.z) / len };
-    let n = { x: -d.z, z: d.x };
-    const mx = (p0.x + p1.x) / 2;
-    const mz = (p0.z + p1.z) / 2;
-    if (n.x * (mx - cx) + n.z * (mz - cz) < 0) n = { x: -n.x, z: -n.z };
-    const pt = (t: number, y: number) => ({ x: p0.x + d.x * t + n.x * 0.04, y, z: p0.z + d.z * t + n.z * 0.04 });
-    for (let f = 0; f < floors; f++) {
-      const y0 = ground + f * FLOOR_HEIGHT + 1;
-      const y1 = y0 + (tall ? 1.1 : 1.3);
-      if (tall) {
-        // Continuous glass band per floor.
-        mb.quad(pt(0.8, y0), pt(len - 0.8, y0), pt(len - 0.8, y1), pt(0.8, y1), glass);
-      } else {
-        // Individual colonial-style windows.
-        const count = Math.max(1, Math.floor((len - 1) / 3.2));
-        const gap = len / count;
-        for (let w = 0; w < count; w++) {
-          const t = gap * (w + 0.5);
-          mb.quad(pt(t - 0.6, y0), pt(t + 0.6, y0), pt(t + 0.6, y1), pt(t - 0.6, y1), glass);
-        }
-      }
-    }
-  }
-}
-
 /** Bus shelter ("parada"): back panel, roof, bench and a blue sign, behind the waiting spot. */
 function addShelter(mb: MeshBuilder, s: Stop, base: number, world: RAPIER.World, fixed: RAPIER.RigidBody): void {
   const r = right(s.heading);
@@ -435,14 +474,6 @@ function addShelter(mb: MeshBuilder, s: Stop, base: number, world: RAPIER.World,
       .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
     fixed,
   );
-}
-
-function addTree(mb: MeshBuilder, p: Vec2, base: number, world: RAPIER.World, fixed: RAPIER.RigidBody): void {
-  const s = 0.8 + (Math.abs(Math.sin(p.x * 12.9898 + p.z * 78.233)) % 0.6);
-  mb.add(new THREE.CylinderGeometry(0.2, 0.3, 2.4 * s, 6), new THREE.Matrix4().makeTranslation(p.x, base + 1.2 * s, p.z), '#6b4a2f');
-  const crown = new THREE.IcosahedronGeometry(1.8 * s, 0);
-  mb.add(crown, new THREE.Matrix4().makeTranslation(p.x, base + 3.4 * s, p.z), '#4f8a3a', '#3f7430');
-  world.createCollider(RAPIER.ColliderDesc.cylinder(1.2 * s, 0.3).setTranslation(p.x, base + 1.2 * s, p.z), fixed);
 }
 
 function prismPoints(footprint: Vec2[], y0: number, y1: number): Float32Array {
@@ -472,6 +503,3 @@ function featurePoints(f: Feature, h: (p: Vec2) => number): THREE.Vector3[] {
   return pts;
 }
 
-function centroid(poly: Vec2[]): Vec2 {
-  return { x: poly.reduce((s, p) => s + p.x, 0) / poly.length, z: poly.reduce((s, p) => s + p.z, 0) / poly.length };
-}

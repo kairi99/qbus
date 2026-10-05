@@ -13,9 +13,14 @@ describe('settings', () => {
 
   it('round-trips through storage', () => {
     const store = memory();
-    const s = { ...DEFAULTS, bus: 'buseta', zone: 'grid', route: 'ruta-amazonas', camera: 'cockpit' as const, volume: 0.3, hills: 2 };
+    const s = { ...DEFAULTS, bus: 'buseta', zone: 'grid', route: 'ruta-amazonas', camera: 'cockpit' as const, volume: 0.3, hills: 2, timeOfDay: 'night' as const };
     saveSettings(s, store);
     expect(loadSettings(store)).toEqual(s);
+  });
+
+  it('keeps a save from before the time of day existed, in daylight', () => {
+    const { timeOfDay: _, ...old } = DEFAULTS;
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2 }) })).timeOfDay).toBe('day');
   });
 
   it('starts on real hills', () => {
@@ -33,12 +38,13 @@ describe('settings', () => {
   });
 
   it('ignores garbage and out-of-range values', () => {
-    const store = memory({ qbus: JSON.stringify({ volume: 7, hills: -3, camera: 'drone', bus: 42 }) });
+    const store = memory({ qbus: JSON.stringify({ volume: 7, hills: -3, camera: 'drone', bus: 42, timeOfDay: 'noon' }) });
     const s = loadSettings(store);
     expect(s.volume).toBe(1);
     expect(s.hills).toBe(DEFAULTS.hills);
     expect(s.camera).toBe(DEFAULTS.camera);
     expect(s.bus).toBe(DEFAULTS.bus);
+    expect(s.timeOfDay).toBe('day');
     expect(loadSettings(memory({ qbus: '{not json' }))).toEqual(DEFAULTS);
   });
 });

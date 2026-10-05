@@ -41,6 +41,10 @@ export interface Building {
   height: number;
   color: string;
   roof: string;
+  /** OSM `building` type when more specific than "yes" (house, apartments, commercial, office...). */
+  use?: string;
+  /** OSM `shop` or `amenity` of a business in the building (restaurant, pharmacy, bank...). */
+  shop?: string;
 }
 
 /** Rapid-transit systems with their own stations (the Metro is underground: entrances only). */

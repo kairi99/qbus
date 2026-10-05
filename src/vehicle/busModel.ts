@@ -19,7 +19,7 @@ export class BusModel {
   /** Exhaust flames, shown while the nitro burns. */
   private flames = new THREE.Group();
 
-  constructor(preset: BusPreset) {
+  constructor(private preset: BusPreset) {
     const { length: L, width: W, height: H } = preset.body;
     const car = preset.kind === 'car';
     if (car) this.exterior.add(...carExterior(preset));
@@ -138,6 +138,25 @@ export class BusModel {
     wheelMount.rotation.y = Math.PI / 2;
     wheelMount.add(this.steeringWheel);
     this.cockpit.add(wheelMount);
+  }
+
+  /**
+   * Headlights for the dark: one real spot light lighting the road ahead (the only moving
+   * light in the game; traffic gets fake beams on the road instead).
+   */
+  setHeadlights(on: boolean): void {
+    if (!on || this.root.getObjectByName('headlights')) return;
+    const { length: L, height: H } = this.preset.body;
+    const spot = new THREE.SpotLight('#fff1d0', 90, 85, 0.62, 0.55, 1.2);
+    spot.name = 'headlights';
+    spot.position.set(L / 2 + 0.1, -H * 0.2, 0);
+    spot.target.position.set(L / 2 + 22, -H * 0.5 - 2.5, 0);
+    this.root.add(spot, spot.target);
+    // The cabin ceiling is unshaded so it reads as daylit: dim it in the dark.
+    this.cockpit.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+      if (mat?.isMeshBasicMaterial) mat.color.multiplyScalar(0.22);
+    });
   }
 
   setCockpitView(on: boolean): void {

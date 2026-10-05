@@ -6,7 +6,7 @@ import { engineLoad, isBraking } from './core/soundModel';
 import { BusPhysics } from './vehicle/bus';
 import { BusModel } from './vehicle/busModel';
 import { CameraRig } from './camera/cameraRig';
-import { SKY_HORIZON, setupSky, followSun } from './world/sky';
+import { LIGHTING, parseTimeOfDay, setupSky, followSun } from './world/sky';
 import { buildBackdrop } from './world/backdrop';
 import { buildCity } from './world/cityBuilder';
 import { groundHeightAt, nearestRoad } from './world/cityData';
@@ -29,6 +29,7 @@ const MAX_FRAME = 0.1;
  */
 export async function main(params: URLSearchParams, cityReady: Promise<CityData>) {
   const settings = loadSettings();
+  const tod = parseTimeOfDay(params.get('tod')) ?? settings.timeOfDay;
   performance.mark('qbus:start');
   await initRapier();
   performance.mark('qbus:rapier');
@@ -46,7 +47,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 3000);
   const farCamera = new THREE.PerspectiveCamera(68, 1, 20, 120000);
   renderer.autoClear = false;
-  renderer.setClearColor(SKY_HORIZON);
+  renderer.setClearColor(LIGHTING[tod].horizon);
   // Size to what the canvas actually covers (CSS keeps it on the whole window): on phones the
   // window's size is briefly wrong while rotating, and a stale size leaves bars at the sides.
   const resize = () => {
@@ -60,7 +61,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   addEventListener('orientationchange', () => setTimeout(resize, 300));
   resize();
 
-  const sun = setupSky(scene);
+  const sun = setupSky(scene, tod);
   const world = createWorld();
   const city = await cityReady;
   performance.mark('qbus:city-loaded');
@@ -70,7 +71,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const { props } = buildCity(city, world, scene, graph);
   performance.mark('qbus:city-built');
   const { min, max } = city.bounds;
-  const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))));
+  const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))), tod);
 
   // Free roam (?mode=free) has no route; a route shift is always driven in a bus.
   const free = params.get('mode') === 'free';
@@ -81,6 +82,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const model = new BusModel(preset);
+  model.setHeadlights(LIGHTING[tod].headlights);
   scene.add(model.root);
 
   const input = new Input();
@@ -114,7 +116,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, rig, input, city, props, renderer, scene, backdrop, session, route, perf, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, rig, input, city, props, renderer, scene, backdrop, session, route, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();

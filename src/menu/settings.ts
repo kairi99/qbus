@@ -1,5 +1,6 @@
 import type { CameraMode } from '../camera/cameraRig';
 import { DEFAULT_HILLS } from '../world/loadCity';
+import { type TimeOfDay, parseTimeOfDay } from '../world/sky';
 
 /** What the player picked last time, and their preferences. Saved in localStorage. */
 export interface Settings {
@@ -15,13 +16,20 @@ export interface Settings {
   volume: number;
   /** Elevation exaggeration for real zones. */
   hills: number;
+  /** Light the city is played in. */
+  timeOfDay: TimeOfDay;
 }
 
-export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS };
+export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day' };
 export const HILLS_OPTIONS = [
   { value: 1, label: 'Reales' },
   { value: 1.3, label: 'Un poquito más' },
   { value: 2, label: 'Quito extremo' },
+];
+export const TIME_OPTIONS: { value: TimeOfDay; label: string }[] = [
+  { value: 'day', label: 'Día' },
+  { value: 'sunset', label: 'Atardecer' },
+  { value: 'night', label: 'Noche' },
 ];
 
 export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>;
@@ -55,6 +63,7 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     camera: raw.camera === 'cockpit' || raw.camera === 'chase' ? raw.camera : DEFAULTS.camera,
     volume: num('volume', 0, 1),
     hills: raw.v !== VERSION && raw.hills === 1.3 ? DEFAULTS.hills : num('hills', 0.5, 3),
+    timeOfDay: parseTimeOfDay(raw.timeOfDay) ?? DEFAULTS.timeOfDay,
   };
 }
 
