@@ -1,4 +1,5 @@
 import type { CameraMode } from '../camera/cameraRig';
+import { setStyle, setText } from './dom';
 
 /** HUD: speedometer, current street, camera mode, control hints and a "flipped" warning. */
 export class Hud {
@@ -29,11 +30,11 @@ export class Hud {
 
   update(dt: number, speedMs: number, mode: CameraMode, isFlipped: boolean, street: string): void {
     this.frameMs += (dt * 1000 - this.frameMs) * 0.05;
-    this.fps.textContent = `${Math.round(1000 / this.frameMs)} fps`;
+    setText(this.fps, `${Math.round(1000 / this.frameMs)} fps`);
     // Keep the last street while crossing sidewalks/intersections edges.
-    if (street) this.street.textContent = street;
-    this.speed.textContent = String(Math.round(Math.abs(speedMs) * 3.6));
-    this.mode.textContent = mode === 'chase' ? 'Cámara: tercera persona' : 'Cámara: conductor';
-    this.flipped.style.display = isFlipped ? 'block' : 'none';
+    if (street) setText(this.street, street);
+    setText(this.speed, String(Math.round(Math.abs(speedMs) * 3.6)));
+    setText(this.mode, mode === 'chase' ? 'Cámara: tercera persona' : 'Cámara: conductor');
+    setStyle(this.flipped, 'display', isFlipped ? 'block' : 'none');
   }
 }

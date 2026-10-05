@@ -1,5 +1,6 @@
 import type { Rating } from '../gameplay/routeGame';
 import type { TrickKind } from '../gameplay/scoring';
+import { setData, setStyle, setText } from './dom';
 
 export type HudAction = 'again' | 'menu' | 'resume';
 
@@ -93,28 +94,28 @@ export class GameHud {
   ): void {
     this.clock += dt;
     const secs = Math.ceil(s.timeLeft);
-    this.el.timer.textContent = String(secs);
+    setText(this.el.timer, String(secs));
     this.el.timer.classList.toggle('low', s.started && secs <= 10);
-    this.el.money.textContent = money(s.cents);
-    this.el.riders.textContent = `${s.onBoard} a bordo`;
+    setText(this.el.money, money(s.cents));
+    setText(this.el.riders, `${s.onBoard} a bordo`);
     this.el.prompt.hidden = s.started;
-    this.el.combo.textContent = s.chain >= 2 ? `Combo ×${s.chain}` : '';
+    setText(this.el.combo, s.chain >= 2 ? `Combo ×${s.chain}` : '');
     this.el.combo.classList.toggle('on', s.chain >= 2);
-    this.el.nitroFill.style.transform = `scaleY(${s.nitro})`;
+    setStyle(this.el.nitroFill, 'transform', `scaleY(${s.nitro})`);
     this.el.nitro.classList.toggle('burn', s.boosting);
     this.el.nitro.classList.toggle('full', s.nitro >= 1);
     this.el.nitro.classList.toggle('empty', !s.nitroReady && !s.boosting);
     // The tank as page-wide state too: on touch screens the Nitro button shows it (ui/touchControls).
     const doc = document.documentElement;
-    doc.style.setProperty('--nitro', String(s.nitro));
-    doc.dataset.nitro = s.boosting ? 'burn' : !s.nitroReady ? 'empty' : s.nitro >= 1 ? 'full' : '';
+    setStyle(doc, '--nitro', String(s.nitro));
+    setData(doc, 'nitro', s.boosting ? 'burn' : !s.nitroReady ? 'empty' : s.nitro >= 1 ? 'full' : '');
     if (this.clock > this.speechUntil) this.el.speech.classList.remove('on');
   }
 
   board(stopName: string, meters: number, gettingOff: number): void {
-    this.el.stop.textContent = stopName;
-    this.el.dist.textContent = `${Math.round(meters / 10) * 10} m`;
-    this.el.off.textContent = gettingOff ? `Se bajan ${gettingOff}` : 'Solo suben';
+    setText(this.el.stop, stopName);
+    setText(this.el.dist, `${Math.round(meters / 10) * 10} m`);
+    setText(this.el.off, gettingOff ? `Se bajan ${gettingOff}` : 'Solo suben');
     this.el.board.classList.toggle('dropoff', gettingOff > 0);
   }
 

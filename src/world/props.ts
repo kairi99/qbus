@@ -52,9 +52,12 @@ function fruitStandSpec(): KindSpec {
   return { geometry: mb.build(), collider: () => RAPIER.ColliderDesc.cuboid(1, h, 0.55), halfHeight: h, mass: 40 };
 }
 
+/** Props are drawn in tiles this big (m), so the shadow pass only redraws the ones near the bus. */
+const TILE = 600;
+
 /**
  * Knockable street props. Bodies start asleep so hundreds of them cost nothing until the
- * bus hits one; each kind renders as one InstancedMesh.
+ * bus hits one; each kind renders as one InstancedMesh per tile of the city.
  */
 export class PropSystem {
   private groups: { mesh: THREE.InstancedMesh; bodies: RAPIER.RigidBody[]; origins: THREE.Vector3[]; knocked: boolean[] }[] = [];
@@ -68,12 +71,9 @@ export class PropSystem {
     const material = vertexColorMaterial();
     for (const kind of Object.keys(specs) as PropKind[]) {
       const spec = specs[kind];
-      const items = city.props.filter((p) => p.kind === kind);
-      if (!items.length) continue;
-      const mesh = new THREE.InstancedMesh(spec.geometry, material, items.length);
-      mesh.castShadow = true;
-      mesh.frustumCulled = false; // instances span the whole city
-      const bodies = items.map((prop) => {
+      const tiles = new Map<string, RAPIER.RigidBody[]>();
+      for (const prop of city.props) {
+        if (prop.kind !== kind) continue;
         const y = groundHeightAt(city, prop.pos) + spec.halfHeight + 0.01;
         const rot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), prop.heading);
         const body = world.createRigidBody(
@@ -85,11 +85,18 @@ export class PropSystem {
             .setAngularDamping(0.5),
         );
         world.createCollider(spec.collider().setMass(spec.mass).setFriction(0.7), body);
-        return body;
-      });
-      const origins = bodies.map((b) => new THREE.Vector3().copy(b.translation()));
-      this.groups.push({ mesh, bodies, origins, knocked: bodies.map(() => false) });
-      scene.add(mesh);
+        const key = `${Math.floor(prop.pos.x / TILE)},${Math.floor(prop.pos.z / TILE)}`;
+        const tile = tiles.get(key);
+        if (tile) tile.push(body);
+        else tiles.set(key, [body]);
+      }
+      for (const bodies of tiles.values()) {
+        const mesh = new THREE.InstancedMesh(spec.geometry, material, bodies.length);
+        mesh.castShadow = true;
+        const origins = bodies.map((b) => new THREE.Vector3().copy(b.translation()));
+        this.groups.push({ mesh, bodies, origins, knocked: bodies.map(() => false) });
+        scene.add(mesh);
+      }
     }
     this.sync(true);
   }
@@ -127,7 +134,10 @@ export class PropSystem {
         mesh.setMatrixAt(i, this.m);
         dirty = true;
       });
-      if (dirty) mesh.instanceMatrix.needsUpdate = true;
+      if (!dirty) continue;
+      mesh.instanceMatrix.needsUpdate = true;
+      // Culling uses the instances' bounds: keep them around a prop that flew off.
+      mesh.computeBoundingSphere();
     }
   }
 }

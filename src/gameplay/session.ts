@@ -88,6 +88,7 @@ export class GameSession {
   private metroView: PedestrianView;
   private frustum = new THREE.Frustum();
   private viewProj = new THREE.Matrix4();
+  private probe = new THREE.Vector3();
   private dives = 0;
   private clock = 0;
   private budget = START_CARS;
@@ -241,7 +242,7 @@ export class GameSession {
     this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.viewProj);
     const eye = camera.position;
-    const hidden = (p: Vec2) => Math.hypot(p.x - eye.x, p.z - eye.z) > 120 || !this.frustum.containsPoint(new THREE.Vector3(p.x, groundHeightAt(this.d.city, p) + 1, p.z));
+    const hidden = (p: Vec2) => Math.hypot(p.x - eye.x, p.z - eye.z) > 120 || !this.frustum.containsPoint(this.probe.set(p.x, groundHeightAt(this.d.city, p) + 1, p.z));
     this.metro.update(dt, { x: bus.body.translation().x, z: bus.body.translation().z }, hidden);
     this.metroView.sync(this.clock);
     this.knocked += this.d.props.consumeKnocked();

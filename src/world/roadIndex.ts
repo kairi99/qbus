@@ -2,10 +2,12 @@ import type { Road, Vec2 } from './cityData';
 import { distToSegment } from './geom';
 
 const CELL = 30;
+/** Numeric cell key (cells stay well within ±32768 of the origin). */
+const key = (x: number, z: number) => x * 65536 + z;
 
 /** Grid-hashed road segments for fast "is this on the asphalt?" queries. */
 export class RoadIndex {
-  private cells = new Map<string, { a: Vec2; b: Vec2; half: number }[]>();
+  private cells = new Map<number, { a: Vec2; b: Vec2; half: number }[]>();
   private maxHalf = 0;
 
   constructor(roads: Road[]) {
@@ -21,9 +23,9 @@ export class RoadIndex {
         const z1 = Math.floor((Math.max(a.z, b.z) + half) / CELL);
         for (let x = x0; x <= x1; x++)
           for (let z = z0; z <= z1; z++) {
-            const key = `${x},${z}`;
-            let list = this.cells.get(key);
-            if (!list) this.cells.set(key, (list = []));
+            const k = key(x, z);
+            let list = this.cells.get(k);
+            if (!list) this.cells.set(k, (list = []));
             list.push({ a, b, half });
           }
       }
@@ -33,9 +35,8 @@ export class RoadIndex {
   /** Distance from `p` to the nearest road edge; negative on the asphalt. */
   clearance(p: Vec2): number {
     let best = Infinity;
-    for (const s of this.cells.get(`${Math.floor(p.x / CELL)},${Math.floor(p.z / CELL)}`) ?? []) {
-      best = Math.min(best, distToSegment(p, s.a, s.b) - s.half);
-    }
+    const list = this.cells.get(key(Math.floor(p.x / CELL), Math.floor(p.z / CELL)));
+    if (list) for (const s of list) best = Math.min(best, distToSegment(p, s.a, s.b) - s.half);
     return best;
   }
 

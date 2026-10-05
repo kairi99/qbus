@@ -27,6 +27,8 @@ const PARK_TOP = '#79a651';
 const PAVING = '#b9b2a3';
 const COUNTRY = '#8aa266';
 const FLOOR_HEIGHT = 3.2;
+/** Size of the ground layers' tiles (m). */
+const GROUND_TILE = 450;
 /** Ground layers are draped vertex by vertex, with vertices at most this far apart. */
 const DRAPE = 2.5;
 /** Heights above the terrain for each ground layer. */
@@ -49,10 +51,11 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     Math.max(h(p), h({ x: p.x + r, z: p.z }), h({ x: p.x - r, z: p.z }), h({ x: p.x, z: p.z + r }), h({ x: p.x, z: p.z - r }));
   const layer = (factor: number) =>
     vertexColorMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: factor, polygonOffsetUnits: factor });
-  // Ground layers are tiled so the camera frustum can skip what's out of view.
-  const sidewalks = new ChunkedMeshBuilder(150);
-  const asphalt = new ChunkedMeshBuilder(150);
-  const paint = new ChunkedMeshBuilder(150);
+  // Ground layers are tiled so the camera frustum can skip what's out of view. Tiles are big:
+  // nearly all of the city is in front of the camera anyway, and every tile is a draw call.
+  const sidewalks = new ChunkedMeshBuilder(GROUND_TILE);
+  const asphalt = new ChunkedMeshBuilder(GROUND_TILE);
+  const paint = new ChunkedMeshBuilder(GROUND_TILE);
   const solid = new ChunkedMeshBuilder(); // casts and receives shadows
 
   // Underpasses cut through the terrain: a finer patch with the cut left open replaces it there.
@@ -139,11 +142,12 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   let works: ReturnType<typeof addRoadworks> = { cones: [], signs: [] };
   if (city.playArea) {
     const index = new RoadIndex(city.roads);
-    const hulls = graph.nodes.filter((n) => n.hull).map((n) => n.hull!);
+    const hulls = graph.nodes.filter((n) => n.hull).map((n) => ({ poly: n.hull!, box: bbox(n.hull!) }));
+    const inBox = (p: Vec2, b: { min: Vec2; max: Vec2 }) => p.x >= b.min.x && p.x <= b.max.x && p.z >= b.min.z && p.z <= b.max.z;
     const { min, max } = city.playArea;
     const nearEdge = (b: Building) =>
       b.footprint.some((p) => Math.min(Math.abs(p.x - min.x), Math.abs(p.x - max.x), Math.abs(p.z - min.z), Math.abs(p.z - max.z)) < 40);
-    const edgeBuildings = city.buildings.filter(nearEdge);
+    const edgeBuildings = city.buildings.filter(nearEdge).map((b) => ({ poly: b.footprint, box: bbox(b.footprint) }));
     // Road surfaces at a point: an underpass crossing the edge is closed down on its floor.
     const boxes = city.roads.map((r) => {
       const b = bbox(r.points);
@@ -163,8 +167,8 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
       city,
       h,
       surfaces,
-      (p) => index.onAsphalt(p, 0.3) || hulls.some((hl) => pointInPolygon(p, hl)),
-      (p) => edgeBuildings.some((b) => pointInPolygon(p, b.footprint)),
+      (p) => index.onAsphalt(p, 0.3) || hulls.some((hl) => inBox(p, hl.box) && pointInPolygon(p, hl.poly)),
+      (p) => edgeBuildings.some((b) => inBox(p, b.box) && pointInPolygon(p, b.poly)),
       world,
       fixed,
     );
@@ -173,8 +177,8 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
 
   const ground = [...sidewalks.build(layer(3)), ...asphalt.build(layer(0)), ...paint.build(layer(-3))];
   for (const m of ground) m.receiveShadow = true;
-  const solidMeshes = solid.build(vertexColorMaterial({ side: THREE.DoubleSide }));
-  for (const m of solidMeshes) m.castShadow = m.receiveShadow = true;
+  // Drawn in 3 × 3 blocks of tiles; the shadow pass still culls tile by tile.
+  const solidMeshes = solid.build(vertexColorMaterial({ side: THREE.DoubleSide }), { merge: 3, shadows: true });
   scene.add(...ground, ...solidMeshes, ...transitSigns(city.stations ?? [], city.metro ?? [], h), ...worksSigns(works.signs));
 
   markStatic(world);
@@ -221,7 +225,7 @@ function terrainMeshes(
   color: (x: number, z: number, out: THREE.Color) => THREE.Color,
   skip?: Set<number>,
 ): THREE.Mesh[] {
-  const TILE = 40;
+  const TILE = 80;
   const meshes: THREE.Mesh[] = [];
   const c = new THREE.Color();
   for (let r0 = 0; r0 < t.rows - 1; r0 += TILE)
