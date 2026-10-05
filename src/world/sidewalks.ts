@@ -7,6 +7,7 @@ import { LIFTED, liftAlong } from './elevation';
 export const SIDEWALK_WIDTH = 3;
 const STEP = 3;
 const PROBE = 0.25;
+const HULL_CELL = 40;
 
 /** A sidewalk cross-section: from/to are signed offsets (right of `dir`) from the road centerline. */
 export interface SidewalkSection {
@@ -26,9 +27,22 @@ export function sidewalkSections(city: CityData, graph: RoadGraph): SidewalkSect
   const hulls = graph.nodes
     .filter((n) => n.hull)
     .map((n) => ({ poly: n.hull!, box: bbox(n.hull!) }));
+  // Junction hulls bucketed by grid cell: each probe only looks at the few nearby.
+  const cell = (x: number, z: number) => Math.floor(x / HULL_CELL) * 65536 + Math.floor(z / HULL_CELL);
+  const near = new Map<number, typeof hulls>();
+  for (const h of hulls)
+    for (let x = Math.floor(h.box.min.x / HULL_CELL); x <= Math.floor(h.box.max.x / HULL_CELL); x++)
+      for (let z = Math.floor(h.box.min.z / HULL_CELL); z <= Math.floor(h.box.max.z / HULL_CELL); z++) {
+        const k = x * 65536 + z;
+        const list = near.get(k);
+        if (list) list.push(h);
+        else near.set(k, [h]);
+      }
   const paved = (q: Vec2) =>
     roads.onAsphalt(q, 0.05) ||
-    hulls.some((h) => q.x >= h.box.min.x && q.x <= h.box.max.x && q.z >= h.box.min.z && q.z <= h.box.max.z && pointInPolygon(q, h.poly));
+    (near.get(cell(q.x, q.z)) ?? []).some(
+      (h) => q.x >= h.box.min.x && q.x <= h.box.max.x && q.z >= h.box.min.z && q.z <= h.box.max.z && pointInPolygon(q, h.poly),
+    );
 
   const out: SidewalkSection[][] = [];
   for (const r of city.roads) {

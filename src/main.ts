@@ -11,28 +11,27 @@ import { buildBackdrop } from './world/backdrop';
 import { buildCity } from './world/cityBuilder';
 import { groundHeightAt, nearestRoad } from './world/cityData';
 import { buildRoadGraph } from './world/roadGraph';
-import { DEFAULT_ZONE, loadCity } from './world/loadCity';
+import { DEFAULT_ZONE } from './world/loadCity';
+import type { CityData } from './world/cityData';
 import { snapToRoad } from './world/roadSnap';
 import { Hud } from './ui/hud';
 import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
 import { busById } from './vehicle/buses';
 import { routesFor } from './gameplay/routes';
-import { Menu } from './menu/menu';
 import { loadSettings } from './menu/settings';
 
 const MAX_FRAME = 0.1;
 
-async function main() {
-  // Without a shift to play (?play=1 from the menu, or ?city= / ?seed= directly), show the menu.
-  const params = new URLSearchParams(location.search);
-  if (!params.has('play') && !params.has('city') && !params.has('seed')) {
-    new Menu(document.body);
-    return;
-  }
+/**
+ * Runs a shift (started by `boot.ts`, which shows the menu otherwise). `cityReady` is the city
+ * from the URL, already loading while this chunk (three.js, Rapier, the game) downloads.
+ */
+export async function main(params: URLSearchParams, cityReady: Promise<CityData>) {
   const settings = loadSettings();
-  if (!params.has('hills')) params.set('hills', String(settings.hills));
+  performance.mark('qbus:start');
   await initRapier();
+  performance.mark('qbus:rapier');
 
   const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -63,10 +62,13 @@ async function main() {
 
   const sun = setupSky(scene);
   const world = createWorld();
-  const city = await loadCity(params);
+  const city = await cityReady;
+  performance.mark('qbus:city-loaded');
   if (!city.terrain) addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
   const graph = buildRoadGraph(city);
+  performance.mark('qbus:graph');
   const { props } = buildCity(city, world, scene, graph);
+  performance.mark('qbus:city-built');
   const { min, max } = city.bounds;
   const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))));
 
@@ -108,7 +110,11 @@ async function main() {
     }
   };
 
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, rig, input, city, props, renderer, scene, session, route, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  performance.mark('qbus:session');
+  // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
+  const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
+  renderer.info.autoReset = false;
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, rig, input, city, props, renderer, scene, backdrop, session, route, perf, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();
@@ -116,7 +122,9 @@ async function main() {
   let fps = 60;
   let wasBoosting = false;
 
+  const smooth = (prev: number, ms: number) => prev + (ms - prev) * 0.1;
   renderer.setAnimationLoop((now) => {
+    const t0 = performance.now();
     const raw = (now - last) / 1000;
     // rAF timestamps can precede the first performance.now(): never let dt go negative.
     const dt = Math.max(0, Math.min(MAX_FRAME, raw));
@@ -142,7 +150,9 @@ async function main() {
     if (drive.throttle > 0 || drive.boost) session.start();
     // Paused: the world stands still (but keeps rendering behind the menu).
     acc = paused ? 0 : acc + dt;
+    let steps = 0;
     while (acc >= PHYSICS_STEP) {
+      steps++;
       bus.update({ ...drive, boost: session.nitro.step(!!drive.boost, PHYSICS_STEP) }, PHYSICS_STEP);
       session.beforeStep(PHYSICS_STEP);
       world.step();
@@ -150,6 +160,7 @@ async function main() {
       acc -= PHYSICS_STEP;
     }
 
+    const t1 = performance.now();
     const q = bus.body.rotation();
     const upY = 1 - 2 * (q.x * q.x + q.z * q.z);
     flippedFor = upY < 0.3 ? flippedFor + dt : 0;
@@ -185,11 +196,19 @@ async function main() {
       farCamera.aspect = camera.aspect;
       farCamera.updateProjectionMatrix();
     }
+    const t2 = performance.now();
+    renderer.info.reset();
     renderer.clear();
     renderer.render(backdrop, farCamera);
+    perf.backdropCalls = renderer.info.render.calls;
     renderer.clearDepth();
     renderer.render(scene, camera);
+    const t3 = performance.now();
+    perf.sim = smooth(perf.sim, t1 - t0);
+    perf.frame = smooth(perf.frame, t2 - t1);
+    perf.render = smooth(perf.render, t3 - t2);
+    perf.steps = steps;
+    perf.calls = renderer.info.render.calls;
+    perf.triangles = renderer.info.render.triangles;
   });
 }
-
-main();

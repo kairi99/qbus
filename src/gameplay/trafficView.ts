@@ -19,6 +19,8 @@ const PAINT: Record<CarKind['name'], string[]> = {
 };
 
 const at = (x: number, y: number, z: number) => new THREE.Matrix4().makeTranslation(x, y, z);
+/** From a walker's feet to the head's center. */
+const HEAD = at(0, 1.42, 0);
 
 function wheels(mb: MeshBuilder, L: number, W: number, H: number, r: number): void {
   const tire = new THREE.CylinderGeometry(r, r, 0.3, 10).rotateX(Math.PI / 2);
@@ -145,7 +147,7 @@ export class PedestrianView {
       this.q.setFromAxisAngle(this.up, ped.heading + Math.PI / 2).multiply(this.roll.setFromAxisAngle(this.fwd, ped.lean));
       this.m.compose(this.p.set(ped.pos.x, y, ped.pos.z), this.q, this.one);
       this.body.setMatrixAt(i, this.m);
-      this.m.multiply(new THREE.Matrix4().makeTranslation(0, 1.42, 0));
+      this.m.multiply(HEAD);
       this.head.setMatrixAt(i, this.m);
     });
     this.body.instanceMatrix.needsUpdate = true;

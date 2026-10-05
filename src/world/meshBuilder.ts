@@ -1,6 +1,17 @@
 import * as THREE from 'three';
 import type { Vec2 } from './cityData';
 
+/** Parsed colors by CSS string: the city build sets the same few colors millions of times. */
+const parsed = new Map<string, THREE.Color>();
+const scratch = new THREE.Color();
+/** The linear color for `c` (shared: read it, never modify it). */
+function rgb(c: THREE.ColorRepresentation): THREE.Color {
+  if (typeof c !== 'string') return scratch.set(c);
+  let out = parsed.get(c);
+  if (!out) parsed.set(c, (out = new THREE.Color(c)));
+  return out;
+}
+
 /**
  * Accumulates flat-colored triangles into one BufferGeometry so a whole layer of the city
  * (roads, buildings, ...) is a single draw call.
@@ -8,15 +19,13 @@ import type { Vec2 } from './cityData';
 export class MeshBuilder {
   private pos: number[] = [];
   private col: number[] = [];
-  private c = new THREE.Color();
   private v = new THREE.Vector3();
 
   quad(a: THREE.Vector3Like, b: THREE.Vector3Like, c: THREE.Vector3Like, d: THREE.Vector3Like, color: THREE.ColorRepresentation): void {
-    this.c.set(color);
-    for (const p of [a, b, c, a, c, d]) {
-      this.pos.push(p.x, p.y, p.z);
-      this.col.push(this.c.r, this.c.g, this.c.b);
-    }
+    const { r, g, b: bl } = rgb(color);
+    const pos = this.pos;
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    this.col.push(r, g, bl, r, g, bl, r, g, bl, r, g, bl, r, g, bl, r, g, bl);
   }
 
   /** Horizontal quad centered at `center`, `length` along `dir`, `width` across it. */
@@ -48,14 +57,14 @@ export class MeshBuilder {
    * `maxEdge`, every vertex at its own height (drapes large areas over uneven ground).
    */
   fan(poly: Vec2[], yAt: (p: Vec2) => number, color: THREE.ColorRepresentation, maxEdge = Infinity): void {
-    this.c.set(color);
+    const col = rgb(color);
     const emit = (a: Vec2, b: Vec2, c: Vec2) => {
       // Wind so the face points up (+Y).
       const tri = [a, c, b];
       if ((tri[1].z - tri[0].z) * (tri[2].x - tri[0].x) - (tri[1].x - tri[0].x) * (tri[2].z - tri[0].z) < 0) [tri[1], tri[2]] = [tri[2], tri[1]];
       for (const q of tri) {
         this.pos.push(q.x, yAt(q), q.z);
-        this.col.push(this.c.r, this.c.g, this.c.b);
+        this.col.push(col.r, col.g, col.b);
       }
     };
     for (let i = 1; i < poly.length - 1; i++) {
@@ -79,12 +88,13 @@ export class MeshBuilder {
   add(geo: THREE.BufferGeometry, matrix: THREE.Matrix4, top: THREE.ColorRepresentation, side = top): void {
     const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(matrix);
     const p = g.getAttribute('position');
-    const topC = new THREE.Color(top);
-    const sideC = new THREE.Color(side);
+    const topC = rgb(top).clone();
+    const sideC = rgb(side).clone();
+    const a = new THREE.Vector3();
     const e1 = new THREE.Vector3();
     const e2 = new THREE.Vector3();
     for (let i = 0; i < p.count; i += 3) {
-      const a = new THREE.Vector3().fromBufferAttribute(p, i);
+      a.fromBufferAttribute(p, i);
       e1.fromBufferAttribute(p, i + 1).sub(a);
       e2.fromBufferAttribute(p, i + 2).sub(a);
       const up = this.v.crossVectors(e1, e2).normalize().y > 0.5;
@@ -109,6 +119,38 @@ export class MeshBuilder {
     g.computeBoundingSphere();
     return g;
   }
+
+  /** Vertex count so far. */
+  get count(): number {
+    return this.pos.length / 3;
+  }
+
+  /** Copies the triangles into `pos`/`col` from vertex `at` on. */
+  copyTo(pos: Float32Array, col: Float32Array, at: number): void {
+    pos.set(this.pos, at * 3);
+    col.set(this.col, at * 3);
+  }
+}
+
+/**
+ * A directional light's shadow camera is orthographic: its frustum's side planes come in
+ * exactly opposite pairs, which a perspective view's never do.
+ */
+function isShadowFrustum(f: THREE.Frustum): boolean {
+  return f.planes[0].normal.dot(f.planes[1].normal) < -0.999999;
+}
+
+/** Bounding sphere of vertices [start, start + count) of a position attribute. */
+function rangeSphere(pos: Float32Array, start: number, count: number): THREE.Sphere {
+  const box = new THREE.Box3();
+  const v = new THREE.Vector3();
+  for (let i = start; i < start + count; i++) box.expandByPoint(v.fromArray(pos, i * 3));
+  const sphere = new THREE.Sphere();
+  box.getCenter(sphere.center);
+  let r2 = 0;
+  for (let i = start; i < start + count; i++) r2 = Math.max(r2, sphere.center.distanceToSquared(v.fromArray(pos, i * 3)));
+  sphere.radius = Math.sqrt(r2);
+  return sphere;
 }
 
 /**
@@ -116,23 +158,77 @@ export class MeshBuilder {
  * which matters most for the shadow pass (it only covers the area around the bus).
  */
 export class ChunkedMeshBuilder {
-  private chunks = new Map<string, MeshBuilder>();
+  private chunks = new Map<string, { mb: MeshBuilder; cx: number; cz: number }>();
 
   constructor(private size = 110) {}
 
   at(x: number, z: number): MeshBuilder {
-    const key = `${Math.floor(x / this.size)},${Math.floor(z / this.size)}`;
-    let mb = this.chunks.get(key);
-    if (!mb) this.chunks.set(key, (mb = new MeshBuilder()));
-    return mb;
+    const cx = Math.floor(x / this.size);
+    const cz = Math.floor(z / this.size);
+    const key = `${cx},${cz}`;
+    let chunk = this.chunks.get(key);
+    if (!chunk) this.chunks.set(key, (chunk = { mb: new MeshBuilder(), cx, cz }));
+    return chunk.mb;
   }
 
-  build(material: THREE.Material): THREE.Mesh[] {
-    return [...this.chunks.values()].filter((mb) => !mb.empty).map((mb) => new THREE.Mesh(mb.build(), material));
+  /**
+   * The meshes, one per tile. With `merge` > 1, each merge × merge block of tiles is drawn as
+   * one mesh (far fewer draw calls for the main view; nothing changes on screen). With
+   * `shadows`, the meshes receive shadows, and cast them through one proxy per tile that shares
+   * the merged buffers and only the sun's shadow pass draws: the shadow map, which covers just
+   * the area around the bus, still skips the tiles outside it.
+   */
+  build(material: THREE.Material, opts: { merge?: number; shadows?: boolean } = {}): THREE.Mesh[] {
+    const merge = opts.merge ?? 1;
+    const blocks = new Map<string, MeshBuilder[]>();
+    for (const { mb, cx, cz } of this.chunks.values()) {
+      if (mb.empty) continue;
+      const key = `${Math.floor(cx / merge)},${Math.floor(cz / merge)}`;
+      const list = blocks.get(key);
+      if (list) list.push(mb);
+      else blocks.set(key, [mb]);
+    }
+    const out: THREE.Mesh[] = [];
+    for (const tiles of blocks.values()) {
+      const total = tiles.reduce((n, mb) => n + mb.count, 0);
+      const pos = new Float32Array(total * 3);
+      const col = new Float32Array(total * 3);
+      const ranges: [number, number][] = [];
+      let at = 0;
+      for (const mb of tiles) {
+        mb.copyTo(pos, col, at);
+        ranges.push([at, mb.count]);
+        at += mb.count;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      const mesh = new THREE.Mesh(g, material);
+      out.push(mesh);
+      if (!opts.shadows) continue;
+      mesh.receiveShadow = true;
+      if (merge === 1) {
+        mesh.castShadow = true;
+        continue;
+      }
+      for (const [start, count] of ranges) {
+        const tile = new THREE.BufferGeometry();
+        for (const name of ['position', 'color', 'normal']) tile.setAttribute(name, g.getAttribute(name));
+        tile.setDrawRange(start, count);
+        tile.boundingSphere = rangeSphere(pos, start, count);
+        const proxy = new THREE.Mesh(tile, material);
+        proxy.castShadow = true;
+        proxy.intersectsFrustum = (f) => f instanceof THREE.Frustum && isShadowFrustum(f) && f.intersectsObject(proxy);
+        out.push(proxy);
+      }
+    }
+    return out;
   }
 
   get empty(): boolean {
-    return [...this.chunks.values()].every((mb) => mb.empty);
+    return [...this.chunks.values()].every((c) => c.mb.empty);
   }
 
   // Drawing helpers route each piece to the tile under its first point.

@@ -239,12 +239,13 @@ export class TrafficSim {
     const reach = Math.min(LOOKAHEAD, Math.max(14, (car.speed * car.speed) / (2 * DECEL) + 12));
     const path = this.futurePath(car, reach);
     const pad = car.kind.width / 2 + PATH_MARGIN;
+    const self = `car${car.id}`;
     for (const o of others) {
-      if (o.id === `car${car.id}`) continue;
+      if (o.id === self) continue;
       if (Math.hypot(o.pos.x - car.pos.x, o.pos.z - car.pos.z) > reach + o.length) continue;
       // Standoff (both stopped, each waiting on the other): the lower id goes first.
       const other = o.id.startsWith('car') ? this.cars[+o.id.slice(3)] : null;
-      const standoff = other && car.blocker === o.id && other.blocker === `car${car.id}` && car.speed < 0.5 && other.speed < 0.5;
+      const standoff = other && car.blocker === o.id && other.blocker === self && car.speed < 0.5 && other.speed < 0.5;
       if (standoff && car.id < other.id) continue;
       const of = forward(o.heading);
       const or = right(o.heading);
