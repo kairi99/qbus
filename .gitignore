@@ -6,3 +6,5 @@ e2e/screenshots/
 .claude/
 .serena/
 data/raw/*.tif
+tools/music/out/
+__pycache__/

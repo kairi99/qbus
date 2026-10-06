@@ -41,6 +41,13 @@ test('drives on a phone with the touch controls', async ({ page }) => {
   await liftGas();
   await expect.poll(() => page.evaluate(() => (window as any).__qbus.input.touch.gas)).toBe(false);
 
+  // The radio button changes station and shows what's on.
+  const before2 = await page.evaluate(() => (window as any).__qbus.radio.station);
+  await press(page.locator('[data-tap="radio"]'), 4).then((lift) => lift());
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.radio.station)).not.toBe(before2);
+  await expect(page.locator('.radio-toast.on')).toBeVisible();
+  await page.screenshot({ path: `${shots}/89-phone-radio.png` });
+
   // Pause from its button; the pause screen covers the pedals.
   await press(page.locator('[data-tap="pause"]'), 3).then((lift) => lift());
   await expect(page.locator('[data-act="resume"]')).toBeVisible();

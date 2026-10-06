@@ -135,6 +135,11 @@ export class BusAudio {
     }
   }
 
+  /** The audio context once a gesture has started it (the radio plays through it too). */
+  get context(): AudioContext | null {
+    return this.ctx;
+  }
+
   /** Recordings decoded so far (e2e checks they all load). */
   get loaded(): string[] {
     return Object.keys(this.buffers);

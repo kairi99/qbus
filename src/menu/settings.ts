@@ -1,6 +1,7 @@
 import type { CameraMode } from '../camera/cameraRig';
 import { DEFAULT_HILLS } from '../world/loadCity';
 import { type TimeOfDay, parseTimeOfDay } from '../world/sky';
+import { type RadioSetting, parseRadio } from '../core/radioStations';
 
 /** What the player picked last time, and their preferences. Saved in localStorage. */
 export interface Settings {
@@ -18,9 +19,13 @@ export interface Settings {
   hills: number;
   /** Light the city is played in. */
   timeOfDay: TimeOfDay;
+  /** Radio music, 0..1 (under the general volume). */
+  musicVolume: number;
+  /** Station the bus radio is on when a game starts (the last one tuned in). */
+  radio: RadioSetting;
 }
 
-export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day' };
+export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito' };
 export const HILLS_OPTIONS = [
   { value: 1, label: 'Reales' },
   { value: 1.3, label: 'Un poquito más' },
@@ -50,7 +55,7 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     // Corrupt entry: start over from defaults.
   }
   const str = (k: keyof Settings) => (typeof raw[k] === 'string' && raw[k] ? (raw[k] as string) : (DEFAULTS[k] as string));
-  const num = (k: 'volume' | 'hills', lo: number, hi: number) => {
+  const num = (k: 'volume' | 'hills' | 'musicVolume', lo: number, hi: number) => {
     const v = raw[k];
     if (typeof v !== 'number' || !isFinite(v)) return DEFAULTS[k];
     return v < lo ? DEFAULTS[k] : Math.min(hi, v);
@@ -64,6 +69,8 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     volume: num('volume', 0, 1),
     hills: raw.v !== VERSION && raw.hills === 1.3 ? DEFAULTS.hills : num('hills', 0.5, 3),
     timeOfDay: parseTimeOfDay(raw.timeOfDay) ?? DEFAULTS.timeOfDay,
+    musicVolume: num('musicVolume', 0, 1),
+    radio: parseRadio(raw.radio) ?? DEFAULTS.radio,
   };
 }
 

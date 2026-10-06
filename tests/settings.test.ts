@@ -13,7 +13,7 @@ describe('settings', () => {
 
   it('round-trips through storage', () => {
     const store = memory();
-    const s = { ...DEFAULTS, bus: 'buseta', zone: 'grid', route: 'ruta-amazonas', camera: 'cockpit' as const, volume: 0.3, hills: 2, timeOfDay: 'night' as const };
+    const s = { ...DEFAULTS, bus: 'buseta', zone: 'grid', route: 'ruta-amazonas', camera: 'cockpit' as const, volume: 0.3, hills: 2, timeOfDay: 'night' as const, musicVolume: 0.2, radio: 'off' as const };
     saveSettings(s, store);
     expect(loadSettings(store)).toEqual(s);
   });
@@ -37,9 +37,20 @@ describe('settings', () => {
     expect(loadSettings(store).hills).toBe(1.3);
   });
 
+  it('keeps the radio quiet and on a station by default, also for saves from before it', () => {
+    expect(DEFAULTS.radio).not.toBe('off');
+    expect(DEFAULTS.musicVolume).toBeLessThanOrEqual(0.5);
+    const { radio: _r, musicVolume: _m, ...old } = DEFAULTS;
+    const s = loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2 }) }));
+    expect(s.radio).toBe(DEFAULTS.radio);
+    expect(s.musicVolume).toBe(DEFAULTS.musicVolume);
+  });
+
   it('ignores garbage and out-of-range values', () => {
-    const store = memory({ qbus: JSON.stringify({ volume: 7, hills: -3, camera: 'drone', bus: 42, timeOfDay: 'noon' }) });
+    const store = memory({ qbus: JSON.stringify({ volume: 7, hills: -3, camera: 'drone', bus: 42, timeOfDay: 'noon', radio: 'salsa', musicVolume: -1 }) });
     const s = loadSettings(store);
+    expect(s.radio).toBe(DEFAULTS.radio);
+    expect(s.musicVolume).toBe(DEFAULTS.musicVolume);
     expect(s.volume).toBe(1);
     expect(s.hills).toBe(DEFAULTS.hills);
     expect(s.camera).toBe(DEFAULTS.camera);
