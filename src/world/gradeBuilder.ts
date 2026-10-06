@@ -103,8 +103,13 @@ function dirOnRoad(r: Road, s: number): Vec2 {
 }
 
 const PARALLEL = 0.7;
-/** The ground is dug this far past the shoulder: under the retaining wall, where its slope is hidden. */
-const UNDER_WALL = WALL + 0.15;
+/**
+ * The ground is dug this far past the shoulder: under the retaining wall and one patch cell's
+ * diagonal past it, so the slope up from the floor starts behind the wall wherever the grid
+ * lies (a vertex just past a shorter reach tilts its triangles up across the shoulder, onto
+ * the asphalt: lips and saw-teeth along the wall's foot).
+ */
+const UNDER_WALL = WALL + FINE * Math.SQRT2;
 /** Concrete walkway along the top of a retaining wall, over the dug ground behind it. */
 const APRON = 1.4;
 /**
@@ -170,9 +175,12 @@ function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
   // Never on the lowered road's own asphalt where it's down in its cut. (At the shallow top
   // of a ramp a street-level road drawn overlapping it keeps its ground, but only where that
   // ground isn't above the ramp's asphalt: kept there, it's a lip the bus crashes into.)
-  if (d <= l.road.width / 2) {
+  // Down in the cut the shoulders and the wall's footing are ours too: ground kept there slopes
+  // up over the curb lane (a lip a bus scrapes along).
+  if (d <= l.half + WALL) {
     const h = profileAt(l.profile, s);
-    if (h.lift < -0.5 || terrainAt(l.city, p) - surfaceY(l.city, h, p) > 0.1) return false;
+    if (h.lift < -0.5) return false;
+    if (d <= l.road.width / 2 && terrainAt(l.city, p) - surfaceY(l.city, h, p) > 0.1) return false;
   }
   const dir = dirOnRoad(l.road, s);
   return l.rivals.some((r) => {
