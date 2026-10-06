@@ -175,9 +175,9 @@ function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
   // Never on the lowered road's own asphalt where it's down in its cut. (At the shallow top
   // of a ramp a street-level road drawn overlapping it keeps its ground, but only where that
   // ground isn't above the ramp's asphalt: kept there, it's a lip the bus crashes into.)
-  // Down in the cut the shoulders and the wall's footing are ours too: ground kept there slopes
+  // Down in the cut the shoulders are ours too: ground kept there slopes
   // up over the curb lane (a lip a bus scrapes along).
-  if (d <= l.half + WALL) {
+  if (d <= l.half) {
     const h = profileAt(l.profile, s);
     if (h.lift < -0.5) return false;
     if (d <= l.road.width / 2 && terrainAt(l.city, p) - surfaceY(l.city, h, p) > 0.1) return false;
@@ -222,6 +222,8 @@ function cutsAt(lowered: Lowered[], p: Vec2, sunk: SunkJunction[], reach: number
     if (d > l.half + reach) continue;
     const h = profileAt(l.profile, s);
     if (h.lift >= DUG || claimedByRival(l, p, s, d)) continue;
+    // Past the wall's own footing, never under a street at ground level (a pit in its lanes).
+    if (d > l.half + WALL && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2 + 0.3)) continue;
     const y = surfaceY(l.city, h, p);
     out.push({ y, road: l.index, dir: dirOnRoad(l.road, s), rank: d <= l.road.width / 2 ? y - 1000 : d });
   }
@@ -562,11 +564,12 @@ export function buildGrades(
             mb.quad(v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04), CONCRETE);
           }
         }
-        // Solid exactly where the wall is drawn: from its inner face out to its outer face.
-        solidHull([
-          v3(inner.a, a.y - 0.3), v3(inner.b, b.y - 0.3), v3(inner.a, ga + top), v3(inner.b, gb + top),
-          v3(outer.a, a.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.a, ga + top), v3(outer.b, gb + top),
-        ]);
+        // Solid exactly where the wall is drawn: from its inner face out to its outer face. Two
+        // hulls split along the drawn top's diagonal: where the wall's two ends stand at different
+        // offsets its top isn't flat, and one hull would bulge over the drawn triangles.
+        const [ia, ib, oa, ob] = [inner.a, inner.b, outer.a, outer.b];
+        solidHull([v3(ia, a.y - 0.3), v3(ib, b.y - 0.3), v3(ob, b.y - 0.3), v3(ia, ga + top), v3(ib, gb + top), v3(ob, gb + top)]);
+        solidHull([v3(ia, a.y - 0.3), v3(ob, b.y - 0.3), v3(oa, a.y - 0.3), v3(ia, ga + top), v3(ob, gb + top), v3(oa, ga + top)]);
       }
     }
   }
