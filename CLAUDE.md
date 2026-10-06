@@ -8,6 +8,7 @@ Full roadmap (milestones M0–M6): `~/.claude/plans/pasted-content-id-88c6-i-wan
 Node comes from nvm: run `. ~/.nvm/nvm.sh` first in non-login shells.
 - `npm run dev`: dev server on http://localhost:5173
 - `npm test`: Vitest unit tests (`tests/`), physics runs headless in Node
+- `npm run test:underpass`: the bridge/underpass harness, slow physics suites included (`tests/underpass/README.md`)
 - `npm run e2e`: Playwright smoke test (`e2e/`), writes screenshots to `e2e/screenshots/`
 - `npm run build`: typecheck + production build
 - `npx tsx tools/fetch-osm.ts [zone] [osm|routes|stations|areas]`: download a zone from Overpass into `data/raw/` (`<zone>.osm.json`, `.routes.json`, `.stations.json`, `.areas.json`; all by default; servers are flaky, mirrors are tried in order)

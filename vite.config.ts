@@ -21,5 +21,5 @@ export default defineConfig({
     chunkSizeWarningLimit: 3000,
   },
   // Some tests build the whole real city (physics + meshes); give them room under parallel load.
-  test: { include: ['tests/**/*.test.ts'], testTimeout: 30_000, hookTimeout: 30_000 },
+  test: { include: ['tests/**/*.test.ts'], exclude: ['**/node_modules/**', 'tests/**/*.slow.test.ts'], testTimeout: 30_000, hookTimeout: 30_000 },
 });
