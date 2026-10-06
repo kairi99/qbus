@@ -203,8 +203,15 @@ export function surfaceAlong(city: CityData, graph: RoadGraph, route: number[], 
   for (const id of route) {
     const e = graph.edges[id];
     const pr = projectOnPath(e.center, p);
-    // Past either end of an edge it's the junction between edges, not this edge.
-    if (pr.d < best.d) best = { y: edgeY(e, pr.s) ?? groundHeightAt(city, p), edge: id, s: pr.s, d: pr.d };
+    // Past either end of an edge it's the junction between edges, not this edge: a junction at
+    // street level is paved over the ground (it can be tens of meters across, and the ground
+    // slopes), one up on a deck or down in a cut is at the node's height.
+    if (pr.d < best.d) {
+      const past = (pr.s < 0.01 || pr.s > e.len - 0.01) && pr.d > 1;
+      const node = graph.nodes[pr.s < 0.01 ? e.from : e.to];
+      const y = past ? (node.y ?? groundHeightAt(city, p)) : (edgeY(e, pr.s) ?? groundHeightAt(city, p));
+      best = { y, edge: id, s: pr.s, d: pr.d };
+    }
   }
   return best;
 }

@@ -7,7 +7,7 @@ import { buildRoadGraph, dirAt, projectOnPath } from '../roadGraph';
 import { importLines } from './lines';
 import { importStations, widenMedians } from './stations';
 import { importCampuses } from './campus';
-import { CLEARANCE, separateGrades } from './grades';
+import { CLEARANCE, type Level, separateGrades } from './grades';
 import { liftAlong, projectOnRoad } from '../elevation';
 
 /** Subset of the Overpass JSON (`out geom;`) we use. */
@@ -136,7 +136,24 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
       ? widenMedians(importRoads(osm, proj.toXZ, bounds), stationsOsm, routesOsm, proj.toXZ, (p) => inside(p))
       : importRoads(osm, proj.toXZ, bounds);
   // Bridges go up and underpasses down, with ramps; roads on different levels don't meet.
-  const { roads, crossings } = separateGrades(flat);
+  // Then again with every junction's paved area (as the road graph clusters and trims them)
+  // kept level on the ramps that run into it, until none still climbs there. One that would
+  // cost a crossing (no room left for a ramp: the roads would meet at grade) isn't kept.
+  let { roads, crossings } = separateGrades(flat);
+  const level: Level[] = [];
+  const tried = new Set<string>();
+  const key = (l: Level) => `${l.road}@${l.area.map((p) => `${p.x.toFixed(0)},${p.z.toFixed(0)}`).join(';')}`;
+  for (let pass = 0; pass < 3; pass++) {
+    const more = rampsIntoJunctions(roads).filter((l) => !tried.has(key(l)));
+    if (!more.length) break;
+    for (const l of more) {
+      tried.add(key(l));
+      const next = separateGrades(flat, [...level, l]);
+      if (next.crossings.length < crossings.length) continue;
+      level.push(l);
+      ({ roads, crossings } = next);
+    }
+  }
   for (const c of crossings)
     if (c.gap < CLEARANCE * 0.8) console.warn(`grade crossing squeezed to ${c.gap.toFixed(1)} m: ${roads[c.upper].name} over ${roads[c.lower].name}`);
   // Junction areas are paved (the game draws them as asphalt): nothing may stand on them.
@@ -251,6 +268,21 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
 }
 
 /** Inside a rectangle centered at `c`, `halfL` along `heading` and `halfW` across. */
+/** Roads whose ramp is still off street level where it runs into a junction at street level, with that junction's paved area. */
+function rampsIntoJunctions(roads: Road[]): Level[] {
+  const graph = buildRoadGraph({ roads } as CityData);
+  const out: Level[] = [];
+  for (const n of graph.nodes) {
+    if (!n.hull || Math.abs(n.lift) > 0.3) continue;
+    const ends = [...n.in.map((id) => [id, -1] as const), ...n.out.map((id) => [id, 0] as const)];
+    for (const [id, at] of ends) {
+      const e = graph.edges[id];
+      if (e.lift && Math.abs(e.lift.at(at)!) > 0.05 && !out.some((l) => l.road === e.roadIndex && l.area === n.hull)) out.push({ road: e.roadIndex, area: n.hull });
+    }
+  }
+  return out;
+}
+
 function inFootprint(p: Vec2, c: Vec2, heading: number, halfL: number, halfW: number): boolean {
   const f = { x: Math.cos(heading), z: -Math.sin(heading) };
   const dx = p.x - c.x;

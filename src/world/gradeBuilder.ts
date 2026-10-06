@@ -113,12 +113,12 @@ const UNDER_WALL = WALL + FINE * Math.SQRT2;
 /** Concrete walkway along the top of a retaining wall, over the dug ground behind it. */
 const APRON = 1.4;
 /**
- * Ground over a cut only stays on as a roof where there's headroom under it, measured to the
- * underside of the lintel hung along its open edges (LINTEL): the tallest bus is ~3.45 m over
- * the road, plus room for its suspension and pitch on a ramp.
+ * Ground over a cut only stays on as a roof where there's headroom under it: the tallest bus is
+ * ~3.45 m over the road, plus room for its suspension and pitch on a ramp. The lintel hung along
+ * the roof's open edges (at most LINTEL deep) never hangs below it either.
  */
+const HEADROOM = 4.2;
 const LINTEL = 0.6;
-const HEADROOM = 4.2 + LINTEL;
 /** How far the ground over an underpass reaches beyond the edge of a street crossing over it. */
 const ROOF_MARGIN = 3;
 
@@ -709,7 +709,9 @@ function terrainPatch(
         if (!under || !roofAt(city, lowered, mid, sunk, 0, covered)) continue;
         const mb = solid.at(mid.x, mid.z);
         const y = h(mid.x, mid.z);
-        mb.quad({ x, y: y - LINTEL, z }, { x: x + FINE, y: y - LINTEL, z }, { x: x + FINE, y: y - LINTEL, z: z + FINE }, { x, y: y - LINTEL, z: z + FINE }, CONCRETE_DARK);
+        // The ceiling (and lintels) hang below the ground, but never into the headroom.
+        const lintel = Math.max(0.05, Math.min(LINTEL, y - under.y - HEADROOM));
+        mb.quad({ x, y: y - lintel, z }, { x: x + FINE, y: y - lintel, z }, { x: x + FINE, y: y - lintel, z: z + FINE }, { x, y: y - lintel, z: z + FINE }, CONCRETE_DARK);
         // And a dark bottom under it, just below the tunnel floor, so nothing looks through into the void.
         const fy = under.y - 0.15;
         mb.quad({ x, y: fy, z: z + FINE }, { x: x + FINE, y: fy, z: z + FINE }, { x: x + FINE, y: fy, z }, { x, y: fy, z }, CONCRETE_DARK);
@@ -725,9 +727,9 @@ function terrainPatch(
           const pa = { x: ax, z: az };
           const pb = { x: bx, z: bz };
           // Lintel under the roof edge, and a railing on top.
-          mb.quad(v3(pa, y - LINTEL), v3(pb, y - LINTEL), v3(pb, y), v3(pa, y), CONCRETE);
+          mb.quad(v3(pa, y - lintel), v3(pb, y - lintel), v3(pb, y), v3(pa, y), CONCRETE);
           wallStrip(mb, pa, pb, y, y, PARAPET, 0.12, RAIL);
-          const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(stripCorners(pa, pb, y - LINTEL, y - LINTEL, PARAPET + LINTEL, 0.12).flatMap((q) => [q.x, q.y, q.z])));
+          const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(stripCorners(pa, pb, y - lintel, y - lintel, PARAPET + lintel, 0.12).flatMap((q) => [q.x, q.y, q.z])));
           if (desc) world.createCollider(desc, fixed);
         }
       }

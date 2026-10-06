@@ -1,5 +1,5 @@
 import type { Road, Vec2 } from '../cityData';
-import { segmentIntersection } from '../geom';
+import { distToPolyline, pointInPolygon, segmentIntersection } from '../geom';
 
 /** Height between a lower road's surface and the one passing over it (deck included). */
 export const CLEARANCE = 6.5;
@@ -19,6 +19,19 @@ const JUNCTION_CORE = 10;
 const JUNCTION_CLEAR = 10;
 /** A crossing that can't be given at least this much room is treated as an ordinary junction. */
 const MIN_GAP = 4.5;
+/** A road is kept level this far past the edge of a junction's paved area it runs into (`Level`). */
+const PAVING_CLEAR = 3;
+
+/**
+ * A junction's paved area (from the road graph) where a road comes in: that road stays at street
+ * level over it and a little past its edge. The graph merges junctions close together into one
+ * and trims roads back to its edge, which can be further from where the roads meet than
+ * JUNCTION_CLEAR: a ramp still climbing there ends below the junction (a step the bus hits).
+ */
+export interface Level {
+  road: number;
+  area: Vec2[];
+}
 
 /** Where one road passes over another. */
 export interface Crossing {
@@ -45,20 +58,20 @@ interface Dense {
  * a bridge passes over never rises, a road over an underpass never dips. Roads that get a lift
  * come back resampled every few meters with a `lift` per point; the rest are untouched.
  */
-export function separateGrades(roads: Road[]): { roads: Road[]; crossings: Crossing[] } {
+export function separateGrades(roads: Road[], level: Level[] = []): { roads: Road[]; crossings: Crossing[] } {
   if (roads.every((r) => !r.layer)) return { roads, crossings: [] };
   // OSM sometimes tags a short link as a tunnel a few meters from where it passes over another
   // underpass: no ramp can do both. Those crossings meet at street level instead; solve again.
   const atGrade = new Set<string>();
   for (let pass = 0; ; pass++) {
-    const result = solve(roads, atGrade);
+    const result = solve(roads, atGrade, level);
     const bad = result.crossings.filter((c) => c.gap < MIN_GAP);
     if (!bad.length || pass === 5) return { roads: result.roads, crossings: result.crossings.filter((c) => c.gap >= MIN_GAP) };
     for (const c of bad) atGrade.add(`${c.upper},${c.lower}`).add(`${c.lower},${c.upper}`);
   }
 }
 
-function solve(roads: Road[], atGrade: Set<string>): { roads: Road[]; crossings: Crossing[] } {
+function solve(roads: Road[], atGrade: Set<string>, level: Level[]): { roads: Road[]; crossings: Crossing[] } {
   const layer = (i: number) => roads[i].layer ?? 0;
 
   // Dense copies of every road (original points kept), with global vertex ids.
@@ -224,6 +237,13 @@ function solve(roads: Road[], atGrade: Set<string>): { roads: Road[]; crossings:
     const k0 = v - d.base;
     for (let k = k0 - 1; k >= 0 && d.cum[k0] - d.cum[k] <= JUNCTION_CLEAR; k--) anchors.add(d.base + k);
     for (let k = k0 + 1; k < d.pts.length && d.cum[k] - d.cum[k0] <= JUNCTION_CLEAR; k++) anchors.add(d.base + k);
+  }
+  for (const { road, area } of level) {
+    const d = dense[road];
+    const ring = [...area, area[0]];
+    d.pts.forEach((p, k) => {
+      if (pointInPolygon(p, area) || distToPolyline(p, ring) <= PAVING_CLEAR) anchors.add(d.base + k), junctionCore.add(d.base + k);
+    });
   }
 
   // Peaks: the stretch of each moving road right over/under the other one.
