@@ -185,12 +185,15 @@ def fade_out(x: np.ndarray, seconds: float) -> np.ndarray:
     return x
 
 
-def encode_mp3(x: np.ndarray, path: str, kbps=96) -> int:
+def encode_mp3(x: np.ndarray, path: str, kbps=64, out_rate=32000) -> int:
+    """MP3 at a radio's quality: 64 kbps joint stereo at 32 kHz (the game plays it through a
+    7.5 kHz cabin low-pass anyway), so all six songs fit in about 6 MB."""
     import lameenc
 
     enc = lameenc.Encoder()
     enc.set_bit_rate(kbps)
     enc.set_in_sample_rate(SR)
+    enc.set_out_sample_rate(out_rate)
     enc.set_channels(2)
     enc.set_quality(2)
     pcm = (np.clip(x.T, -1, 1) * 32767).astype("<i2").tobytes()
