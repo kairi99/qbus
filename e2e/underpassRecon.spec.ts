@@ -33,6 +33,8 @@ for (const e of graph.edges) {
 
 for (const tod of (process.env.RECON_TOD ?? 'day,night').split(',')) {
   test(`underpass recon views (${tod})`, async ({ page }) => {
+    // Opt-in (~15 min per time of day): not part of `npm run e2e`.
+    test.skip(!process.env.RECON_TOD, 'set RECON_TOD=day,night to render the recon views');
     test.setTimeout(900_000);
     const dir = `e2e/screenshots/recon/${tod}`;
     mkdirSync(dir, { recursive: true });
