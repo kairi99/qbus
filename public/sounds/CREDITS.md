@@ -2,8 +2,10 @@
 
 All recordings come from [Freesound](https://freesound.org) and are released under
 **CC0 1.0** (public domain dedication): no attribution is required, but here is where each
-one comes from. They were cut, high-passed, normalized and re-encoded (mono MP3) for the game;
-loops are made seamless at load time (`makeLoop` in `src/core/soundModel.ts`).
+one comes from. They were cut, high-passed and re-encoded (mono MP3, 80 kb/s) for the game, and
+loudness-normalized to -18 LUFS (EBU R128, sample peaks under -1 dBFS), so the game's mix
+(`LEVELS` in `src/core/soundModel.ts`) sets how loud each one plays. Loops are made seamless at
+load time (`makeLoop`).
 
 | File | What | Source | Author | License | Cut |
 |---|---|---|---|---|---|
@@ -15,6 +17,6 @@ loops are made seamless at load time (`makeLoop` in `src/core/soundModel.ts`).
 | `horn-car.mp3` | Car horn (player car and traffic) | [Car Horn Mercury Marquis](https://freesound.org/s/558842/) | DigPro120 | CC0 1.0 | 1.92–2.37 s (sustain) |
 | `door-open.mp3` | Bus door pneumatic hiss | [Bus Closing Door](https://freesound.org/s/520753/) | am7 | CC0 1.0 | 1.8–3.0 s |
 | `door-close.mp3` | Bus door closing, thud | [Bus Closing Door](https://freesound.org/s/520753/) | am7 | CC0 1.0 | 3.3–5.9 s |
-| `chime.mp3` | Ding-dong chime | [Door_chime.wav](https://freesound.org/s/610096/) | wjauch | CC0 1.0 | 0–3.2 s |
+| `timbre.mp3` | Stop-request buzzer ("timbre"): an electromechanical buzzer, like the ones by Quito buses' rear doors | [KS-20419L1 telephone buzzer](https://freesound.org/s/763483/) | tt_runscript | CC0 1.0 | 0.47–1.12 s (one ring) |
 
 kyles asks (not as a license condition) to be messaged about commercial use of his recordings.

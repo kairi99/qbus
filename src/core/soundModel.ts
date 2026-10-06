@@ -98,8 +98,44 @@ export function engineMix(rpm: number, load: number, v: EngineVoice): EngineMix 
     loadRate: rpm / v.loadRef,
     loadGain: Math.sin((a * Math.PI) / 2) * (0.55 + 0.45 * l),
     cutoff: v.cutoff + v.cutoffOpen * (0.25 * Math.min(x, 1) + 0.75 * l),
-    volume: 0.6 + 0.2 * Math.min(x, 1) + 0.4 * l,
+    volume: 0.65 + 0.35 * Math.min(x, 1) + 0.3 * l,
   };
+}
+
+/**
+ * The mix: gain of each sound as it plays (before the master volume). Every recording is
+ * normalized to about -18 LUFS (see public/sounds/CREDITS.md), so these ratios are the
+ * loudness ratios the player hears. Measured as played (rate and lowpass included), the bus
+ * engine sits near -25 LUFS at idle, -21.5 cruising and -16.5 flat out; the one-shots land
+ * between -22 and -18.5, a little over the cruising engine, and the horn on top at -15.5.
+ */
+export const LEVELS = {
+  /** Engine output = this x `EngineMix.volume`. The car is ~3 dB under the bus. */
+  engine: { bus: 1, car: 0.53 },
+  airRelease: 0.85,
+  airHiss: 0.6,
+  /** The air dryer's purge, a short sharp "psht" a few seconds after setting the brake. */
+  airPurge: 0.45,
+  doorOpen: 0.85,
+  doorClose: 1,
+  /** Stop-request buzzer ("timbre"). */
+  timbre: 0.7,
+  horn: { bus: 1.4, car: 1.2 },
+  /** A traffic car honking at the bus, right next to it. */
+  trafficHorn: 0.55,
+} as const;
+
+/** Linear gain to decibels. */
+export const db = (gain: number) => 20 * Math.log10(gain);
+
+/**
+ * Turbo whistle of the bus's diesel: a thin whine that rises with the revs and only shows up
+ * under load (boost), well under the engine itself.
+ */
+export function turboWhistle(rpm: number, load: number, v: EngineVoice): { freq: number; gain: number } {
+  const x = clamp((rpm - v.idleRpm) / (v.redlineRpm - v.idleRpm), 0, 1.2);
+  const boost = clamp(load, 0, 1) * smoothstep(0.1, 0.7, x);
+  return { freq: 1800 + 2600 * Math.min(x, 1.1), gain: 0.016 * boost };
 }
 
 /** Engine load from the throttle input (negative = brake, or reverse once stopped) and the signed speed in m/s. */
@@ -122,21 +158,34 @@ const BRAKED_WITHIN = 1.5;
 /** A fresh brake application above this speed (m/s) makes a short hiss. */
 const HARD_BRAKE_SPEED = 9;
 
+/** Stopped this long (s) after setting the brake, the compressor cuts out and the dryer purges. */
+const PURGE_AFTER = 4;
+
 /**
  * Air brakes: the long "pssshh" when the bus comes to a stop on the brakes (the driver
- * setting the brake at the stop), and a short hiss when the brakes go on hard at speed.
+ * setting the brake at the stop), a short hiss when the brakes go on hard at speed, and the
+ * air dryer's purge ("psht") once the compressor has topped the tanks up at a long stop.
  */
 export class AirBrakes {
   private sinceBrake = Infinity;
   private moving = false;
   private releaseCooldown = 0;
   private hissCooldown = 0;
+  /** Seconds stopped since the last release, or -1 once purged / when moving. */
+  private stoppedFor = -1;
 
   /** `speed` is |speed| in m/s. */
-  step(dt: number, speed: number, braking: boolean): 'release' | 'hiss' | null {
+  step(dt: number, speed: number, braking: boolean): 'release' | 'hiss' | 'purge' | null {
     this.releaseCooldown -= dt;
     this.hissCooldown -= dt;
-    let out: 'release' | 'hiss' | null = null;
+    let out: 'release' | 'hiss' | 'purge' | null = null;
+    if (this.stoppedFor >= 0) {
+      if (speed >= STOPPED) this.stoppedFor = -1;
+      else if ((this.stoppedFor += dt) >= PURGE_AFTER) {
+        this.stoppedFor = -1;
+        out = 'purge';
+      }
+    }
     if (braking) {
       if (this.sinceBrake > 0.6 && speed > HARD_BRAKE_SPEED && this.hissCooldown <= 0) {
         out = 'hiss';
@@ -150,6 +199,7 @@ export class AirBrakes {
       if (this.sinceBrake < BRAKED_WITHIN && this.releaseCooldown <= 0) {
         out = 'release';
         this.releaseCooldown = 2;
+        this.stoppedFor = 0;
       }
     }
     return out;

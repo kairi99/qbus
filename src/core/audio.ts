@@ -1,7 +1,7 @@
-import { AirBrakes, DIESEL, PETROL, engineMix, engineRpm, makeLoop, type EngineVoice } from './soundModel';
+import { AirBrakes, DIESEL, LEVELS, PETROL, engineMix, engineRpm, makeLoop, turboWhistle, type EngineVoice } from './soundModel';
 
 /** Recorded sounds in public/sounds/ (sources and licenses in public/sounds/CREDITS.md). */
-const FILES = ['engine-idle', 'engine-load', 'car-idle', 'air-brake', 'horn-bus', 'horn-car', 'door-open', 'door-close', 'chime'] as const;
+const FILES = ['engine-idle', 'engine-load', 'car-idle', 'air-brake', 'horn-bus', 'horn-car', 'door-open', 'door-close', 'timbre'] as const;
 type SoundName = (typeof FILES)[number];
 /** Recordings that loop, and their crossfade length in seconds. */
 const LOOPS: Partial<Record<SoundName, number>> = { 'engine-idle': 0.3, 'engine-load': 0.3, 'car-idle': 0.3, 'horn-bus': 0.12, 'horn-car': 0.08 };
@@ -24,6 +24,8 @@ export interface AudioFrame {
  * by a fake gearbox and crossfaded by RPM), air brakes, a truck horn and doors; the car gets a
  * petrol engine and a car horn. Recordings load after the first user gesture (browsers only
  * allow audio then); until they arrive, or if one fails, synthesized stand-ins play instead.
+ * Everything mixes into `master` (the volume setting), then a gentle compressor that keeps
+ * stacked sounds (horn over a revving engine over the doors) from clipping.
  */
 export class BusAudio {
   private ctx: AudioContext | null = null;
@@ -56,7 +58,14 @@ export class BusAudio {
     this.ctx = ctx;
     const master = ctx.createGain();
     master.gain.value = 0.35 * this.volume;
-    master.connect(ctx.destination);
+    // Only peaks reach the threshold (a full mix sits around -24 LUFS out of the master).
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -16;
+    limiter.knee.value = 8;
+    limiter.ratio.value = 4;
+    limiter.attack.value = 0.005;
+    limiter.release.value = 0.2;
+    master.connect(limiter).connect(ctx.destination);
     this.master = master;
 
     // Synth stand-ins, silent once the recordings are in.
@@ -168,7 +177,8 @@ export class BusAudio {
     if (kind === 'carHorn') {
       // "pi-piii", each car a slightly different horn.
       const rate = 0.85 + Math.random() * 0.3;
-      if (this.play('horn-car', 0.35 * volume, 0, rate, 0.12) && this.play('horn-car', 0.35 * volume, 0.22, rate, 0.35)) return;
+      const g = LEVELS.trafficHorn * volume;
+      if (this.play('horn-car', g, 0, rate, 0.12) && this.play('horn-car', g, 0.22, rate, 0.35)) return;
     }
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -194,12 +204,15 @@ export class BusAudio {
     }
   }
 
-  /** Stopped at a stop: chime, the doors open with a hiss, and close again a moment later. */
+  /**
+   * Stopped at a stop: someone at the back rings the stop-request buzzer ("timbre"), the
+   * doors open with a hiss, and close again a moment later.
+   */
   doors(): void {
     if (this.kind === 'car') return;
-    this.play('chime', 0.5);
-    this.play('door-open', 0.7, 0.25);
-    this.play('door-close', 0.7, 2.4);
+    this.play('timbre', LEVELS.timbre);
+    this.play('door-open', LEVELS.doorOpen, 0.25);
+    this.play('door-close', LEVELS.doorClose, 2.4);
   }
 
   /** Nitro: a burst of filtered noise sweeping up. */
@@ -228,12 +241,12 @@ export class BusAudio {
   update(f: AudioFrame, dt: number): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    if (this.horn) this.horn.gain.gain.setTargetAtTime(f.hornHeld ? 0.55 : 0, now, f.hornHeld ? 0.01 : 0.04);
+    if (this.horn) this.horn.gain.gain.setTargetAtTime(f.hornHeld ? LEVELS.horn[this.kind] : 0, now, f.hornHeld ? 0.01 : 0.04);
     else this.synthHornGain.gain.setTargetAtTime(f.hornHeld ? 0.25 : 0, now, 0.02);
 
     const { rpm } = engineRpm(f.speedFrac, f.load, this.voice);
     const mix = engineMix(rpm, f.load, this.voice);
-    if (this.engine) this.engine.set(mix, rpm, f.load, now);
+    if (this.engine) this.engine.set(mix, rpm, f.load, now, turboWhistle(rpm, f.load, this.voice));
     else {
       this.engineSynth.osc.frequency.setTargetAtTime(rpm / (this.kind === 'car' ? 30 : 20), now, 0.08);
       this.engineSynth.gain.gain.setTargetAtTime(0.1 + f.load * 0.12, now, 0.1);
@@ -242,12 +255,13 @@ export class BusAudio {
     if (this.kind === 'car') return;
     const air = this.brakes.step(dt, f.speed, f.braking);
     // The long release when pulling up; a quick, higher, quieter burst of it on a hard stab.
-    if (air === 'release') this.play('air-brake', 0.75);
-    if (air === 'hiss') this.play('air-brake', 0.3, 0, 1.25, 0.35);
+    if (air === 'release') this.play('air-brake', LEVELS.airRelease);
+    if (air === 'hiss') this.play('air-brake', LEVELS.airHiss, 0, 1.25, 0.35);
+    if (air === 'purge') this.play('air-brake', LEVELS.airPurge, 0, 1.6, 0.22);
   }
 }
 
-/** The recorded engine: idle and on-load loops through a shared lowpass. */
+/** The recorded engine: idle and on-load loops through a shared lowpass (and the bus's turbo whine). */
 class EngineLayers {
   private readonly idle: { src: AudioBufferSourceNode; gain: GainNode };
   private readonly load: { src: AudioBufferSourceNode; gain: GainNode };
@@ -255,8 +269,12 @@ class EngineLayers {
   private readonly out: GainNode;
   /** The car's petrol buzz on top of its recording (it has no on-load recording). */
   private readonly buzz: { osc: OscillatorNode; gain: GainNode } | null = null;
+  /** The bus's turbo whistle, past the lowpass. */
+  private readonly turbo: { osc: OscillatorNode; gain: GainNode } | null = null;
+  private readonly level: number;
 
   constructor(ctx: AudioContext, dest: AudioNode, idle: AudioBuffer, load: AudioBuffer, car: boolean) {
+    this.level = LEVELS.engine[car ? 'car' : 'bus'];
     this.out = ctx.createGain();
     this.out.gain.value = 0;
     this.out.connect(dest);
@@ -285,10 +303,18 @@ class EngineLayers {
       osc.connect(gain).connect(this.filter);
       osc.start();
       this.buzz = { osc, gain };
+    } else {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      osc.connect(gain).connect(this.out);
+      osc.start();
+      this.turbo = { osc, gain };
     }
   }
 
-  set(m: ReturnType<typeof engineMix>, rpm: number, load: number, now: number): void {
+  set(m: ReturnType<typeof engineMix>, rpm: number, load: number, now: number, turbo: ReturnType<typeof turboWhistle>): void {
     // Fast enough to drop at a shift, slow enough to never zipper.
     const k = 0.06;
     this.idle.src.playbackRate.setTargetAtTime(m.idleRate, now, k);
@@ -296,7 +322,12 @@ class EngineLayers {
     this.idle.gain.gain.setTargetAtTime(m.idleGain, now, 0.1);
     this.load.gain.gain.setTargetAtTime(m.loadGain, now, 0.1);
     this.filter.frequency.setTargetAtTime(m.cutoff, now, 0.08);
-    this.out.gain.setTargetAtTime(0.45 * m.volume, now, 0.1);
+    this.out.gain.setTargetAtTime(this.level * m.volume, now, 0.1);
+    if (this.turbo) {
+      // Spools up slower than the revs, and winds down slower still.
+      this.turbo.osc.frequency.setTargetAtTime(turbo.freq, now, 0.35);
+      this.turbo.gain.gain.setTargetAtTime(turbo.gain, now, turbo.gain > 0.002 ? 0.3 : 0.6);
+    }
     if (this.buzz) {
       // Four cylinders fire twice a revolution.
       this.buzz.osc.frequency.setTargetAtTime(rpm / 30, now, k);
