@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:underpass": "vitest run --config vitest.underpass.config.ts",
     "e2e": "playwright test"
   },
   "dependencies": {

@@ -24,6 +24,8 @@ const CLUSTER = 25;
 /** Straight approach and exit added at both ends of a passage (m). */
 export const APPROACH = 70;
 export const EXIT = 60;
+/** Drives start at least this far inside the play area (the roadworks stand at its edge). */
+const EDGE_CLEAR = 22;
 /** Sampling step along lanes (m). */
 export const STEP = 2;
 
@@ -49,6 +51,8 @@ export interface Passage {
    * cut (or ends there) runs off the map edge: its other end is past the roadworks.
    */
   opensAt: { start: boolean; end: boolean };
+  /** Where on `route[0]` to start driving: clear of junction trims, and past the roadworks at the map edge. */
+  startS: number;
 }
 
 export interface Structure {
@@ -146,7 +150,10 @@ function passages(city: CityData, graph: RoadGraph, s: Structure, sign: number):
     const first = E[chain[0]];
     const last = E[chain[chain.length - 1]];
     const opensAt = { start: Math.abs(edgeLift(first, 0)) < 1, end: Math.abs(edgeLift(last, last.len)) < 1 };
-    out.push({ id: `${s.id}: ${roads} [e${chain[0]}→e${chain[chain.length - 1]}]`, structure: s.id, kind: s.kind, edges: chain, route, first: before.length, extreme, inPlay, opensAt });
+    const e0 = E[route[0]];
+    let startS = Math.min(6, e0.len / 2);
+    while (startS < e0.len - 5 && !inPlayArea(city, lanePoint(e0, startS, 0), EDGE_CLEAR)) startS += 1;
+    out.push({ id: `${s.id}: ${roads} [e${chain[0]}→e${chain[chain.length - 1]}]`, structure: s.id, kind: s.kind, edges: chain, route, first: before.length, extreme, inPlay, opensAt, startS });
   }
   return out;
 }

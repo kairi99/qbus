@@ -15,6 +15,8 @@ import { routePath, surfaceAlong } from './catalog';
 
 /** Lateral acceleration the autopilot allows itself in curves (m/s²). */
 const A_LAT = 3.5;
+/** Deceleration the autopilot plans for to stop at the end of the route (m/s²). */
+const END_DECEL = 2.5;
 
 export interface DriveResult {
   reached: boolean;
@@ -33,6 +35,9 @@ export interface DriveResult {
   /** Horizontal share of that impulse (a wall shove rather than bottoming out). */
   maxLateralImpulse: number;
   contactAt: { pos: Vec2; y: number; normal: { x: number; y: number; z: number } } | null;
+  lateralAt: { pos: Vec2; y: number; normal: { x: number; y: number; z: number } } | null;
+  /** Vehicle mass (to turn impulses into a speed change). */
+  mass: number;
   /** Chassis height minus road height, relative to its ride height at the start (m). */
   maxRise: number;
   maxSink: number;
@@ -54,6 +59,8 @@ export interface DriveOptions {
   passage?: { from: number; to: number };
   /** Seconds allowed on top of length / (cruise / 2). */
   slack?: number;
+  /** Where to start on the first edge (m). */
+  startS?: number;
   /** Called every step (debugging). */
   trace?: (t: number, bus: BusPhysics, info: { throttle: number; steer: number; target: number; offPath: number; surfaceY: number }) => void;
 }
@@ -65,7 +72,7 @@ export function describe(r: DriveResult): string {
     `reached=${r.reached} in ${r.time.toFixed(1)}/${r.budget.toFixed(0)} s, top ${r.topKmh.toFixed(0)} km/h`,
     `stuck ${r.stuck.toFixed(1)} s at ${fmt(r.stuckAt)}`,
     `airborne ${r.airborne.toFixed(2)} s at ${fmt(r.airAt)}`,
-    `body contacts ${r.bodyContacts} steps, max impulse ${r.maxImpulse.toFixed(0)} (lateral ${r.maxLateralImpulse.toFixed(0)}) at ${fmt(r.contactAt?.pos ?? null)} y=${r.contactAt?.y.toFixed(2) ?? '-'}`,
+    `body contacts ${r.bodyContacts} steps, max impulse ${r.maxImpulse.toFixed(0)} at ${fmt(r.contactAt?.pos ?? null)} y=${r.contactAt?.y.toFixed(2) ?? '-'}, lateral ${r.maxLateralImpulse.toFixed(0)} (Δv ${(r.maxLateralImpulse / r.mass).toFixed(2)} m/s) at ${fmt(r.lateralAt?.pos ?? null)} y=${r.lateralAt?.y.toFixed(2) ?? '-'} n=${r.lateralAt ? `(${r.lateralAt.normal.x.toFixed(2)}, ${r.lateralAt.normal.y.toFixed(2)}, ${r.lateralAt.normal.z.toFixed(2)})` : '-'}`,
     `height vs road +${r.maxRise.toFixed(2)} at ${fmt(r.riseAt)} / ${r.maxSink.toFixed(2)} at ${fmt(r.sinkAt)}${r.fellThrough ? ' FELL THROUGH' : ''}`,
     `off path ${r.maxOffPath.toFixed(1)} m at ${fmt(r.offPathAt)}`,
   ].join('; ');
@@ -74,7 +81,7 @@ export function describe(r: DriveResult): string {
 export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGraph, preset: BusPreset, route: number[], opts: DriveOptions): DriveResult {
   const nav = new Navigator(graph);
   const first = graph.edges[route[0]];
-  const s0 = Math.min(6, first.len / 2);
+  const s0 = opts.startS ?? Math.min(6, first.len / 2);
   const path = routePath(graph, route, s0);
   const start = lanePoint(first, s0, 0);
   const startY = edgeY(first, s0) ?? groundHeightAt(city, start);
@@ -86,7 +93,7 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
   const budget = path.length / (cruise / 2) + (opts.slack ?? 10);
   const r: DriveResult = {
     reached: false, time: 0, budget, stuck: 0, stuckAt: null, airborne: 0, airAt: null, bodyContacts: 0, maxImpulse: 0, maxLateralImpulse: 0,
-    contactAt: null, maxRise: 0, maxSink: 0, riseAt: null, sinkAt: null, fellThrough: false, maxOffPath: 0, offPathAt: null, topKmh: 0,
+    contactAt: null, lateralAt: null, mass: preset.mass, maxRise: 0, maxSink: 0, riseAt: null, sinkAt: null, fellThrough: false, maxOffPath: 0, offPathAt: null, topKmh: 0,
   };
   const passageEdges = opts.passage ? new Set(route.slice(opts.passage.from, opts.passage.to)) : null;
   let ride: number | null = null;
@@ -115,7 +122,9 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
       const h2 = Math.atan2(a2.z - a1.z, a2.x - a1.x);
       const bend = Math.abs(Math.atan2(Math.sin(h2 - h1), Math.cos(h2 - h1)));
       const curvature = bend / 20;
-      const target = Math.min(cruise, curvature > 1e-3 ? Math.sqrt(A_LAT / curvature) : cruise);
+      // Brake for the end of the route (it may end at a T-junction with a wall beyond).
+      const rem = Math.hypot(goal.x - p.x, goal.z - p.z);
+      const target = Math.min(cruise, curvature > 1e-3 ? Math.sqrt(A_LAT / curvature) : cruise, Math.sqrt(2 * END_DECEL * rem) + 3);
       const want = Math.atan2(-(aim.z - p.z), aim.x - p.x);
       const err = Math.atan2(Math.sin(want - bus.heading), Math.cos(want - bus.heading));
       const throttle = Math.max(-1, Math.min(1, (target - v) * 0.4));
@@ -152,6 +161,7 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
           touched ||= imp > 0 || m.numSolverContacts() > 0;
           const n = m.normal();
           const lat = imp * Math.hypot(n.x, n.z);
+          if (lat > r.maxLateralImpulse) r.lateralAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } };
           if (imp > r.maxImpulse) {
             r.maxImpulse = imp;
             r.contactAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } };
