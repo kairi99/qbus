@@ -53,7 +53,7 @@ export const STATIONS: readonly Station[] = [
       { file: 'chicha.mp3', title: 'Cumbia del Trole Perdido', artist: 'Chichero Andrade y su Combo Interparroquial', duration: 123.0 },
       { file: 'chicha2.mp3', title: 'La Psicodélica del Playón', artist: 'Juanito Guagua y los Ñaños Eléctricos', duration: 109.7 },
     ],
-    offset: 71,
+    offset: 31,
   },
   {
     id: 'reggaeton',
