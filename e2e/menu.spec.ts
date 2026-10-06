@@ -85,7 +85,7 @@ test('free roam: pick the AE86, drive around with no route, clock or fares', asy
   await page.locator('[data-mode="free"]').click();
   await expect(page.locator('.mn-step-route')).toBeHidden();
   await page.locator('[data-bus="ae86"]').click();
-  await expect(page.locator('.mn-summary')).toHaveText('Toyota Sprinter Trueno AE86, La Mariscal, Paseo libre');
+  await expect(page.locator('.mn-summary')).toHaveText('Toyoya Sprinta Trueno AE86, La Mariscal, Paseo libre');
   await page.screenshot({ path: `${shots}/66-setup-free.png`, fullPage: true });
 
   await page.getByRole('button', { name: '¡Arranca!' }).click();

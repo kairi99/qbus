@@ -1868,3 +1868,27 @@ body {
 .touch .radio-toast small {
   display: none;
 }
+
+.mn-credits .mn-panel {
+  max-width: 720px;
+  box-sizing: border-box;
+  max-height: calc(100dvh - 130px);
+  overflow-y: auto;
+  gap: 12px;
+}
+
+.mn-credits h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.mn-credits p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.mn-credits a,
+.mn-foot a {
+  color: inherit;
+}

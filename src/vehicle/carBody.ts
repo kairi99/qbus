@@ -18,8 +18,8 @@ function box(w: number, h: number, d: number, x: number, y: number, z: number, m
 }
 
 /**
- * Toyota Sprinter Trueno AE86, low-poly, in the "panda" livery (white over black): wedge nose
- * with its pop-up headlights down, three-door hatchback glasshouse, full-width black tail
+ * The "Toyoya Sprinta Trueno AE86" (a look-alike name: the maker's marks aren't ours), low-poly,
+ * in the "panda" livery (white over black): wedge nose with its pop-up headlights down, three-door hatchback glasshouse, full-width black tail
  * panel. Sized from the preset's body (4.2 × 1.66 × 1.34 m); origin at the body's center.
  */
 export function carExterior(preset: BusPreset): THREE.Object3D[] {

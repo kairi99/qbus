@@ -30,7 +30,8 @@ test('La Mariscal: loads real streets with hills, bus drives, traffic runs', asy
   await page.screenshot({ path: `${shots}/50-mariscal-start.png` });
 
   await page.keyboard.down('KeyW');
-  await expect.poll(async () => (await bus(page)).speed, { timeout: 30_000 }).toBeGreaterThan(8);
+  // Software WebGL runs the sim slower than real time: give it time rather than a fixed pace.
+  await expect.poll(async () => (await bus(page)).speed, { timeout: 60_000 }).toBeGreaterThan(8);
   await page.keyboard.up('KeyW');
   await page.screenshot({ path: `${shots}/51-mariscal-driving.png` });
 
@@ -45,13 +46,13 @@ test('La Mariscal: loads real streets with hills, bus drives, traffic runs', asy
 });
 
 test('La Mariscal: a real bus line route plays with GPS guidance', async ({ page }) => {
-  await page.goto('/?play=1&city=mariscal&route=linea-catar-061');
+  await page.goto('/?play=1&city=mariscal&route=linea-katar-061');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   const r = await page.evaluate(() => {
     const q = (window as any).__qbus;
     return { line: q.route.line, stops: q.session.game.route.length };
   });
-  expect(r.line).toBe('CATAR-061');
+  expect(r.line).toBe('KATAR-061');
   expect(r.stops).toBeGreaterThanOrEqual(15);
   await expect.poll(() => page.evaluate(() => (window as any).__qbus.session.path?.points.length ?? 0), { timeout: 20_000 }).toBeGreaterThan(1);
   await page.screenshot({ path: `${shots}/52-mariscal-real-line.png` });

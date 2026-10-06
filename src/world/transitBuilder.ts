@@ -155,7 +155,7 @@ export function transitSigns(stations: Station[], metro: MetroEntrance[], ground
   for (const e of metro) {
     const p = totemSpot(e);
     const fw = forward(e.heading);
-    const tex = signTexture(METRO_RED, 'M', e.name, true);
+    const tex = signTexture(METRO_RED, 'METRO', e.name, true);
     for (const side of [1, -1]) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(TOTEM_SIGN, TOTEM_SIGN), new THREE.MeshBasicMaterial({ map: tex }));
       // On the board's faces, just clear of it, so nothing passes in front of the sign.
@@ -179,10 +179,28 @@ function signTexture(color: string, label: string, name: string, square = false)
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (square) {
-    ctx.font = 'bold 84px system-ui, sans-serif';
-    ctx.fillText(label, 64, 54);
-    ctx.font = 'bold 14px system-ui, sans-serif';
-    ctx.fillText(name.toUpperCase(), 64, 112, 120);
+    // The game's own Metro pictogram, not the city's logo (a white "M" on red is its identity):
+    // a dark board with a red disc holding a train's front, and the station's name.
+    ctx.fillStyle = '#20262d';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(64, 50, 38, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.roundRect(46, 26, 36, 42, 8);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillRect(51, 33, 26, 14); // windscreen
+    ctx.beginPath();
+    for (const x of [54, 74]) ctx.arc(x, 58, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillText(label, 64, 98);
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(name.toUpperCase(), 64, 116, 120);
   } else {
     ctx.font = 'bold 22px system-ui, sans-serif';
     ctx.fillText(label, 256, 24);

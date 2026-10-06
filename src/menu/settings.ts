@@ -2,6 +2,7 @@ import type { CameraMode } from '../camera/cameraRig';
 import { DEFAULT_HILLS } from '../world/loadCity';
 import { type TimeOfDay, parseTimeOfDay } from '../world/sky';
 import { type RadioSetting, parseRadio } from '../core/radioStations';
+import { aliasRouteId } from '../world/osm/operators';
 
 /** What the player picked last time, and their preferences. Saved in localStorage. */
 export interface Settings {
@@ -64,7 +65,7 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     mode: raw.mode === 'free' ? 'free' : 'route',
     bus: str('bus'),
     zone: str('zone'),
-    route: str('route'),
+    route: aliasRouteId(str('route')),
     camera: raw.camera === 'cockpit' || raw.camera === 'chase' ? raw.camera : DEFAULTS.camera,
     volume: num('volume', 0, 1),
     hills: raw.v !== VERSION && raw.hills === 1.3 ? DEFAULTS.hills : num('hills', 0.5, 3),

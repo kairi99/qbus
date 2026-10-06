@@ -65,9 +65,9 @@ const SIGNS: SignDef[] = [
   { text: 'Karaoke El Chulla', trade: 'food', bg: '#4a148c', fg: '#ffeb3b' },
   { text: 'Licorería La Esquina', trade: 'store', bg: '#880e4f', fg: '#ffffff' },
   { text: 'Hostal La Mariscal', trade: 'hotel', bg: '#1a237e', fg: '#ffffff', sub: 'HABITACIONES · WIFI' },
-  { text: 'Hotel Amazonas', trade: 'hotel', bg: '#3e2723', fg: '#ffd54f' },
+  { text: 'Hotel Amazonía', trade: 'hotel', bg: '#3e2723', fg: '#ffd54f' },
   { text: 'Hostal El Quinde', trade: 'hotel', bg: '#00796b', fg: '#ffffff' },
-  { text: 'Cooperativa Andina', trade: 'money', bg: '#0d47a1', fg: '#ffeb3b', sub: 'AHORRO Y CRÉDITO' },
+  { text: 'Caja Solidaria La Minga', trade: 'money', bg: '#0d47a1', fg: '#ffeb3b', sub: 'AHORRO Y CRÉDITO' },
   { text: 'Compra y Venta de Oro', trade: 'money', bg: '#fbc02d', fg: '#000000' },
   { text: 'Envíos y Giros', trade: 'money', bg: '#c62828', fg: '#ffffff' },
 ];

@@ -60,11 +60,64 @@ export class Menu {
         <nav class="mn-title-actions">
           <button class="mn-btn mn-btn-go" data-go="setup">Jugar</button>
           <button class="mn-btn" data-go="settings">Ajustes</button>
+          <button class="mn-btn" data-go="credits">Créditos</button>
         </nav>
-        <p class="mn-foot">Mapa © OpenStreetMap · Relieve Copernicus GLO-30</p>
+        <p class="mn-foot">Mapa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Relieve Copernicus GLO-30</p>
       </main>`;
     this.on('[data-go="setup"]', () => this.setup());
     this.on('[data-go="settings"]', () => this.settingsScreen(() => this.title()));
+    this.on('[data-go="credits"]', () => this.credits());
+    this.focusFirst();
+  }
+
+  /** Who made what, the data licences, and that the game is nobody's official product. */
+  private credits(): void {
+    const link = (url: string, text: string) => `<a href="${url}" target="_blank" rel="noopener">${text}</a>`;
+    this.root.innerHTML = `
+      ${SKYLINE}
+      <main class="mn-settings mn-credits">
+        <header class="mn-head">
+          <button class="mn-back" data-go="back" aria-label="Volver">‹</button>
+          <div class="mn-led mn-led-wide"><span>CRÉDITOS</span></div>
+        </header>
+        <div class="mn-panel">
+          <section>
+            <h2>QBus</h2>
+            <p>Juego gratuito, hecho por aficionados, de ficción y sin fines de lucro.</p>
+          </section>
+          <section>
+            <h2>Mapa</h2>
+            <p>Calles, edificios, paradas y rutas: © colaboradores de ${link('https://www.openstreetmap.org/copyright', 'OpenStreetMap')},
+            bajo la licencia ${link('https://opendatacommons.org/licenses/odbl/1-0/', 'ODbL 1.0')}. Los datos de la ciudad del juego
+            (<code>data/cities/*.json</code>) son una base de datos derivada y se comparten bajo la misma licencia.</p>
+          </section>
+          <section>
+            <h2>Relieve</h2>
+            <p lang="en">Produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018
+            provided under COPERNICUS by the European Union and ESA; all rights reserved. The organisations in charge of the
+            Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.</p>
+          </section>
+          <section>
+            <h2>Sonidos</h2>
+            <p>Grabaciones de dominio público (CC0) de ${link('https://freesound.org', 'Freesound')}: kyles, AndrewAlexander, rabbydaw,
+            DigPro120, am7 y tt_runscript. Detalle en <code>public/sounds/CREDITS.md</code>.</p>
+          </section>
+          <section>
+            <h2>Música</h2>
+            <p>Las tres canciones de la radio son originales, compuestas y sintetizadas por código para QBus (CC0).
+            Las radios, locutores y artistas son inventados.</p>
+          </section>
+          <section>
+            <h2>Aviso</h2>
+            <p>QBus no está afiliado, patrocinado ni aprobado por el Municipio del Distrito Metropolitano de Quito, la Empresa
+            Pública Metropolitana Metro de Quito, la EPMTPQ (Trolebús, Ecovía, Metrobus-Q), ninguna operadora de buses, ni
+            ningún fabricante de vehículos. Los nombres de calles, lugares y sistemas de transporte se usan solo para ubicar el
+            juego. Las operadoras de buses, comercios, vehículos y canciones son inventados o parodias; cualquier parecido es
+            un guiño. Las marcas mencionadas pertenecen a sus dueños.</p>
+          </section>
+        </div>
+      </main>`;
+    this.on('[data-go="back"]', () => this.title());
     this.focusFirst();
   }
 

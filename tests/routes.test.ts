@@ -99,9 +99,9 @@ describe.each([
 describe('route pruning', () => {
   it('drops the dead-end stop itself, not the healthy stops after it', () => {
     const routes = routesFor(mariscal);
-    // Catar 061 has one unreachable stop at its end; the line must survive with the rest.
-    const catar = routes.find((r) => r.line === 'CATAR-061');
-    expect(catar, 'Catar 061 kept').toBeDefined();
+    // Katar 061 has one unreachable stop at its end; the line must survive with the rest.
+    const catar = routes.find((r) => r.line === 'KATAR-061');
+    expect(catar, 'Katar 061 kept').toBeDefined();
     expect(catar!.stops.length).toBeGreaterThanOrEqual(15);
   });
 });

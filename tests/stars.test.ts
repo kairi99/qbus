@@ -22,9 +22,9 @@ describe('starsFor', () => {
 // two at most, and three out of the autopilot's reach (a human expert also skims traffic).
 const PLAYED: Record<string, [number, number, number]> = {
   circuito: [257, 363, 535],
-  'linea-catar-061': [785, 1280, 1698],
+  'linea-katar-061': [785, 1280, 1698],
   'linea-c4': [60, 377, 500],
-  'linea-bellavista-002': [0, 113, 592],
+  'linea-belavista-002': [0, 113, 592],
 };
 
 describe('star targets against played shifts (La Mariscal)', () => {

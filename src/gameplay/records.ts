@@ -1,4 +1,5 @@
 import type { KeyValueStore } from '../menu/settings';
+import { aliasRouteId } from '../world/osm/operators';
 
 /** One finished shift, as kept in the high-score table. */
 export interface ShiftRecord {
@@ -48,6 +49,9 @@ const VERSION = 2;
 
 export const routeKey = (zone: string, route: string) => `${zone}/${route}`;
 
+/** Lines once kept the real operator's name in their id: follow the rename. */
+const renamedKey = (key: string) => key.replace(/\/(.+)$/, (_, route: string) => `/${aliasRouteId(route)}`);
+
 const empty = (): Records => ({ routes: {}, missions: {} });
 const count = (v: unknown, max = 1e7) => (typeof v === 'number' && isFinite(v) && v >= 0 ? Math.min(max, Math.floor(v)) : null);
 
@@ -89,7 +93,7 @@ export function loadRecords(store: KeyValueStore = localStorage): Records {
         .sort((a, b) => b.cents - a.cents)
         .slice(0, TOP_N);
       const stars = keepStars ? Math.max(count((r as { stars?: unknown }).stars, 3) ?? 0, ...top.map((s) => s.stars)) : 0;
-      if (top.length || stars) out.routes[k] = { top, stars };
+      if (top.length || stars) out.routes[renamedKey(k)] = { top, stars };
     }
   }
   if (missions && typeof missions === 'object') {

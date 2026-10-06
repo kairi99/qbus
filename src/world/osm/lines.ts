@@ -1,6 +1,7 @@
 import type { Stop, TransitSystem, Vec2 } from '../cityData';
 import { forward } from '../cityData';
 import type { OsmJson } from './import';
+import { aliasRef } from './operators';
 import { transitSystem } from './stations';
 
 /** A real bus line's stretch through the zone: one direction's stops, then the other's. */
@@ -73,12 +74,13 @@ export function importLines(osm: OsmJson, toXZ: Proj, stops: Stop[]): BusLine[] 
   const lines: BusLine[] = [];
   for (const ds of byRef.values()) {
     const [a, b] = ds.sort((x, y) => y.stops.length - x.stops.length);
-    const ref = a.ref;
+    // Real operators' names never reach the game: see `operators.ts`.
+    const ref = aliasRef(a.ref);
     const back = b ? b.stops.filter((id) => !a.stops.includes(id)) : [];
     lines.push({
       ref,
       name: lineDisplayName({ ref, route: a.tags.route, system: a.system, name: a.tags.name }),
-      endpoints: endpoints(a.tags),
+      endpoints: aliasRef(endpoints(a.tags)),
       stops: [...a.stops, ...back],
       split: a.split,
       alsoServedBy: [],
