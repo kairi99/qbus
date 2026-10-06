@@ -1,0 +1,21 @@
+26 lifted drivable edges
+edge 156 Av. 12 de Octubre -> Av. 12 de Octubre(590) popular@40: reached=true t=21.9 wall=0 floor=82 air=0.00 stall=0.1 dev=0.2 end=(-182.6,814.6) firstFloor@(-9.6,709.6) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) popular@40: reached=true t=30.0 wall=527 floor=130 air=0.08 stall=4.3 dev=2.0 end=(19.7,704.8) firstWall@(-20.1,747.7) TriMesh firstFloor@(17.2,706.4) ConvexPolyhedron
+edge 160 sin nombre -> Av. Patria(970) popular@40: reached=true t=20.8 wall=144 floor=0 air=0.08 stall=1.1 dev=0.6 end=(-23.7,713.7) firstWall@(-20.1,747.7) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) popular@40: reached=true t=21.3 wall=60 floor=3 air=0.12 stall=0.1 dev=0.2 end=(-696.3,205.9) firstWall@(-659.7,278.8) ConvexPolyhedron firstFloor@(-693.6,212) TriMesh
+edge 167 Av. Patria -> Av. Patria(517) popular@40: reached=true t=23.9 wall=0 floor=10 air=0.15 stall=0.2 dev=0.5 end=(-606.1,341.6) firstFloor@(-702.8,219.5) HeightField
+edge 195 sin nombre -> -(undefined) popular@40: reached=true t=17.2 wall=423 floor=0 air=0.17 stall=1.8 dev=1.3 end=(-833,778.5) firstWall@(-819.7,768.3) ConvexPolyhedron
+edge 197 sin nombre -> sin nombre(198) popular@40: reached=true t=13.2 wall=0 floor=11 air=0.13 stall=0.1 dev=0.5 end=(-656,319.8) firstFloor@(-647.8,316.6) TriMesh
+edge 198 sin nombre -> sin nombre(199) popular@40: reached=true t=18.4 wall=3 floor=10 air=0.13 stall=0.1 dev=0.5 end=(-679.3,370.8) firstWall@(-647.9,316.7) TriMesh firstFloor@(-647.9,316.7) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) popular@40: reached=true t=22.8 wall=2 floor=8 air=0.00 stall=0.1 dev=1.2 end=(-718.9,446.5) firstWall@(-663.6,327.4) TriMesh firstFloor@(-648,316.7) TriMesh
+edge 241 Av. 12 de Octubre -> Av. 12 de Octubre(587) popular@40: reached=true t=22.8 wall=1100 floor=85 air=0.00 stall=0.5 dev=0.1 end=(77.4,666.2) firstWall@(-75.7,757.3) TriMesh firstFloor@(-75.7,757.3) TriMesh
+edge 242 Av. 12 de Octubre -> Av. 12 de Octubre(241) popular@40: reached=true t=25.6 wall=801 floor=6 air=0.12 stall=0.1 dev=0.1 end=(29.8,695.9) firstWall@(0.4,712.9) TriMesh firstFloor@(-66.3,751.8) TriMesh
+edge 276 Av. 10 de Agosto -> -(undefined) popular@40: reached=true t=10.8 wall=141 floor=0 air=0.15 stall=0.1 dev=0.4 end=(-176.7,-835.1) firstWall@(-191,-801.7) TriMesh
+edge 349 sin nombre -> sin nombre(524) popular@40: reached=true t=16.1 wall=0 floor=57 air=0.12 stall=0.1 dev=0.6 end=(-57.6,713.7) firstFloor@(-29.4,710.5) TriMesh
+edge 516 sin nombre -> -(undefined) popular@40: reached=false t=45.0 wall=12687 floor=60080 air=0.00 stall=3.1 dev=0.4 end=(-859.7,-257.1) firstWall@(-859.6,-256.8) TriMesh firstFloor@(-859.6,-256.8) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) popular@40: reached=true t=20.0 wall=0 floor=160 air=0.12 stall=0.1 dev=1.2 end=(-62.9,755.3) firstFloor@(-29.5,710.5) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) popular@40: reached=true t=20.3 wall=18 floor=276 air=0.12 stall=0.1 dev=0.6 end=(-91.9,754.4) firstWall@(-61.3,716.7) TriMesh firstFloor@(-29.5,710.5) TriMesh
+edge 564 Av. 10 de Agosto -> Av. 10 de Agosto(508) popular@40: reached=true t=23.4 wall=906 floor=810 air=0.00 stall=8.6 dev=0.9 end=(-227.8,-763.7) firstWall@(-197.7,-831.3) TriMesh firstFloor@(-197.7,-831.3) TriMesh
+edge 589 Av. 12 de Octubre -> Av. 12 de Octubre(242) popular@40: reached=true t=13.7 wall=0 floor=6 air=0.13 stall=0.1 dev=0.1 end=(-55.2,745.4) firstFloor@(-66.3,751.8) TriMesh
+edge 681 sin nombre -> sin nombre(195) popular@40: reached=true t=16.5 wall=421 floor=0 air=0.17 stall=1.2 dev=1.3 end=(-833,778.6) firstWall@(-819.7,768.3) ConvexPolyhedron
+edge 895 Alfredo Perez Guerrero -> Alfredo Perez Guerrero(166) popular@40: reached=true t=15.9 wall=72 floor=2 air=0.15 stall=0.2 dev=1.5 end=(-709.2,166.9) firstWall@(-659.2,279.3) ConvexPolyhedron firstFloor@(-693.7,211.9) TriMesh
