@@ -242,7 +242,10 @@ function solve(roads: Road[], atGrade: Set<string>): { roads: Road[]; crossings:
 
   // Where a road passes over (or under) another it must stay at street level: the stretch of
   // it right at the crossing. (The rest of it may still ramp, say out of another underpass.)
-  const stretch = (ri: number, s: number, flat: number) => dense[ri].cum.flatMap((c, k) => (Math.abs(c - s) <= flat ? [dense[ri].base + k] : []));
+  // Measured along the network, not just the one way: OSM often splits a way right at (or a few
+  // meters from) the crossing, and the way carrying on is still under/over the other road there
+  // (cut off at the joint, it ramps while still under the street above and the roof is too low).
+  const stretch = (ri: number, s: number, flat: number) => [...dijkstra(adj, [nearestVertex(ri, s)], flat, (v) => anchors.has(v) && roadOf[v] !== ri).keys()];
   const lift = new Float64Array(count);
   /**
    * Vertices whose lift must stay exact through the grade smoothing: the junction cores, and at
@@ -263,9 +266,7 @@ function solve(roads: Road[], atGrade: Set<string>): { roads: Road[]; crossings:
     const anchor = dijkstra(adj, [...fixed, ...anchors], CLEARANCE / STEEP, () => false);
     const best = new Float64Array(count);
     for (const p of peaks) {
-      const d = dense[p.road];
-      const sources: number[] = [];
-      d.cum.forEach((s, k) => Math.abs(s - p.s) <= p.flat && sources.push(d.base + k));
+      const sources = stretch(p.road, p.s, p.flat);
       const dist = dijkstra(adj, sources, p.h / GRADE, isFixed);
       for (const [v, dv] of dist) best[v] = Math.max(best[v], p.h - dv * GRADE);
     }

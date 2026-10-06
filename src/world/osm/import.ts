@@ -219,9 +219,11 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   for (const p of treeSpots)
     if (inside(p) && offRoad(p, 0.8) && !blockedByBuilding(p) && !onJunction(p) && !occupied(p, 2) && !nearLifted(roads, p, 4) && trees.every((q) => Math.hypot(p.x - q.x, p.z - q.z) > 2.5))
       trees.push(p);
-  const props = scatterProps(roads, stops, buildings, rng, inside).filter((pr) => !onJunction(pr.pos) && !occupied(pr.pos, 1) && !nearLifted(roads, pr.pos, 4));
+  // Props and humps roll their dice per road segment (seeded by where it starts), so adding or
+  // dropping a way only moves what's on it, not furniture all over the city.
+  const props = scatterProps(roads, stops, buildings, opts.seed ?? 1, inside).filter((pr) => !onJunction(pr.pos) && !occupied(pr.pos, 1) && !nearLifted(roads, pr.pos, 4));
   // Humps only where the game happens, and never on a ramp, bridge or underpass.
-  const features = placeFeatures(roads, rng).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20));
+  const features = placeFeatures(roads, opts.seed ?? 1).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20));
   const spawn = pickSpawn(roads.filter((r) => !r.lift), bounds);
 
   return {
@@ -478,7 +480,7 @@ function importStops(
 }
 
 /** Street furniture along the sidewalks: trash cans, fruit stands, the odd cluster of cones. */
-function scatterProps(roads: Road[], stops: Stop[], buildings: Building[], rng: Rng, inside: (p: Vec2) => boolean): Prop[] {
+function scatterProps(roads: Road[], stops: Stop[], buildings: Building[], seed: number, inside: (p: Vec2) => boolean): Prop[] {
   const props: Prop[] = [];
   const ok = (p: Vec2) =>
     inside(p) &&
@@ -493,6 +495,7 @@ function scatterProps(roads: Road[], stops: Stop[], buildings: Building[], rng: 
       const len = Math.hypot(b.x - a.x, b.z - a.z);
       const dir = { x: (b.x - a.x) / len, z: (b.z - a.z) / len };
       const heading = Math.atan2(-dir.z, dir.x);
+      const rng = new Rng(spotSeed(seed, a, b));
       for (let s = 8; s < len - 8; s += 18) {
         for (const side of [-1, 1]) {
           const roll = rng.next();
@@ -531,7 +534,7 @@ function nearLifted(roads: Road[], p: Vec2, margin: number): boolean {
   });
 }
 
-function placeFeatures(roads: Road[], rng: Rng): Feature[] {
+function placeFeatures(roads: Road[], seed: number): Feature[] {
   const out: Feature[] = [];
   for (const road of roads) {
     if (road.kind === 'avenue') continue;
@@ -544,12 +547,19 @@ function placeFeatures(roads: Road[], rng: Rng): Feature[] {
       const heading = Math.atan2(-dir.z, dir.x);
       const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
       if (out.some((f) => Math.hypot(f.pos.x - mid.x, f.pos.z - mid.z) < 60)) continue;
-      const roll = rng.next();
+      const roll = new Rng(spotSeed(seed + 104729, a, b)).next();
       // No ramps: real streets are too narrow for traffic to pass beside one.
       if (roll < 0.12) out.push({ kind: 'hump', pos: mid, heading, length: 3, width: road.width, height: 0.22 });
     }
   }
   return out;
+}
+
+/** A seed for the dice of one road segment, from its ends (rounded to the centimeter). */
+function spotSeed(seed: number, a: Vec2, b: Vec2): number {
+  let h = Math.imul(seed, 0x9e3779b1);
+  for (const v of [a.x, a.z, b.x, b.z]) h = Math.imul(h ^ Math.round(v * 100), 0x85ebca6b) ^ (h >>> 13);
+  return h >>> 0;
 }
 
 /** In the right-hand lane of Av. Amazonas nearest the middle of the map (or the longest avenue). */

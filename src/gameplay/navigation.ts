@@ -142,20 +142,31 @@ export class Navigator {
   /** The point `ahead` meters along the path past where `p` projects onto it. */
   guidePoint(path: NavPath, p: Vec2, ahead: number): Vec2 {
     const pts = path.points;
+    if (pts.length < 2) return pts[0];
+    // Project onto the segments, not just the vertices: a turn across a big junction is one
+    // long segment, and aiming past its far vertex from halfway along cuts the corner.
     let bestI = 0;
+    let bestU = 0;
     let bestD = Infinity;
-    for (let i = 0; i < pts.length; i++) {
-      const d = Math.hypot(pts[i].x - p.x, pts[i].z - p.z);
-      if (d < bestD) (bestD = d), (bestI = i);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const u = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+      const d = Math.hypot(a.x + dx * u - p.x, a.z + dz * u - p.z);
+      if (d < bestD) (bestD = d), (bestI = i), (bestU = u);
     }
     let left = ahead;
+    let from = { x: pts[bestI].x + (pts[bestI + 1].x - pts[bestI].x) * bestU, z: pts[bestI].z + (pts[bestI + 1].z - pts[bestI].z) * bestU };
     for (let i = bestI; i < pts.length - 1; i++) {
-      const seg = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
+      const to = pts[i + 1];
+      const seg = Math.hypot(to.x - from.x, to.z - from.z);
       if (seg >= left) {
         const t = left / seg;
-        return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t, z: pts[i].z + (pts[i + 1].z - pts[i].z) * t };
+        return { x: from.x + (to.x - from.x) * t, z: from.z + (to.z - from.z) * t };
       }
       left -= seg;
+      from = to;
     }
     return pts[pts.length - 1];
   }

@@ -19,9 +19,10 @@ describe('traffic through the bridges and underpasses', () => {
   beforeAll(() => initRapier());
 
   it.each([
-    ['Puente del Guambra', { x: -660, z: 292 }],
-    ['Patria y 12 de Octubre', { x: -30, z: 725 }],
-  ])('flows through %s without cars getting stuck', (_, focus) => {
+    ['Puente del Guambra', { x: -660, z: 292 }, null],
+    // Including the link from 12 de Octubre northbound through its tunnel up to Patria.
+    ['Patria y 12 de Octubre', { x: -30, z: 725 }, { x: -60, z: 757 }],
+  ])('flows through %s without cars getting stuck', (_, focus, mustUse) => {
     const graph = buildRoadGraph(city);
     const world = createWorld();
     buildCity(city, world, new THREE.Scene(), graph);
@@ -32,6 +33,7 @@ describe('traffic through the bridges and underpasses', () => {
     sim.recycle({ pos: focus, heading: 0 }, true);
     const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim));
     let stuck = 0;
+    const used = new Set<number>();
     const prev = sim.cars.map((c) => c.state);
     for (let t = 0; t < 40; t += PHYSICS_STEP) {
       sim.step(PHYSICS_STEP, bodies.obstacles());
@@ -40,9 +42,14 @@ describe('traffic through the bridges and underpasses', () => {
       bodies.afterStep(PHYSICS_STEP, bus.body.collider(0), { x: 2000, z: 2000 });
       sim.cars.forEach((c, i) => {
         if (c.state === 'free' && prev[i] === 'driving') stuck++;
+        if (c.state === 'driving') used.add(c.edge);
         prev[i] = c.state;
       });
     }
     expect(stuck).toBeLessThanOrEqual(1);
+    if (mustUse) {
+      const link = graph.edges.filter((e) => e.drivable && e.center.pts.some((p) => Math.hypot(p.x - mustUse.x, p.z - mustUse.z) < 3));
+      expect(link.some((e) => used.has(e.id)), 'traffic drives the link').toBe(true);
+    }
   });
 });

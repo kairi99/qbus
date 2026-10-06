@@ -153,6 +153,29 @@ describe('La Mariscal bridges and underpasses', () => {
     expect(r.offWheels).toBeLessThan(0.3);
   });
 
+  it('takes the link from 12 de Octubre (south to north) through its tunnel up to Av. Patria', () => {
+    // OSM ways 24650066, 425195365, 420861081 (the tunnel) and 24650067: it leaves 12 de Octubre
+    // northbound, dives under Queseras del Medio (at about -59, 757) and comes up at Patria.
+    const r = driveThrough('sin nombre', -1, { x: -60, z: 757 });
+    console.log('Patria link:', r);
+    expect(r.reached).toBe(true);
+    expect(r.extreme).toBeLessThan(-4);
+    expect(r.offWheels).toBeLessThan(0.3);
+  });
+
+  it('routes from 12 de Octubre northbound onto Av. Patria (westbound) through the restored link', () => {
+    const graph = buildRoadGraph(city);
+    const nav = new Navigator(graph);
+    const from = nav.locate({ x: -213, z: 847 }, Math.atan2(14, 16))!;
+    const to = nav.locate({ x: -47, z: 694 }, Math.atan2(-(679 - 708), -65 + 30))!;
+    expect(from && to).toBeTruthy();
+    const path = nav.route(from, to)!;
+    expect(path).not.toBeNull();
+    // Through the tunnel (not around by the surface streets): past its deepest point, and short.
+    expect(path.points.some((p) => Math.hypot(p.x + 60, p.z - 757) < 4)).toBe(true);
+    expect(path.length).toBeLessThan(320);
+  });
+
   it('drives over 10 de Agosto on the Puente del Guambra', () => {
     const r = driveThrough('Av. Patria', 1);
     console.log('Puente del Guambra:', r);
