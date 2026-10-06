@@ -2,7 +2,7 @@
  * Plays route shifts headless with an autopilot: the real physics bus on the real city, under
  * the real RouteGame, TrickScorer, Nitro and Missions rules (no traffic, so no close calls).
  * Three driver profiles (casual, decent, expert) give a feel for what shifts earn, to check
- * the star targets against. Usage: npx tsx tools/sim-shift.ts [profiles] [route ids] [seeds]
+ * the star targets against. Usage: npx tsx tools/sim-shift.ts [profiles|casual,decent,expert] [route ids|all] [seeds] [zone]
  */
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
@@ -12,6 +12,7 @@ import type { BusPreset } from '../src/vehicle/busPreset';
 import { buildCity } from '../src/world/cityBuilder';
 import { type CityData, groundHeightAt, type Vec2 } from '../src/world/cityData';
 import { buildRoadGraph } from '../src/world/roadGraph';
+import { generateCity } from '../src/world/procCity';
 import { Navigator, type NavPath } from '../src/gameplay/navigation';
 import { type RouteDef, routeLegs, routeStops, routesFor, startPose } from '../src/gameplay/routes';
 import { RouteGame } from '../src/gameplay/routeGame';
@@ -21,8 +22,9 @@ import { Missions, pickMissions, type MissionEvent } from '../src/gameplay/missi
 import { starThresholds } from '../src/gameplay/stars';
 
 const popular = JSON.parse(readFileSync('data/buses/popular.json', 'utf8')) as BusPreset;
-const city: CityData = JSON.parse(readFileSync('data/cities/mariscal.json', 'utf8'));
-city.terrain!.scale = 1;
+const zone = process.argv[5] ?? 'mariscal';
+const city: CityData = zone === 'grid' ? generateCity({ seed: 42 }) : JSON.parse(readFileSync(`data/cities/${zone}.json`, 'utf8'));
+if (city.terrain) city.terrain.scale = 1;
 const graph = buildRoadGraph(city);
 const nav = new Navigator(graph);
 
@@ -55,7 +57,8 @@ function run(route: RouteDef, prof: Profile, seed: number) {
   const scorer = new TrickScorer();
   const nitro = new Nitro();
   const missions = new Missions(pickMissions(seed * 31 + 7));
-  const r = { trick: 0, mission: 0, fare: 0, fast: 0, ok: 0, slow: 0, secs: 0 };
+  const legs = routeLegs(city, route, graph);
+  const r = { trick: 0, mission: 0, fare: 0, fast: 0, ok: 0, slow: 0, secs: 0, stops: 0, meters: 0, lastArrive: 0 };
   const feed = (e: MissionEvent) => {
     for (const m of missions.feed(e)) {
       game.addCents(m.def.reward);
@@ -163,10 +166,15 @@ function run(route: RouteDef, prof: Profile, seed: number) {
       if (e.type === 'arrive') {
         feed({ type: 'arrive', rating: e.rating });
         r[e.rating]++;
+        // Door-to-door pace: legal meters served over the time it took.
+        r.meters += r.stops === 0 ? Math.hypot(stops[0].zone.x - start.pos.x, stops[0].zone.z - start.pos.z) : legs[e.stopIndex];
+        r.stops++;
+        r.lastArrive = r.secs;
       }
     }
   }
-  return { ...r, cents: game.cents, delivered: game.delivered, stops: r.fast + r.ok + r.slow };
+  world.free();
+  return { ...r, cents: game.cents, delivered: game.delivered, pace: r.lastArrive ? r.meters / r.lastArrive : 0 };
 }
 
 async function main() {
@@ -183,7 +191,7 @@ async function main() {
       const avg = (k: keyof (typeof res)[number]) => res.reduce((s, x) => s + x[k], 0) / res.length;
       console.log(
         `${w.padEnd(7)} ${$(avg('cents'))} (fares ${$(avg('fare'))}, tricks ${$(avg('trick'))}, missions ${$(avg('mission'))}) ` +
-          `${avg('delivered').toFixed(1)} pax, ${avg('secs').toFixed(0)} s, ${avg('stops').toFixed(1)} stops (fast ${avg('fast').toFixed(1)}, ok ${avg('ok').toFixed(1)}, slow ${avg('slow').toFixed(1)}); ` +
+          `${avg('delivered').toFixed(1)} pax, ${avg('secs').toFixed(0)} s, ${avg('stops').toFixed(1)} stops (fast ${avg('fast').toFixed(1)}, ok ${avg('ok').toFixed(1)}, slow ${avg('slow').toFixed(1)}), pace ${avg('pace').toFixed(1)} m/s; ` +
           `each ${res.map((x) => $(x.cents)).join(' ')}`,
       );
     }
