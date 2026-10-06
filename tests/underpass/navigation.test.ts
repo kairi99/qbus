@@ -29,7 +29,7 @@ const base = cityAndCatalog();
 const { city, graph, structures } = base;
 const nav = new Navigator(graph);
 const ground = (p: { x: number; z: number }) => groundHeightAt(city, p);
-const yAt = (e: LaneEdge, s: number) => edgeY(e, s) ?? ground(e.center.pts[0] && dirAt(e.center, s) ? posOn(e, s) : e.a);
+const yAt = (e: LaneEdge, s: number) => edgeY(e, s) ?? ground(posOn(e, s));
 function posOn(e: LaneEdge, s: number) {
   const { cum, pts } = e.center;
   let i = 1;

@@ -4,7 +4,7 @@
  */
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import { Navigator } from '../../src/gameplay/navigation';
-import { PHYSICS_STEP, RAPIER } from '../../src/physics/world';
+import { PHYSICS_STEP } from '../../src/physics/world';
 import { BusPhysics } from '../../src/vehicle/bus';
 import type { BusPreset } from '../../src/vehicle/busPreset';
 import type { CityData, Vec2 } from '../../src/world/cityData';
@@ -185,4 +185,3 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
   return r;
 }
 
-export { RAPIER };
