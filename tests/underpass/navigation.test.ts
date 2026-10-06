@@ -19,8 +19,6 @@ import { fmt, intrusions, yawPitchRoll } from './probe';
 known({
   'route joints are legal and level cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524]':
     'The Queseras tunnel link (e524) ends 1.15 m below the edge it leads into (e277) at node 257: its lift is still -1.0 at its end while the node is at street level',
-  'snapToRoad keeps the level and clears walls cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]':
-    'R reset at (-176.7, -834.5) in the 10 de Agosto cut puts the bus 0.25 m into the ground beside its lane (trimesh at (-174.9, -836.0), road height)',
   'snapToRoad keeps the level and clears walls cut sin nombre @(-820,774): sin nombre [e681→e195]':
     'R reset at (-820.6, 767.7) in the cut at (-820, 774) puts the bus 1.6 m into a wall (convex hull at (-826.2, 767.8, y 21.9)): the same wall the drive-through hits',
 });

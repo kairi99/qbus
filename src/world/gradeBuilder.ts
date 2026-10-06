@@ -659,9 +659,10 @@ function terrainPatch(
     let q = cells.get(key);
     if (!q) {
       const mid = { x: x + FINE / 2, z: z + FINE / 2 };
-      const cut = trenchAt(lowered, mid, sunk, UNDER_WALL);
+      const under = trenchAt(lowered, mid, sunk);
+      const cut = under ?? trenchAt(lowered, mid, sunk, UNDER_WALL);
       const roof = !!cut && covered(mid, cut.dir, cut.road) && terrainAt(city, mid) - cut.y > HEADROOM;
-      cells.set(key, (q = { roof, under: trenchAt(lowered, mid, sunk) }));
+      cells.set(key, (q = { roof, under }));
     }
     return q;
   };
@@ -726,17 +727,20 @@ function terrainPatch(
           const pb = { x: x + bx * FINE, z: z + bz * FINE };
           const ya = v[ax * 2 + az].y;
           const yb = v[bx * 2 + bz].y;
-          const la = Math.max(cornerY(nx, nz, pa.x, pa.z), ya - 0.6);
-          const lb = Math.max(cornerY(nx, nz, pb.x, pb.z), yb - 0.6);
+          // (Never lower than HEADROOM over the floor: where the roof is only just high enough,
+          // the lintel is thinner.)
+          const lintel = (q: Vec2, y: number) => Math.max(cornerY(nx, nz, q.x, q.z), y - 0.6, (vertex(q.x, q.z).cutY ?? -Infinity) + HEADROOM);
+          const la = Math.min(ya, lintel(pa, ya));
+          const lb = Math.min(yb, lintel(pb, yb));
           if (ya - la < 0.01 && yb - lb < 0.01) continue;
           const face = [v3(pa, la), v3(pb, lb), v3(pb, yb), v3(pa, ya)];
           mb.quad(face[0], face[1], face[2], face[3], CONCRETE);
           tris.quad(face[0], face[1], face[2], face[3]);
-          // A railing only where there's a real drop into the cut.
+          // A railing only over the cut, where there's a real drop into it.
           const below = vertex(nx + FINE / 2, nz + FINE / 2);
-          if (!isOpen(nx, nz) || Math.min(ya, yb) - (below.cutY ?? below.g) < 1.5) continue;
+          if (!here.under || !isOpen(nx, nz) || Math.min(ya, yb) - (below.dipped ? below.cutY! : below.g) < 1.5) continue;
           wallStrip(mb, pa, pb, ya, yb, PARAPET, 0.12, RAIL);
-          const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(stripCorners(pa, pb, ya - 0.6, yb - 0.6, PARAPET + 0.6, 0.12).flatMap((q) => [q.x, q.y, q.z])));
+          const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(stripCorners(pa, pb, la, lb, PARAPET + Math.max(ya - la, yb - lb), 0.12).flatMap((q) => [q.x, q.y, q.z])));
           if (desc) world.createCollider(desc, fixed);
         }
         // Over the cut itself: a ceiling under the roof (following it, no steps between cells) and

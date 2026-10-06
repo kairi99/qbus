@@ -7,6 +7,23 @@ const BASE_FOV = 68;
 const SPEED_FOV = 14;
 /** Extra widening while the nitro burns. */
 const NITRO_FOV = 10;
+/** Chase camera: clearance kept under a roof or deck over the bus, and in front of a wall between it and the bus. */
+const ROOF_CLEAR = 1.2;
+const WALL_CLEAR = 0.6;
+/** Closest the chase camera is pulled in to the bus (from the pivot over its roof). */
+const MIN_REACH = 2;
+/** How fast it backs out again once clear (1/s); pulling in is instant. */
+const EASE_OUT = 1.5;
+
+/**
+ * What the chase camera can't go through: the static world (walls, roofs, terrain, buildings).
+ * `cast` returns the distance from (ox, oy, oz) along the unit direction (dx, dy, dz) to the
+ * first obstacle, or `max` if there's none that close.
+ */
+export interface CameraObstacles {
+  cast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number): number;
+}
+
 // Camera looks down -Z; the bus faces +X, so rotate -90° about Y to look forward.
 const LOOK_FORWARD = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
 
@@ -23,8 +40,19 @@ export class CameraRig {
   private lastBus = new THREE.Vector3(Infinity, 0, 0);
   private lookingBack = false;
   private nitroFov = 0;
+  /** Where the chase camera would be with nothing in the way (smoothed). */
+  private ideal = new THREE.Vector3();
+  private pivot = new THREE.Vector3();
+  private ray = new THREE.Vector3();
+  /** Smoothed headroom over the pivot and distance from it the camera may use. */
+  private headroom = Infinity;
+  private reach = Infinity;
 
-  constructor(readonly camera: THREE.PerspectiveCamera) {}
+  constructor(
+    readonly camera: THREE.PerspectiveCamera,
+    /** Optional (tests, menus): without it the chase camera goes through anything. */
+    public obstacles: CameraObstacles | null = null,
+  ) {}
 
   toggle(): CameraMode {
     this.mode = this.mode === 'chase' ? 'cockpit' : 'chase';
@@ -84,11 +112,41 @@ export class CameraRig {
     const desired = this.tmp.copy(this.busPos).addScaledVector(this.flatFwd, -back);
     desired.y += Math.min(7, 2 + height * 1.8);
     const k = this.first ? 1 : 1 - Math.exp(-dt * 5);
-    this.camera.position.lerp(desired, k);
+    if (this.first) this.ideal.copy(desired);
+    else this.ideal.lerp(desired, k);
+    this.camera.position.copy(this.ideal);
+    if (this.obstacles) this.avoid(dt, height);
     const look = this.tmp.copy(this.busPos).addScaledVector(this.flatFwd, 10);
     look.y += 1;
     this.lookTarget.lerp(look, this.first ? 1 : 1 - Math.exp(-dt * 10));
     this.camera.lookAt(this.lookTarget);
+  }
+
+  /**
+   * Keeps the chase camera out of the world: under a roof or deck over the bus (a tunnel, a
+   * bridge) it comes down beneath it, and with a wall, the ground or a building between it and
+   * the bus it moves in along that line. Both pull in at once and ease back out, so passing
+   * obstacles don't make it jitter.
+   */
+  private avoid(dt: number, height: number): void {
+    const obs = this.obstacles!;
+    const p = this.pivot.copy(this.busPos);
+    p.y += height / 2 + 0.6;
+    const ease = this.first ? 1 : 1 - Math.exp(-dt * EASE_OUT);
+    const above = Math.max(0, this.ideal.y - p.y);
+    const up = obs.cast(p.x, p.y, p.z, 0, 1, 0, above + ROOF_CLEAR);
+    const room = up < above + ROOF_CLEAR ? Math.max(0, up - ROOF_CLEAR) : above;
+    this.headroom = this.first || room < this.headroom ? room : this.headroom + (room - this.headroom) * ease;
+    const cam = this.camera.position;
+    cam.y = Math.min(cam.y, p.y + this.headroom);
+    const d = this.ray.subVectors(cam, p);
+    const dist = d.length();
+    if (dist < 1e-3) return;
+    d.divideScalar(dist);
+    const hit = obs.cast(p.x, p.y, p.z, d.x, d.y, d.z, dist + WALL_CLEAR);
+    const allowed = hit < dist + WALL_CLEAR ? Math.max(MIN_REACH, hit - WALL_CLEAR) : dist;
+    this.reach = this.first || allowed < this.reach ? allowed : this.reach + (allowed - this.reach) * ease;
+    if (this.reach < dist) cam.copy(p).addScaledVector(d, this.reach);
   }
 
   private cockpit(dt: number, bus: BusPhysics): void {
