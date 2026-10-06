@@ -121,6 +121,20 @@ function otherFloor(lowered: Lowered[], self: Lowered, p: Vec2): boolean {
   });
 }
 
+/**
+ * The asphalt of another road with an underpass ramp at `p` (partway along it, not just its end
+ * touching ours at a joint), its surface within a meter or so of `y` (it may not be dug in yet).
+ */
+function rampAlongside(lowered: Lowered[], self: Lowered, p: Vec2, y: number): boolean {
+  return lowered.some((o) => {
+    if (o === self || !inBox(o.box, p)) return false;
+    const { s, d } = projectOnRoad(o.road, p);
+    const len = o.profile.cum[o.profile.cum.length - 1];
+    if (d > o.road.width / 2 + 0.3 || s < 0.5 || s > len - 0.5) return false;
+    return Math.abs(profileAt(o.profile, s).y - y) < 1.2;
+  });
+}
+
 /** A junction down in an underpass cut. */
 interface SunkJunction {
   poly: Vec2[];
@@ -191,14 +205,15 @@ function trenchAt(lowered: Lowered[], p: Vec2, sunk: SunkJunction[] = [], reach 
  * the way the cut runs there (roads alongside it don't cover it).
  */
 function coverTest(city: CityData, graph: RoadGraph, lowered: Lowered[]): (p: Vec2, dir?: Vec2 | null, cutRoad?: number) => boolean {
-  const skip = new Set(lowered.map((l) => l.index));
   const profiles = roadProfiles(city);
   const box = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
   for (const l of lowered)
     for (const p of l.road.points) (box.x0 = Math.min(box.x0, p.x)), (box.x1 = Math.max(box.x1, p.x)), (box.z0 = Math.min(box.z0, p.z)), (box.z1 = Math.max(box.z1, p.z));
   const near = (p: Vec2) => p.x > box.x0 - 60 && p.x < box.x1 + 60 && p.z > box.z0 - 60 && p.z < box.z1 + 60;
   const boxes = roadBoxes(city);
-  const over = city.roads.map((r, i) => ({ r, i })).filter(({ r, i }) => !skip.has(i) && r.points.some(near));
+  // Roads with a ramp of their own count too where they're back at street level (a link coming
+  // up out of its cut and crossing over another underpass).
+  const over = city.roads.map((r, i) => ({ r, i })).filter(({ r }) => r.points.some(near));
   const underpass = lowered.flatMap((l) => l.road.points.filter((_, k) => l.profile.lift[k] < DUG));
   const hulls = graph.nodes
     .filter((n) => n.hull && n.y === null && near(n.pos))
@@ -207,7 +222,7 @@ function coverTest(city: CityData, graph: RoadGraph, lowered: Lowered[]): (p: Ve
   return (p, dir, cutRoad) =>
     hulls.some((h) => inBox(h.box, p) && pointInPolygon(p, h.poly)) ||
     over.some(({ r, i }) => {
-      if (!inBox(boxes[i], p)) return false;
+      if (i === cutRoad || !inBox(boxes[i], p)) return false;
       const { s, d } = projectOnRoad(r, p);
       // Well past the street's edge, so its whole width (and sidewalk) has ground under it.
       if (d > r.width / 2 + ROOF_MARGIN) return false;
@@ -461,8 +476,14 @@ export function buildGrades(
         const pb = edge(b, side * (rb - WALL / 2));
         const mid = { x: (pa.x + pb.x) / 2, z: (pa.z + pb.z) / 2 };
         const beyond = edge(a, side * (l.half + WALL + 0.8));
+        // (Sharing means a floor at about ours: a ramp passing over the cut near the top of its
+        // own climb is a street above it, and the wall stands under it.)
         const shared = trenchAt(lowered.filter((o) => o !== l), beyond, sunk);
-        if (shared) continue;
+        if (shared && Math.abs(shared.y - (a.y + b.y) / 2) < 2.5) continue;
+        // Another ramp's asphalt right where the wall would stand, at about our floor's height: a
+        // carriageway alongside that starts down a little later (so not `shared` here). A wall
+        // there stands across its lanes.
+        if (rampAlongside(lowered, l, mid, (a.y + b.y) / 2)) continue;
         const ga = ground(pa);
         const gb = ground(pb);
         if (Math.max(ga - a.y, gb - b.y) < 0.2) continue;
