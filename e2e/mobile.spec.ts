@@ -71,6 +71,7 @@ test('a route shift on a phone', async ({ page }) => {
   await page.waitForFunction(() => (window as any).__qbus?.session?.game, null, { timeout: 60_000 });
   await expect(page.locator('.tc-gas')).toBeVisible();
   await expect(page.locator('.gh-missions li')).toHaveCount(3);
+  await expect(page.locator('.gh-targets')).toBeVisible();
   await page.screenshot({ path: `${shots}/86-phone-route.png` });
 
   // A mission done, then the end of the shift: the toast and results fit the small screen.
@@ -85,6 +86,12 @@ test('a route shift on a phone', async ({ page }) => {
     for (const e of events) if (!m.done) session.mission(e);
   });
   await expect(page.locator('.gh-toast.on')).toBeVisible();
+  // Money past the first target: the star meter beside the money fills one star.
+  await page.evaluate(() => {
+    const { session } = (window as any).__qbus;
+    session.game.addCents(session.stars[0]);
+  });
+  await expect(page.locator('.gh-goal b')).toHaveText(/^★+$/);
   await page.screenshot({ path: `${shots}/87-phone-mission.png` });
   await page.evaluate(() => ((window as any).__qbus.session.game.timeLeft = 0.2));
   await expect(page.locator('[data-k="results"]')).toBeVisible({ timeout: 20_000 });

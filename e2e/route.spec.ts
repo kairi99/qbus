@@ -31,6 +31,9 @@ for (const [city, url] of SHIFTS) test(`a shift on ${city}: start, pick up, drop
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   await page.waitForTimeout(800);
   await expect(page.locator('.gh-prompt')).toBeVisible();
+  // The route's star targets show before the shift starts, and the meter beside the money.
+  await expect(page.locator('.gh-targets')).toHaveText(/^★ \$\d+\.\d\d · ★★ \$\d+\.\d\d · ★★★ \$\d+\.\d\d$/);
+  await expect(page.locator('.gh-goal')).toHaveText(/^☆☆☆ \$\d+\.\d\d$/);
   await page.screenshot({ path: `${shots}/30-route-start-${city}.png` });
 
   // Clock starts on throttle.
@@ -95,6 +98,7 @@ for (const [city, url] of SHIFTS) test(`a shift on ${city}: start, pick up, drop
   await page.evaluate(() => ((window as any).__qbus.session.game.timeLeft = 0.2));
   await expect(page.locator('[data-k="results"]')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.gh-stars')).toHaveText(/^[★☆]{3}$/);
+  await expect(page.locator('.gh-rtargets span')).toHaveCount(3);
   await expect(page.locator('.gh-record')).toBeVisible();
   await expect(page.locator('.gh-rmissions li')).toHaveCount(3);
   await expect(page.locator('.gh-rmissions li.done')).not.toHaveCount(0);
