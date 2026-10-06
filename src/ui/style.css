@@ -1841,6 +1841,13 @@ body {
   transform: translate(-50%, 0);
 }
 
+/* Between songs: a slimmer card with just the song. */
+.radio-toast.song {
+  padding: 3px 10px 4px;
+  font-size: 13px;
+  border-left-width: 3px;
+}
+
 .radio-toast b {
   display: block;
   font-size: 17px;
