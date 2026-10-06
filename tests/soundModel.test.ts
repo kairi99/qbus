@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AirBrakes, DIESEL, PETROL, engineLoad, engineMix, engineRpm, isBraking, makeLoop } from '../src/core/soundModel';
+import { AirBrakes, DIESEL, LEVELS, PETROL, db, engineLoad, engineMix, engineRpm, isBraking, makeLoop, turboWhistle } from '../src/core/soundModel';
 
 const DT = 1 / 60;
 
@@ -59,6 +59,44 @@ describe('engine mix', () => {
   });
 });
 
+describe('mix levels', () => {
+  // Engine loudness as played, relative to the normalized recordings: gain x volume, at
+  // idle, cruising (60% of top speed, light throttle) and flat out.
+  const engineDb = (kind: 'bus' | 'car', speedFrac: number, load: number) => {
+    const v = kind === 'bus' ? DIESEL : PETROL;
+    return db(LEVELS.engine[kind] * engineMix(engineRpm(speedFrac, load, v).rpm, load, v).volume);
+  };
+
+  it('the engine gets louder with throttle, and the bus louder than the car', () => {
+    for (const kind of ['bus', 'car'] as const) {
+      expect(engineDb(kind, 0.6, 0.3)).toBeGreaterThan(engineDb(kind, 0, 0) + 2);
+      expect(engineDb(kind, 0.6, 1)).toBeGreaterThan(engineDb(kind, 0.6, 0) + 2);
+    }
+    for (const [s, l] of [[0, 0], [0.6, 0.3], [0.9, 1]])
+      expect(engineDb('bus', s, l)).toBeGreaterThan(engineDb('car', s, l) + 2);
+  });
+
+  it('one-shots sit a little over the cruising bus engine, not far over it', () => {
+    const cruise = engineDb('bus', 0.6, 0.3);
+    for (const g of [LEVELS.airRelease, LEVELS.doorOpen, LEVELS.doorClose, LEVELS.timbre, LEVELS.horn.bus]) {
+      expect(db(g) - cruise).toBeGreaterThan(-4);
+      expect(db(g) - cruise).toBeLessThan(6);
+    }
+    // The horn is the loudest thing the driver controls; the air brakes never beat it.
+    expect(LEVELS.horn.bus).toBeGreaterThan(LEVELS.airRelease);
+  });
+
+  it('the turbo only whistles under load, rising with the revs, far under the engine', () => {
+    expect(turboWhistle(DIESEL.idleRpm, 1, DIESEL).gain).toBe(0);
+    expect(turboWhistle(2000, 0, DIESEL).gain).toBe(0);
+    const lo = turboWhistle(1400, 1, DIESEL);
+    const hi = turboWhistle(2200, 1, DIESEL);
+    expect(hi.freq).toBeGreaterThan(lo.freq);
+    expect(hi.gain).toBeGreaterThan(0);
+    expect(db(hi.gain)).toBeLessThan(-30);
+  });
+});
+
 describe('throttle meaning', () => {
   it('pushing against the motion brakes, with no engine load', () => {
     expect(isBraking(-1, 10)).toBe(true);
@@ -81,7 +119,22 @@ describe('air brakes', () => {
       const e = a.step(DT, v, v > 0);
       if (e) events.push(e);
     }
-    expect(events).toEqual(['hiss', 'release']);
+    expect(events).toEqual(['hiss', 'release', 'purge']);
+  });
+
+  it('purges once after a long stop, not if the bus pulls away first', () => {
+    const run = (stopFor: number) => {
+      const a = new AirBrakes();
+      const events: string[] = [];
+      const push = (e: string | null) => e && events.push(e);
+      for (let i = 0; i < 60; i++) push(a.step(DT, 10, false));
+      for (let i = 0; i < 60; i++) push(a.step(DT, 0, true));
+      for (let t = 0; t < stopFor; t += DT) push(a.step(DT, 0, false));
+      for (let i = 0; i < 600; i++) push(a.step(DT, 10, false));
+      return events;
+    };
+    expect(run(8)).toEqual(['release', 'purge']);
+    expect(run(2)).toEqual(['release']);
   });
 
   it('stays quiet when coasting to a stop or crawling at a stop', () => {
