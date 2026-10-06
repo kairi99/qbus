@@ -1742,8 +1742,8 @@ body {
 .radio-toast {
   position: absolute;
   left: 50%;
-  bottom: 96px;
-  transform: translate(-50%, 8px);
+  top: 150px;
+  transform: translate(-50%, -8px);
   padding: 6px 14px 8px;
   border-left: 4px solid #ffc83d;
   border-radius: 6px;
@@ -1775,7 +1775,7 @@ body {
 }
 
 .touch .radio-toast {
-  bottom: 64px;
+  top: 78px;
   max-width: 40vw;
   font-size: 11px;
   overflow: hidden;
