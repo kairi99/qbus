@@ -5,6 +5,7 @@ import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routePaths, routesFor } from '../gameplay/routes';
 import { buildRoadGraph } from '../world/roadGraph';
 import { HILLS_OPTIONS, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
+import { RADIO_OFF, STATIONS } from '../core/radioStations';
 import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
 import { MISSIONS } from '../gameplay/missions';
 import { money, starText } from '../ui/gameHud';
@@ -164,11 +165,13 @@ export class Menu {
             <legend>Hora</legend>
             ${TIME_OPTIONS.map((o) => choice('timeOfDay', o.value, o.label, s.timeOfDay === o.value)).join('')}
           </fieldset>
-          <label class="mn-volume">
-            <span>Volumen</span>
-            <input type="range" min="0" max="100" step="5" value="${Math.round(s.volume * 100)}" name="volume" />
-            <output>${Math.round(s.volume * 100)}%</output>
-          </label>
+          <fieldset>
+            <legend>Radio al arrancar</legend>
+            ${choice('radio', 'off', RADIO_OFF, s.radio === 'off')}
+            ${STATIONS.map((st) => choice('radio', st.id, st.name, s.radio === st.id)).join('')}
+          </fieldset>
+          ${slider('volume', 'Volumen', s.volume)}
+          ${slider('musicVolume', 'Música', s.musicVolume)}
         </div>
       </main>`;
     this.on('[data-go="back"]', back);
@@ -177,15 +180,18 @@ export class Menu {
         if (el.name === 'camera') this.settings.camera = el.value as Settings['camera'];
         if (el.name === 'hills') this.settings.hills = Number(el.value);
         if (el.name === 'timeOfDay') this.settings.timeOfDay = el.value as Settings['timeOfDay'];
+        if (el.name === 'radio') this.settings.radio = el.value as Settings['radio'];
         saveSettings(this.settings);
       }),
     );
-    const vol = this.root.querySelector<HTMLInputElement>('input[name="volume"]')!;
-    vol.addEventListener('input', () => {
-      this.settings.volume = Number(vol.value) / 100;
-      this.root.querySelector('output')!.textContent = `${vol.value}%`;
-      saveSettings(this.settings);
-    });
+    for (const key of ['volume', 'musicVolume'] as const) {
+      const input = this.root.querySelector<HTMLInputElement>(`input[name="${key}"]`)!;
+      input.addEventListener('input', () => {
+        this.settings[key] = Number(input.value) / 100;
+        input.nextElementSibling!.textContent = `${input.value}%`;
+        saveSettings(this.settings);
+      });
+    }
     this.focusFirst();
   }
 
@@ -343,6 +349,11 @@ function placard(r: RouteDef, names: Map<string, string>, checked: boolean, best
       <span class="mn-placard-stops">${list.join(' · ')}</span>
       <span class="mn-placard-meta">${r.stops.length} paradas · ${(r.lengthM / 1000).toFixed(1)} km · ${r.blurb}</span>
     </button>`;
+}
+
+function slider(name: string, label: string, value: number): string {
+  const pct = Math.round(value * 100);
+  return `<label class="mn-volume"><span>${label}</span><input type="range" min="0" max="100" step="5" value="${pct}" name="${name}" /><output>${pct}%</output></label>`;
 }
 
 function choice(name: string, value: string, label: string, checked: boolean): string {
