@@ -17,7 +17,7 @@ export class Hud {
       <div class="hud-mode"><span id="hud-mode"></span><br><span id="hud-fps"></span></div>
       <div class="hud-help">
         <b>W/S</b> acelerar/frenar · <b>A/D</b> girar · <b>Espacio</b> freno de mano · <b>Shift</b> nitro<br>
-        <b>C</b> cámara · <b>Q</b> mirar atrás · <b>H</b> pito · <b>R</b> volver a la calle
+        <b>C</b> cámara · <b>Q</b> mirar atrás · <b>H</b> pito · <b>M</b> radio · <b>R</b> volver a la calle
       </div>
       ${attribution ? `<div class="hud-credit">${attribution}</div>` : ''}
       <div class="hud-flipped" id="hud-flipped">¡Ñaño, te viraste! <span class="keys-only">Presiona <b>R</b></span><span class="touch-only">Toca <b>↺</b></span></div>`;

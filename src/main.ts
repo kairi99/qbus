@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { initRapier, createWorld, addGround, PHYSICS_STEP } from './physics/world';
 import { Input } from './core/input';
 import { BusAudio } from './core/audio';
+import { Radio } from './core/radio';
 import { engineLoad, isBraking } from './core/soundModel';
 import { BusPhysics } from './vehicle/bus';
 import { BusModel } from './vehicle/busModel';
@@ -19,7 +20,8 @@ import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
 import { busById } from './vehicle/buses';
 import { routesFor } from './gameplay/routes';
-import { loadSettings } from './menu/settings';
+import { loadSettings, saveSettings } from './menu/settings';
+import { RadioToast } from './ui/radioToast';
 
 const MAX_FRAME = 0.1;
 
@@ -95,6 +97,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph, route, zone });
   if (touch) new TouchControls(document.body, input);
   audio.setVolume(settings.volume);
+  // The radio keeps its own level (under the engine) and plays straight to the speakers.
+  const radio = new Radio(settings.radio, settings.volume * settings.musicVolume);
+  const radioToast = new RadioToast(hudRoot);
+  radio.onTune = (st) => st && radioToast.show(st.id);
   if (settings.camera === 'cockpit') rig.toggle();
 
   let paused = false;
@@ -116,7 +122,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, rig, input, city, props, renderer, scene, backdrop, session, route, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();
@@ -143,6 +149,11 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading });
       }
       if (action === 'pause') setPaused(!paused);
+      if (action === 'radio') {
+        radioToast.show(radio.next());
+        // The station you leave it on is the one the next game starts with.
+        saveSettings({ ...loadSettings(), radio: radio.station });
+      }
       if (paused) continue;
       if (action === 'restart' && session.game?.over) session.restart();
       if (action === 'horn') session.playerHonk();
@@ -188,6 +199,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       },
       paused ? 0 : dt,
     );
+    radio.update(audio.context, paused);
     const t = bus.body.translation();
     hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, nearestRoad(city, { x: t.x, z: t.z })?.name ?? '');
     // Backdrop first (sky, far hills, landmarks) through a matching long-range camera, then the city.

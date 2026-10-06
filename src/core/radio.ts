@@ -71,7 +71,8 @@ export class Radio {
     this.onAir = null;
     this.crackle();
     if (id === 'off') this.onTune(null);
-    else void this.play(stationById(id)!, this.tuning);
+    // Music turned all the way down: nothing to download.
+    else if (this.volume > 0) void this.play(stationById(id)!, this.tuning);
   }
 
   setVolume(v: number): void {

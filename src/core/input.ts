@@ -9,11 +9,12 @@ export interface DriveInput {
   boost?: boolean;
 }
 
-export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause';
+export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause' | 'radio';
 
-const KEY_ACTIONS: Record<string, Action> = { KeyC: 'camera', KeyR: 'reset', KeyH: 'horn', Enter: 'restart', NumpadEnter: 'restart', Escape: 'pause', KeyP: 'pause' };
-// Standard gamepad mapping: Y toggles camera, Back resets, left stick press honks, Start pauses.
-const PAD_ACTIONS: Record<number, Action> = { 3: 'camera', 8: 'reset', 10: 'horn', 9: 'pause' };
+const KEY_ACTIONS: Record<string, Action> = { KeyC: 'camera', KeyR: 'reset', KeyH: 'horn', Enter: 'restart', NumpadEnter: 'restart', Escape: 'pause', KeyP: 'pause', KeyM: 'radio' };
+// Standard gamepad mapping: Y toggles camera, Back resets, left stick press honks, Start pauses,
+// X changes the radio station.
+const PAD_ACTIONS: Record<number, Action> = { 3: 'camera', 8: 'reset', 10: 'horn', 9: 'pause', 2: 'radio' };
 
 /** What the on-screen touch controls are holding (written by `ui/touchControls.ts`). */
 export interface TouchState {

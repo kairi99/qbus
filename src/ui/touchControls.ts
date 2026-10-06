@@ -13,7 +13,7 @@ type Hold = Exclude<keyof TouchState, 'steer'>;
 /**
  * On-screen driving controls for touch screens, feeding `Input.touch`: the left thumb steers
  * (drag sideways from wherever it lands), the right one works the pedals, nitro, handbrake, horn
- * and looking back; small buttons up top pause, switch the camera and get back on the street.
+ * and looking back; small buttons up top pause, switch the camera, get back on the street and change the radio station.
  * Every control tracks its own finger, so steering, gas and nitro work at the same time.
  */
 export class TouchControls {
@@ -27,6 +27,7 @@ export class TouchControls {
         <button class="tc-small" data-tap="pause" aria-label="Pausa">❚❚</button>
         <button class="tc-small" data-tap="camera" aria-label="Cámara">🎥</button>
         <button class="tc-small" data-tap="reset" aria-label="Volver a la calle">↺</button>
+        <button class="tc-small" data-tap="radio" aria-label="Radio">📻</button>
       </div>
       <button class="tc-small tc-horn" data-hold="horn" data-tap="horn" aria-label="Pito">📯</button>
       <button class="tc-small tc-look" data-hold="lookBack" aria-label="Mirar atrás">👀</button>
