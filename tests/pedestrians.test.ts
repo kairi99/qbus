@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { generateCity } from '../src/world/procCity';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { PedestrianSim, PED_RECYCLE_RADIUS, type BusState } from '../src/gameplay/pedestrians';
-import { pointInPolygon } from '../src/world/geom';
+import { distToSegment, pointInPolygon } from '../src/world/geom';
 import { RoadIndex } from '../src/world/roadIndex';
 import { forward, type CityData, type Vec2 } from '../src/world/cityData';
 
@@ -134,5 +134,26 @@ describe('PedestrianSim dives', () => {
     sim.honk(crossing.pos);
     sim.step(DT, farBus);
     expect(crossing.speed).toBeGreaterThan(before * 1.8);
+  });
+});
+
+describe('PedestrianSim near underpasses (La Mariscal)', () => {
+  it('keeps people off the edges of open cuts (shoulder and retaining wall)', { timeout: 60_000 }, () => {
+    const graph = buildRoadGraph(mariscal);
+    const s = new PedestrianSim(mariscal, graph, { seed: 5, count: 300 });
+    // Stretches of road down in a cut, and roads at street level (one may run over a tunnel).
+    const cut: { a: Vec2; b: Vec2; reach: number }[] = [];
+    for (const r of mariscal.roads)
+      if (r.lift)
+        for (let i = 0; i < r.points.length - 1; i++)
+          if ((r.lift[i] + r.lift[i + 1]) / 2 < -0.3) cut.push({ a: r.points[i], b: r.points[i + 1], reach: r.width / 2 + 1.1 });
+    const level = new RoadIndex(mariscal.roads.filter((r) => !r.lift || r.lift.every((l) => Math.abs(l) <= 0.3)));
+    const nearCut = (p: Vec2) => cut.some((c) => distToSegment(p, c.a, c.b) < c.reach);
+    const bad: string[] = [];
+    for (let t = 0; t < 20; t += DT) {
+      s.step(DT, farBus);
+      for (const p of s.peds) if (nearCut(p.pos) && !level.onAsphalt(p.pos)) bad.push(`ped ${p.id} ${p.mode} at (${p.pos.x.toFixed(1)}, ${p.pos.z.toFixed(1)})`);
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
   });
 });
