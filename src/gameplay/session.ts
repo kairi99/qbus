@@ -23,7 +23,7 @@ import { NavArrow } from '../ui/arrow';
 import { GameHud, money, RATING_LABEL, TRICK_LABEL } from '../ui/gameHud';
 import { LINES, SPEAKER, type LineKind } from './lines';
 import type { RoadGraph } from '../world/roadGraph';
-import { groundHeightAt, inPlayArea, nearestRoad } from '../world/cityData';
+import { groundHeightAt, inPlayArea, nearestRoad, terrainAt } from '../world/cityData';
 import { pointInPolygon } from '../world/geom';
 import { TrafficSim, type Obstacle } from './traffic';
 import { TrafficBodies, laneSurface } from './trafficBodies';
@@ -201,9 +201,10 @@ export class GameSession {
       this.peds.recycle({ pos: busPos, heading: bus.heading });
     }
     const obstacles: Obstacle[] = [
-      { id: 'bus', pos: busPos, heading: bus.heading, length: bus.preset.body.length, width: bus.preset.body.width },
+      // The bus at its level (in an underpass it doesn't hold up the street over it), people on the street.
+      { id: 'bus', pos: busPos, heading: bus.heading, length: bus.preset.body.length, width: bus.preset.body.width, lift: bus.roadHeight() - terrainAt(this.d.city, busPos) },
       ...this.trafficBodies.obstacles(),
-      ...this.peds.peds.filter((p) => p.onRoad).map((p) => ({ id: `ped${p.id}`, pos: p.pos, heading: p.heading, length: 0.8, width: 0.8 })),
+      ...this.peds.peds.filter((p) => p.onRoad).map((p) => ({ id: `ped${p.id}`, pos: p.pos, heading: p.heading, length: 0.8, width: 0.8, lift: 0 })),
     ];
     for (const e of this.traffic.step(dt, obstacles)) {
       const d = Math.hypot(e.pos.x - t.x, e.pos.z - t.z);

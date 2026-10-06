@@ -18,10 +18,7 @@ import { TRAFFIC } from './thresholds';
 
 // Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS): the test's own
 // first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
-known({
-  "no car stuck in cut Av. 12 de Octubre @(-42,734)":
-    "1 found: seed 1 car 21 on e349 at (-25.8, 710.4) t 38.8 s",
-});
+known({});
 
 const LIST = 8;
 const base = cityAndCatalog();
