@@ -10,12 +10,14 @@ import { RouteGame, type RouteStop } from './routeGame';
  * 16 flat out with handbrake drifts (which earns it 0.6 to 4 cents a second in tricks).
  *  - 1 star: a steady, clean shift; fares and tips only.
  *  - 2 stars: a quick shift with some tricks and a mission done.
- *  - 3 stars: an expert run flat out, chaining tricks all the way, two missions done.
+ *  - 3 stars: an expert run flat out, chaining tricks all the way (3 cents a second: more than
+ *    the autopilot, so it takes combos with close calls in traffic), two missions done.
+ * The autopilot's shifts are pinned in tests/stars.test.ts: it never gets 3 stars.
  */
 export const STAR_TIERS = [
   { pace: 9.5, tricks: 0, missions: 0 },
   { pace: 13, tricks: 0.5, missions: 1 },
-  { pace: 16, tricks: 2, missions: 2 },
+  { pace: 16, tricks: 3, missions: 2 },
 ] as const;
 /** Reference capacity: the thresholds don't depend on the bus. */
 const CAPACITY = 40;

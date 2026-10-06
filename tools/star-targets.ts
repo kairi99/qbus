@@ -1,3 +1,7 @@
+/**
+ * Star targets of every route (both zones), beside the fares a model driver earns at the
+ * autopilot's paces (tools/sim-shift.ts). Usage: npx tsx tools/star-targets.ts
+ */
 import { readFileSync } from 'node:fs';
 import { generateCity } from '../src/world/procCity';
 import { buildRoadGraph } from '../src/world/roadGraph';
@@ -14,6 +18,6 @@ for (const [n, city] of [
     const args = [routeStops(city, r), legs, startPose(city, g, r).pos] as const;
     const th = starThresholds(...args);
     const fares = [9.5, 13.2, 16.2].map((p) => $([1, 2, 3].reduce((s, seed) => s + modelShift(...args, p, seed).cents, 0) / 3));
-    console.log(n.padEnd(8), r.id.padEnd(24), String(r.stops.length).padStart(2), 'stops | model fares @9.5/13.2/16.2 m/s (seeds 1-3):', fares.join(' / '), '| stars:', th.map($).join(' / '));
+    console.log(n.padEnd(8), r.id.padEnd(24), String(r.stops.length).padStart(2), 'stops | fares at 9.5/13.2/16.2 m/s:', fares.join(' / '), '| stars:', th.map($).join(' / '));
   }
 }
