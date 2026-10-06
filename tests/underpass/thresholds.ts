@@ -51,6 +51,11 @@ export const NAV = {
   SNAP_TOL: 1.5,
   /** Bus box placed at a snap pose, lifted this much, must not touch anything solid (m). */
   SNAP_LIFT: 0.35,
+  /**
+   * ...and walls may cut into that box at most this deep (a straight box over a sag or crest
+   * grazes the ramp's own ground by a few centimeters: not a wall).
+   */
+  SNAP_DEPTH: 0.25,
 };
 
 /** Geometry/colliders. */

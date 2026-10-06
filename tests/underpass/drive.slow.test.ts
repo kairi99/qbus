@@ -66,7 +66,7 @@ export function driveProblems(r: DriveResult): string[] {
   return out;
 }
 
-for (const s of base.structures)
+for (const s of base.structures.filter((x) => x.passages.length))
   describe(s.id, () => {
     for (const p of s.passages)
       for (const [vehicle, kmh] of DRIVE.RUNS)
