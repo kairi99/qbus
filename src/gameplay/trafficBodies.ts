@@ -5,20 +5,55 @@ const IN_LANE = groups(GROUP.TRAFFIC, GROUP.ALL & ~GROUP.STATIC);
 const WRECK = groups(GROUP.ALL, GROUP.ALL);
 import type { CityData, Vec2 } from '../world/cityData';
 import { groundHeightAt } from '../world/cityData';
-import { type RoadGraph, edgeY, projectOnPath } from '../world/roadGraph';
+import { surfaceY } from '../world/elevation';
+import { type RoadGraph, edgeLift, edgeY, projectOnPath } from '../world/roadGraph';
 import type { Obstacle, TrafficSim } from './traffic';
 
+const STATIC_ONLY = groups(GROUP.ALL, GROUP.STATIC);
+/** Lanes within this of a bridge, underpass or ramp check the solid road under them (m). */
+const NEAR_GRADE = 20;
+/** The solid road is looked for this far above and below the computed surface (m). */
+const PROBE = 0.6;
+
 /**
- * Road surface under car `i` at `p`: its lane's own height on a ramp, bridge or underpass (or
- * the junction's, mid-turn), else the ground.
+ * Road surface under car `i` at `p`: on a ramp, bridge or underpass its road's own surface
+ * there (the same `surfaceY` the road and its collider are built from, cross slope and all),
+ * mid-turn the junction's height, else the ground. With `world`, on and near grade-separated
+ * roads (where the ground is dug or patched) it's the solid surface found by a short ray
+ * down within `PROBE` of that, so cars ride exactly what the bus drives on.
  */
-export function laneSurface(city: CityData, graph: RoadGraph, sim: TrafficSim): (p: Vec2, i: number) => number {
+export function laneSurface(city: CityData, graph: RoadGraph, sim: TrafficSim, world?: RAPIER.World): (p: Vec2, i: number) => number {
+  // Edges on or near a lifted road (by their centerline points against every lifted point).
+  const cell = (x: number, z: number) => `${Math.floor(x / NEAR_GRADE)},${Math.floor(z / NEAR_GRADE)}`;
+  const lifted = new Set<string>();
+  for (const e of graph.edges) if (e.lift) e.center.pts.forEach((q, k) => Math.abs(e.lift![k]) > 0.3 && lifted.add(cell(q.x, q.z)));
+  const nearCell = (q: Vec2) => {
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (lifted.has(cell(q.x + dx * NEAR_GRADE, q.z + dz * NEAR_GRADE))) return true;
+    return false;
+  };
+  const near = graph.edges.map((e) => !!world && e.center.pts.some(nearCell));
+  const nodeNear = graph.nodes.map((n) => [...n.in, ...n.out].some((id) => near[id]));
+  const ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+  const solid = (p: Vec2, y: number) => {
+    ray.origin.x = p.x;
+    ray.origin.y = y + PROBE;
+    ray.origin.z = p.z;
+    const hit = world!.castRay(ray, 2 * PROBE, true, undefined, STATIC_ONLY);
+    return hit ? y + PROBE - hit.timeOfImpact : y;
+  };
   return (p, i) => {
     const car = sim.cars[i];
+    if (car.turn) {
+      const y = graph.nodes[car.turn.node].y ?? groundHeightAt(city, p);
+      return nodeNear[car.turn.node] ? solid(p, y) : y;
+    }
     const e = graph.edges[car.edge];
-    if (car.turn) return graph.nodes[car.turn.node].y ?? groundHeightAt(city, p);
-    if (!e.y) return groundHeightAt(city, p);
-    return edgeY(e, projectOnPath(e.center, p).s)!;
+    let y: number;
+    if (e.y) {
+      const s = projectOnPath(e.center, p).s;
+      y = surfaceY(city, { y: edgeY(e, s)!, lift: edgeLift(e, s) }, p);
+    } else y = groundHeightAt(city, p);
+    return near[e.id] ? solid(p, y) : y;
   };
 }
 
@@ -67,6 +102,8 @@ export class TrafficBodies {
     });
     this.freeFor = sim.cars.map(() => 0);
     this.generation = sim.cars.map((c) => c.generation);
+    // On the road from the first frame (at its height and pitch), not risen from y = 0.
+    sim.cars.forEach((c, i) => c.state === 'driving' && this.drive(i));
     this.syncEnabled();
   }
 
@@ -82,14 +119,9 @@ export class TrafficBodies {
       let vz = (c.pos.z - t.z) / dt;
       const v = Math.hypot(vx, vz);
       if (v > MAX_SPEED) (vx *= MAX_SPEED / v), (vz *= MAX_SPEED / v);
-      // Ride on the ground: height and nose-up/down pitch come from the terrain under the car.
-      const f = { x: Math.cos(c.heading), z: -Math.sin(c.heading) };
-      const half = c.kind.length / 2;
-      const front = this.groundAt({ x: c.pos.x + f.x * half, z: c.pos.z + f.z * half }, i);
-      const back = this.groundAt({ x: c.pos.x - f.x * half, z: c.pos.z - f.z * half }, i);
-      const y = (front + back) / 2 + c.kind.height / 2 + 0.02;
-      b.setLinvel({ x: vx, y: (y - t.y) / dt, z: vz }, true);
-      b.setRotation(yawPitch(c.heading, Math.atan2(front - back, c.kind.length)), true);
+      this.ride(i);
+      b.setLinvel({ x: vx, y: (this.rideY - t.y) / dt, z: vz }, true);
+      b.setRotation(yawPitch(c.heading, this.ridePitch), true);
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     });
   }
@@ -158,8 +190,9 @@ export class TrafficBodies {
     this.generation[i] = c.generation;
     const b = this.bodies[i];
     b.setEnabled(true);
-    b.setTranslation({ x: c.pos.x, y: this.groundAt(c.pos, i) + c.kind.height / 2 + 0.02, z: c.pos.z }, true);
-    b.setRotation(yaw(c.heading), true);
+    this.ride(i);
+    b.setTranslation({ x: c.pos.x, y: this.rideY, z: c.pos.z }, true);
+    b.setRotation(yawPitch(c.heading, this.ridePitch), true);
     b.setLinvel({ x: 0, y: 0, z: 0 }, true);
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     b.setEnabledRotations(false, true, false, true);
@@ -167,6 +200,28 @@ export class TrafficBodies {
     b.setAngularDamping(0);
     this.colliders[i].setFriction(0);
     this.colliders[i].setCollisionGroups(IN_LANE);
+  }
+
+  private rideY = 0;
+  private ridePitch = 0;
+  private wheel = { x: 0, z: 0 };
+
+  /**
+   * Ride on the road: body height (`rideY`) and nose-up/down pitch (`ridePitch`) of car `i`
+   * from the surface under its front and back.
+   */
+  private ride(i: number): void {
+    const c = this.sim.cars[i];
+    const fx = Math.cos(c.heading);
+    const fz = -Math.sin(c.heading);
+    const half = c.kind.length / 2;
+    const w = this.wheel;
+    (w.x = c.pos.x + fx * half), (w.z = c.pos.z + fz * half);
+    const front = this.groundAt(w, i);
+    (w.x = c.pos.x - fx * half), (w.z = c.pos.z - fz * half);
+    const back = this.groundAt(w, i);
+    this.rideY = (front + back) / 2 + c.kind.height / 2 + 0.02;
+    this.ridePitch = Math.atan2(front - back, c.kind.length);
   }
 
   /** Parked cars (over the performance budget) are taken out of the physics world. */

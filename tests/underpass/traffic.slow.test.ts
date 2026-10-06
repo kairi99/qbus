@@ -19,12 +19,8 @@ import { TRAFFIC } from './thresholds';
 // Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS): the test's own
 // first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
 known({
-  "traffic rides at the road's height in cut Av. 10 de Agosto @(-172,-870)":
-    "2 found: seed 1 car 31 on e564 at (-211.3, -785.2, y 21.47) t 0.5 s: floating 0.41 m; seed 2 car 11 on e564 at (-212.5, -782.6, y 21.44) t 0.5 s: floating 0.39 m",
   "no car stuck in cut Av. 12 de Octubre @(-42,734)":
     "1 found: seed 1 car 21 on e349 at (-25.8, 710.4) t 38.8 s",
-  "traffic rides at the road's height in cut Av. 12 de Octubre @(-42,734)":
-    "3 found: seed 2 car 12 on e589 at (-119.6, 779.6, y 21.27) t 3.6 s: sunk 0.36 m; seed 2 car 12 on e589 at (-114.9, 776.7, y 20.52) t 4.1 s: sunk 0.42 m",
 });
 
 const LIST = 8;
@@ -58,7 +54,7 @@ function run(s: Structure): Run {
     const sim = new TrafficSim(graph, city, { seed, count: TRAFFIC.CARS });
     sim.setBudget(TRAFFIC.CARS, s.center);
     sim.recycle({ pos: s.center, heading: 0 }, true);
-    const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim));
+    const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim, world));
     const prevEdge = sim.cars.map((c) => c.edge);
     const prevState = sim.cars.map((c) => c.state);
     const slow = sim.cars.map(() => 0);

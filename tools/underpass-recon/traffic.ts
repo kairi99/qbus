@@ -35,7 +35,7 @@ async function main() {
   const graph = buildRoadGraph(city);
   const world = createWorld();
   buildCity(city, world, new THREE.Scene(), graph);
-  const surface = (sim: TrafficSim) => laneSurface(city, graph, sim);
+  const surface = (sim: TrafficSim) => laneSurface(city, graph, sim, world);
   const f = (p: { x: number; z: number }) => `(${p.x.toFixed(0)}, ${p.z.toFixed(0)})`;
   for (const [name, focus] of SITES) {
     for (let seed = 1; seed <= SEEDS; seed++) {

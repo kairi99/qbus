@@ -120,7 +120,7 @@ export class GameSession {
     const graph = d.graph;
     this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 } });
     this.traffic.setBudget(this.budget, spawn);
-    this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic));
+    this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic, d.world));
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
     this.nearMiss = new NearMissDetector(d.world, d.bus, (c) => this.trafficBodies.isCar(c));
     this.trafficView = new TrafficView(d.scene, this.traffic, this.trafficBodies);
