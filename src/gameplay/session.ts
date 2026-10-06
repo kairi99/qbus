@@ -445,7 +445,9 @@ export class GameSession {
       this.path = from && to ? this.nav.route(from, to) : null;
     }
     const close = Math.hypot(zone.x - here.x, zone.z - here.z) < 45;
-    if (!this.game.over) this.arrow.point(close || !this.path ? zone : this.nav.guidePoint(this.path, here, 35));
+    // The arrow follows the path on the bus's own level (not the street over its underpass).
+    const lift = bus.roadHeight() - terrainAt(this.d.city, here);
+    if (!this.game.over) this.arrow.point(close || !this.path ? zone : this.nav.guidePoint(this.path, here, 35, lift));
     if (this.minimapClock >= 1 / 30) {
       this.minimapClock = 0;
       const stops = this.game.route.map((r) => r.zone);

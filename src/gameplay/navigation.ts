@@ -1,5 +1,5 @@
 import type { Vec2 } from '../world/cityData';
-import { type LaneEdge, type RoadGraph, dirAt, edgeY, lanePoint, projectOnPath } from '../world/roadGraph';
+import { type LaneEdge, type RoadGraph, dirAt, edgeLift, edgeY, lanePoint, projectOnPath } from '../world/roadGraph';
 
 /** A spot on the lane graph: an edge and a distance along it. */
 export interface GraphSpot {
@@ -11,8 +11,13 @@ export interface GraphSpot {
 export interface NavPath {
   edges: number[];
   points: Vec2[];
+  /** Lift off the ground at each point (below 0 in an underpass, above on a bridge). */
+  lifts: number[];
   length: number;
 }
+
+/** Path points whose lift is this far from the bus's are on another level (over or under it). */
+const LEVEL_SEP = 2;
 
 const SEARCH = 40;
 /**
@@ -143,8 +148,12 @@ export class Navigator {
     return { pos: lanePoint(e, spot.s, 0), heading: Math.atan2(-d.z, d.x), y: edgeY(e, spot.s) };
   }
 
-  /** The point `ahead` meters along the path past where `p` projects onto it. */
-  guidePoint(path: NavPath, p: Vec2, ahead: number): Vec2 {
+  /**
+   * The point `ahead` meters along the path past where `p` projects onto it. With `lift` (the
+   * bus's height off the ground), stretches of the path on another level don't count, so a
+   * path that later passes over the underpass the bus is in still guides it along the bottom.
+   */
+  guidePoint(path: NavPath, p: Vec2, ahead: number, lift?: number): Vec2 {
     const pts = path.points;
     if (pts.length < 2) return pts[0];
     // Project onto the segments, not just the vertices: a turn across a big junction is one
@@ -153,6 +162,7 @@ export class Navigator {
     let bestU = 0;
     let bestD = Infinity;
     for (let i = 0; i < pts.length - 1; i++) {
+      if (lift !== undefined && Math.abs(path.lifts[i] - lift) > LEVEL_SEP && Math.abs(path.lifts[i + 1] - lift) > LEVEL_SEP) continue;
       const [a, b] = [pts[i], pts[i + 1]];
       const dx = b.x - a.x;
       const dz = b.z - a.z;
@@ -177,20 +187,22 @@ export class Navigator {
 
   private build(chain: number[], s0: number, s1: number): NavPath {
     const points: Vec2[] = [];
+    const lifts: number[] = [];
     let length = 0;
     chain.forEach((id, i) => {
       const e = this.graph.edges[id];
       const a = i === 0 ? s0 : 0;
       const b = i === chain.length - 1 ? s1 : e.len;
-      for (let s = a; s < b; s += POINT_STEP) points.push(lanePoint(e, s, 0));
+      for (let s = a; s < b; s += POINT_STEP) points.push(lanePoint(e, s, 0)), lifts.push(edgeLift(e, s));
       points.push(lanePoint(e, b, 0));
+      lifts.push(edgeLift(e, b));
       length += Math.max(0, b - a);
       if (i < chain.length - 1) {
         const n = this.graph.edges[chain[i + 1]];
         length += Math.hypot(n.a.x - e.b.x, n.a.z - e.b.z);
       }
     });
-    return { edges: chain, points, length };
+    return { edges: chain, points, lifts, length };
   }
 }
 

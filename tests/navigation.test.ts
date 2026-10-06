@@ -58,3 +58,25 @@ describe.each([
     expect(onPath).toBe(true);
   });
 });
+
+describe('Navigator.guidePoint', () => {
+  const nav = new Navigator(buildRoadGraph(grid));
+  // Down through an underpass heading +x, round a loop, then back west over it on the street.
+  const points = [
+    { x: 0, z: 0 },
+    { x: 50, z: 0 },
+    { x: 100, z: 0 },
+    { x: 100, z: 50 },
+    { x: 50, z: 50 },
+    { x: 50, z: 0.5 },
+    { x: 50, z: -50 },
+  ];
+  const path = { edges: [], points, lifts: [-6, -6, -6, 0, 0, 0, 0], length: 300 };
+
+  it('follows the stretch of the path on the bus level where it passes over itself', () => {
+    // Down in the underpass: ahead along the bottom, not along the street over it.
+    expect(nav.guidePoint(path, { x: 50, z: 0 }, 20, -6).x).toBeCloseTo(70, 0);
+    // On the street over it: southward along the last stretch.
+    expect(nav.guidePoint(path, { x: 50, z: 0 }, 20, 0).z).toBeLessThan(-15);
+  });
+});
