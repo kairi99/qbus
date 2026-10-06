@@ -135,7 +135,7 @@ for (const s of city.stops) {
   const n = nearRamp(s.pos, 15);
   if (n) console.log(`stop ${s.id} ${s.name} ${f(s.pos)}: near ramp ${n}`);
 }
-for (const st of city.stations) {
+for (const st of city.stations ?? []) {
   const n = nearRamp(st.pos, st.length / 2);
   if (n) console.log(`station ${st.name} ${f(st.pos)}: near ramp ${n}`);
 }

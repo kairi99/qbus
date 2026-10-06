@@ -6,7 +6,7 @@ import { terrainAt } from './cityData';
 import { type RoadProfile, profileAt, projectOnRoad, roadProfiles, surfaceY } from './elevation';
 import { pointInPolygon } from './geom';
 import type { ChunkedMeshBuilder } from './meshBuilder';
-import { type RoadGraph, convexHull } from './roadGraph';
+import { type RoadGraph, convexHull, pointAt } from './roadGraph';
 
 /** Deck slab thickness under a bridge's road surface. */
 const SLAB = 0.8;
@@ -103,10 +103,15 @@ function dirOnRoad(r: Road, s: number): Vec2 {
 }
 
 const PARALLEL = 0.7;
-/** The ground is dug this far past the shoulder: under the retaining wall, where its slope is hidden. */
-const UNDER_WALL = WALL + 0.15;
-/** Concrete walkway along the top of a retaining wall, over the dug ground behind it. */
-const APRON = 1.4;
+/**
+ * The ground is dug this far past the shoulder, so its slope up to the street is hidden behind
+ * the retaining wall. A patch triangle spans up to a cell's diagonal: any vertex within that of
+ * the wall's inner face must be down at the floor, or the triangle climbs in front of the wall
+ * (concrete "teeth" along its foot).
+ */
+const UNDER_WALL = FINE * Math.SQRT2 + 0.05;
+/** Concrete walkway along the top of a retaining wall, over the dug ground behind it (and its slope back up). */
+const APRON = UNDER_WALL + FINE * Math.SQRT2 - WALL + 0.1;
 /** Ground over a cut only stays on as a roof where there's headroom under it (a bus is ~3 m). */
 const HEADROOM = 3.6;
 /** How far the ground over an underpass reaches beyond the edge of a street crossing over it. */
@@ -177,6 +182,22 @@ function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
 }
 
 /**
+ * Whether a street alongside keeps the ground at `p` (`d` off `l`'s centerline, `s` along it).
+ * Digging past the cut (`reach` > 0, under the retaining wall), what counts is where the wall
+ * stands: the wall stops where a rival's ground begins, so `p` is dug if the spot `reach - WALL`
+ * nearer the road (the wall's inner face, for the deepest point dug) isn't claimed.
+ */
+function dugAway(l: Lowered, p: Vec2, s: number, d: number, reach: number): boolean {
+  if (reach <= WALL || d <= 1e-6) return claimedByRival(l, p, s, d);
+  // Never under the street's own asphalt (its ground is all that holds it up).
+  if (d > l.half && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2 + 0.3)) return true;
+  const pull = Math.min(d, reach - WALL);
+  const c = pointAt({ pts: l.road.points, cum: l.profile.cum, len: l.profile.cum[l.profile.cum.length - 1] }, s);
+  const q = { x: p.x + ((c.x - p.x) * pull) / d, z: p.z + ((c.z - p.z) * pull) / d };
+  return claimedByRival(l, q, s, d - pull);
+}
+
+/**
  * Inside an underpass cut (at `p`): how deep its floor is there and which way the cut runs (the
  * nearest cut, where two meet). `reach` widens the cut past the shoulders, e.g. to dig the
  * ground under the retaining walls so its slope stays hidden behind them.
@@ -191,7 +212,7 @@ function trenchAt(lowered: Lowered[], p: Vec2, sunk: SunkJunction[] = [], reach 
     const { s, d } = projectOnRoad(l.road, p);
     if (d > l.half + reach) continue;
     const h = profileAt(l.profile, s);
-    if (h.lift >= DUG || claimedByRival(l, p, s, d)) continue;
+    if (h.lift >= DUG || dugAway(l, p, s, d, reach)) continue;
     const y = surfaceY(l.city, h, p);
     const rank = d <= l.road.width / 2 ? y - 1000 : d;
     if (!best || rank < best.rank) best = { y, road: l.index, dir: dirOnRoad(l.road, s), rank };
@@ -515,7 +536,10 @@ export function buildGrades(
           const apron = { a: edge(a, side * (ra + APRON)), b: edge(b, side * (rb + APRON)) };
           const apronMid = { x: (apron.a.x + apron.b.x) / 2, z: (apron.a.z + apron.b.z) / 2 };
           if (!onTraffic(l.index, apronMid, ground(apronMid))) {
-            mb.quad(v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04), CONCRETE);
+            const walk = [v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04)];
+            mb.quad(walk[0], walk[1], walk[2], walk[3], CONCRETE);
+            // Solid too: it's all there is over the pit behind the wall.
+            solidHull([...walk, ...walk.map((q) => ({ x: q.x, y: q.y - 0.25, z: q.z }))]);
           }
         }
         // Solid exactly where the wall is drawn: from its inner face out to its outer face.
