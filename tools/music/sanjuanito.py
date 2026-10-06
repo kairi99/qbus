@@ -89,12 +89,12 @@ def build() -> tuple[Song, dict]:
 
     song.track("quena", gain=0.55, pan=-0.12, sends={"room": 0.35})
     song.track("rondador", gain=0.5, pan=0.18, sends={"room": 0.45})
-    song.track("charango", gain=0.42, pan=0.35, sends={"room": 0.2})
-    song.track("guitar", gain=0.55, pan=-0.35, sends={"room": 0.18})
-    song.track("bass", gain=0.62, pan=0.0)
-    song.track("bombo", gain=0.85, pan=0.0, sends={"room": 0.12})
-    song.track("rim", gain=0.25, pan=0.1, sends={"room": 0.15})
-    song.track("chajchas", gain=0.3, pan=0.45, sends={"room": 0.2})
+    song.track("charango", gain=1.3, pan=0.35, sends={"room": 0.2})
+    song.track("guitar", gain=1.2, pan=-0.35, sends={"room": 0.18})
+    song.track("bass", gain=0.32, pan=0.0)
+    song.track("bombo", gain=0.4, pan=0.0, sends={"room": 0.12})
+    song.track("rim", gain=0.6, pan=0.1, sends={"room": 0.15})
+    song.track("chajchas", gain=1.0, pan=0.45, sends={"room": 0.2})
 
     live = dict(jitter=0.004, vel_var=0.07)
 
@@ -180,7 +180,7 @@ def build() -> tuple[Song, dict]:
         strum_bar(bar + i, c, 0.8, charango=False)
         bass_bar(bar + i, c)
         drums_bar(bar + i, 0.9)
-    song.track("charango_solo", gain=0.5, pan=0.2, sends={"room": 0.3})
+    song.track("charango_solo", gain=1.6, pan=0.2, sends={"room": 0.3})
     song.play("charango_solo", s.pluck, solo, bar, jitter=0.003, vel_var=0.1, bright=0.85, decay=0.45, pos=0.12, damp=0.04)
     song.play("charango_solo", s.pluck, solo, bar, gain=0.6, jitter=0.004, vel_var=0.1, bright=0.85, decay=0.45, pos=0.2, damp=0.04)
     bar += 8
