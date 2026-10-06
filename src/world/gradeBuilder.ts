@@ -153,12 +153,15 @@ function sunkJunctions(city: CityData, graph: RoadGraph): SunkJunction[] {
     .map((n) => ({ poly: n.hull!, y: n.y!, box: boxOf(n.hull!, 0) }));
 }
 
-/** Over a lowered road's asphalt, where it's dug in. */
+/**
+ * Over a lowered road's floor (asphalt and shoulders, which are solid), where it's dug in. (A
+ * bus's overhang sweeps the shoulder on a bend: ground sloping up there is a wall to it.)
+ */
 function overRoadFloor(lowered: Lowered[], p: Vec2): boolean {
   return lowered.some((l) => {
     if (!inBox(l.box, p)) return false;
     const { s, d } = projectOnRoad(l.road, p);
-    return d <= l.road.width / 2 && profileAt(l.profile, s).lift < DUG;
+    return d <= l.half && profileAt(l.profile, s).lift < DUG;
   });
 }
 

@@ -30,7 +30,7 @@ async function main() {
           let imp = 0;
           for (let i = 0; i < m.numContacts(); i++) imp += m.contactImpulse(i);
           const n = m.normal();
-          const lp = m.localContactPoint2(0);
+          const lp = m.localContactPoint1(0);
           hits.push(`${RAPIER.ShapeType[other.shapeType()]} imp ${imp.toFixed(0)} n(${n.x.toFixed(2)},${n.y.toFixed(2)},${n.z.toFixed(2)}) at ${lp ? `(${lp.x.toFixed(1)},${lp.y.toFixed(2)},${lp.z.toFixed(1)})` : '-'}`);
         });
       });
