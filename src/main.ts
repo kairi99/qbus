@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { initRapier, createWorld, addGround, PHYSICS_STEP } from './physics/world';
+import { staticObstacles } from './physics/cameraObstacles';
 import { Input } from './core/input';
 import { BusAudio } from './core/audio';
 import { Radio } from './core/radio';
@@ -89,7 +90,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
 
   const input = new Input();
   const audio = new BusAudio(preset.kind === 'car' ? 'car' : 'bus');
-  const rig = new CameraRig(camera);
+  // The chase camera stays out of walls and roofs (tunnels, cuts, buildings).
+  const rig = new CameraRig(camera, staticObstacles(world));
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
   const hud = new Hud(hudRoot, city.attribution);
   // Records are kept per zone and route (a generated city other than the default seed is its own zone).

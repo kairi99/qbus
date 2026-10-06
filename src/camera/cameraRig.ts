@@ -131,7 +131,9 @@ export class CameraRig {
   private avoid(dt: number, height: number): void {
     const obs = this.obstacles!;
     const p = this.pivot.copy(this.busPos);
-    p.y += height / 2 + 0.6;
+    // From over the bus (below a low roof just high enough for it), not from its center: the
+    // camera mustn't dive under the bus's own roof line.
+    p.y += Math.min(height / 2, 1);
     const ease = this.first ? 1 : 1 - Math.exp(-dt * EASE_OUT);
     const above = Math.max(0, this.ideal.y - p.y);
     const up = obs.cast(p.x, p.y, p.z, 0, 1, 0, above + ROOF_CLEAR);
