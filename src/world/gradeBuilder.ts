@@ -117,12 +117,16 @@ const HEADROOM = 3.6;
 /** How far the ground over an underpass reaches beyond the edge of a street crossing over it. */
 const ROOF_MARGIN = 3;
 
-/** Another lowered road's asphalt (plus a little) covers `p`: its floor, not ours, goes there. */
-function otherFloor(lowered: Lowered[], self: Lowered, p: Vec2): boolean {
+/**
+ * Another lowered road's asphalt (plus a little) covers `p` at about our floor `y`: its floor, not
+ * ours, goes there. (One well above ours is a ramp alongside near its top: our wall stands under it.)
+ */
+function otherFloor(lowered: Lowered[], self: Lowered, p: Vec2, y: number): boolean {
   return lowered.some((o) => {
     if (o === self || !inBox(o.box, p)) return false;
     const { s, d } = projectOnRoad(o.road, p);
-    return d < o.road.width / 2 + 0.3 && profileAt(o.profile, s).lift < DUG;
+    const h = profileAt(o.profile, s);
+    return d < o.road.width / 2 + 0.3 && h.lift < DUG && Math.abs(h.y - y) < 2.5;
   });
 }
 
@@ -246,7 +250,12 @@ function coverTest(city: CityData, graph: RoadGraph, lowered: Lowered[]): (p: Ve
         if (Math.abs(od.x * dir.x + od.z * dir.z) > PARALLEL && !stacked) return false;
       }
       const prof = profiles[i];
-      return !prof || profileAt(prof, s).lift > DUG;
+      if (!prof) return true;
+      const h = profileAt(prof, s);
+      if (h.lift > DUG) return true;
+      // A ramp near the top of its climb, crossing well above the cut's floor, roofs it like any street.
+      const cut = cutRoad !== undefined && cutRoad >= 0 ? profiles[cutRoad] : undefined;
+      return !!cut && h.y - profileAt(cut, projectOnRoad(city.roads[cutRoad!], p).s).y > HEADROOM;
     });
 }
 
@@ -472,7 +481,7 @@ export function buildGrades(
         const o0 = side * w2;
         const o1 = side * l.half;
         const shoulderMid = { x: (edge(a, (o0 + o1) / 2).x + edge(b, (o0 + o1) / 2).x) / 2, z: (edge(a, (o0 + o1) / 2).z + edge(b, (o0 + o1) / 2).z) / 2 };
-        if (otherFloor(lowered, l, shoulderMid)) continue;
+        if (otherFloor(lowered, l, shoulderMid, (a.y + b.y) / 2)) continue;
         deck.quad(fv(a, o0), fv(b, o0), fv(b, o1), fv(a, o1));
         mb.quad(fv(a, o0, 0.01, back), fv(b, o0, 0.01, fore), fv(b, o1, 0.01, fore), fv(a, o1, 0.01, back), CONCRETE);
         // Retaining wall just outside the shoulder, or halfway to a street alongside, unless the
@@ -511,7 +520,6 @@ export function buildGrades(
         const other = through(l.index, mid, Math.min(a.y, b.y) + 0.5, Math.min(ga, gb) + top - 0.1);
         if (other !== null && other < Math.min(ga, gb) - 0.6) continue;
         if (other !== null) top = -0.05;
-        const flush = roof || other !== null;
         const reachOut = (q: Vec2, sec: Sec, along: number) => ({ x: q.x + sec.d.x * along, z: q.z + sec.d.z * along });
         const inner = { a: reachOut(edge(a, side * (ra - WALL)), a, back), b: reachOut(edge(b, side * (rb - WALL)), b, fore) };
         const outer = { a: reachOut(edge(a, side * ra), a, back), b: reachOut(edge(b, side * rb), b, fore) };
@@ -522,16 +530,21 @@ export function buildGrades(
         mb.quad(v3(outer.a, a.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.b, gb + top), v3(outer.a, ga + top), CONCRETE);
         mb.quad(v3(inner.a, a.y - 0.3), v3(outer.a, a.y - 0.3), v3(outer.a, ga + top), v3(inner.a, ga + top), CONCRETE);
         mb.quad(v3(inner.b, b.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.b, gb + top), v3(inner.b, gb + top), CONCRETE);
-        if (!flush) {
-          // Walkway along the top, over the ground dug under the wall (unless a street is there).
-          const apron = { a: edge(a, side * (ra + APRON)), b: edge(b, side * (rb + APRON)) };
-          const apronMid = { x: (apron.a.x + apron.b.x) / 2, z: (apron.a.z + apron.b.z) / 2 };
-          if (!onTraffic(l.index, apronMid, ground(apronMid))) {
-            const walk = [v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04)];
-            mb.quad(walk[0], walk[1], walk[2], walk[3], CONCRETE);
-            // Solid too: it's all there is over the pit behind the wall.
-            solidHull([...walk, ...walk.map((q) => ({ x: q.x, y: q.y - 0.25, z: q.z }))]);
-          }
+        if (!roof) {
+          // Walkway along the top, over the ground dug behind the wall (also where a street at
+          // ground level runs alongside: there it stops at the street's asphalt).
+          const width = (sec: Sec, o: number) => {
+            let w = APRON;
+            while (w > 0.25 && onTraffic(l.index, edge(sec, side * (o + w)), ground(edge(sec, side * (o + w))))) w -= 0.25;
+            return w;
+          };
+          const wa = width(a, ra);
+          const wb = width(b, rb);
+          const apron = { a: reachOut(edge(a, side * (ra + wa)), a, back), b: reachOut(edge(b, side * (rb + wb)), b, fore) };
+          const walk = [v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04)];
+          mb.quad(walk[0], walk[1], walk[2], walk[3], CONCRETE);
+          // Solid too: it's all there is over the pit behind the wall.
+          solidHull([...walk, ...walk.map((q) => ({ x: q.x, y: q.y - 0.25, z: q.z }))]);
         }
         // Solid exactly where the wall is drawn: from its inner face out to its outer face.
         solidHull([
@@ -657,7 +670,12 @@ function terrainPatch(
     const v = vertex(vx, vz);
     const q = cell(x, z);
     if (q.roof) return v.g;
-    return v.dipped || (v.roof && q.under && v.cutY !== null) ? v.cutY! : v.g;
+    // A cell in the cut itself is all floor, whatever its corners (one claimed by a street
+    // alongside would stand up in front of the wall as a sliver).
+    // A corner on another cut well above this one's floor (a ramp alongside, near its top) is
+    // past this cut's wall: the cell is behind it and under that ramp's own deck.
+    if (q.under) return Math.min(v.g, v.cutY !== null && v.cutY < q.under.y + 1 ? v.cutY : q.under.y - 0.03);
+    return v.dipped ? v.cutY! : v.g;
   };
   const sides = [
     [-1, 0, 0, 0, 0, 1],
