@@ -138,13 +138,15 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   // Bridges go up and underpasses down, with ramps; roads on different levels don't meet.
   // Then again with every junction's paved area (as the road graph clusters and trims them)
   // kept level on the ramps that run into it, until none still climbs there. One that would
-  // cost a crossing (no room left for a ramp: the roads would meet at grade) isn't kept.
+  // cost a crossing (no room left for a ramp: the roads would meet at grade) isn't kept, and
+  // past the play area's edge (nobody drives there) nothing is reshaped.
+  const playBox = { playArea: { min: { x: bounds.min.x + EDGE_INSET, z: bounds.min.z + EDGE_INSET }, max: { x: bounds.max.x - EDGE_INSET, z: bounds.max.z - EDGE_INSET } } };
   let { roads, crossings } = separateGrades(flat);
   const level: Level[] = [];
   const tried = new Set<string>();
   const key = (l: Level) => `${l.road}@${l.area.map((p) => `${p.x.toFixed(0)},${p.z.toFixed(0)}`).join(';')}`;
   for (let pass = 0; pass < 3; pass++) {
-    const more = rampsIntoJunctions(roads).filter((l) => !tried.has(key(l)));
+    const more = rampsIntoJunctions(roads).filter((l) => !tried.has(key(l)) && l.area.some((p) => inPlayArea(playBox, p)));
     if (!more.length) break;
     for (const l of more) {
       tried.add(key(l));
