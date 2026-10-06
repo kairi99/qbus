@@ -1,0 +1,105 @@
+114 drivable edges near lifted roads
+
+== Lowest ceilings over lanes (< 4.2 m), worst per 6 m stretch ==
+ceiling 0.4 m  edge 589 Av. 12 de Octubre lane 1 (-111.0, 774.3) lift -1.94 (TriMesh)
+ceiling 0.41 m  edge 589 Av. 12 de Octubre lane 1 (-117.0, 778.0) lift -1.26 (TriMesh)
+ceiling 1.02 m  edge 970 Av. Patria lane 1 (-30.0, 710.6) lift 0 (ConvexPolyhedron)
+ceiling 3.2 m  edge 564 Av. 10 de Agosto lane 0 (-195.7, -835.8) lift -2.95 (TriMesh)
+ceiling 3.48 m  edge 516 sin nombre lane 0 (-861.2, -252.0) lift -3.52 (TriMesh)
+ceiling 3.58 m  edge 516 sin nombre lane 0 (-861.5, -251.1) lift -3.62 (TriMesh)
+ceiling 3.62 m  edge 516 sin nombre lane 2 (-868.4, -253.4) lift -3.62 (TriMesh)
+
+== Solid things across lanes at bus heights ==
+edge 516 sin nombre lane 0 at (-861.5, -251.1) y 23.28 lift -3.62: ConvexPolyhedron 1.47 m ahead at 3.3 m up, n=(-1.00,-0.00,0.00)
+edge 516 sin nombre lane 0 at (-861.2, -252.0) y 23.38 lift -3.52: ConvexPolyhedron 0.47 m ahead at 2.9 m up, n=(-1.00,0.00,0.00)
+edge 516 sin nombre lane 2 at (-868.1, -254.4) y 23.38 lift -3.52: ConvexPolyhedron 0.59 m ahead at 3.3 m up, n=(-0.00,0.00,1.00)
+edge 564 Av. 10 de Agosto lane 0 at (-195.7, -835.8) y 17.60 lift -2.95: ConvexPolyhedron 0.68 m ahead at 2.9 m up, n=(1.00,0.00,-0.00)
+edge 564 Av. 10 de Agosto lane 0 at (-195.7, -835.8) y 17.60 lift -2.95: ConvexPolyhedron 0.68 m ahead at 3.3 m up, n=(1.00,-0.00,-0.00)
+edge 589 Av. 12 de Octubre lane 1 at (-128.1, 784.8) y 22.48 lift -0.17: TriMesh 0.15 m ahead at 0.3 m up, n=(-0.10,-0.99,0.02)
+edge 589 Av. 12 de Octubre lane 1 at (-122.1, 781.1) y 21.66 lift -0.72: TriMesh 0.31 m ahead at 0.3 m up, n=(-0.12,-0.99,0.04)
+edge 589 Av. 12 de Octubre lane 1 at (-115.3, 776.9) y 20.57 lift -1.45: TriMesh 0.90 m ahead at 0.3 m up, n=(-0.12,-0.99,0.07)
+edge 589 Av. 12 de Octubre lane 1 at (-108.5, 772.7) y 19.44 lift -2.24: TriMesh 0.59 m ahead at 0.3 m up, n=(-0.13,-0.99,0.08)
+edge 970 Av. Patria lane 1 at (-29.1, 711.2) y 19.92 lift 0.00: ConvexPolyhedron 0.98 m ahead at 0.3 m up, n=(1.00,0.00,-0.00)
+
+== Road surface vs graph height (>12 cm) ==
+edge 276 Av. 10 de Agosto at (-196.4, -788.9) s 30 lift -0.12: graph y 20.46, solid at 20.29 (-0.17) TriMesh terrain 20.44
+edge 276 Av. 10 de Agosto at (-196.0, -789.8) s 31 lift -0.18: graph y 20.40, solid at 20.20 (-0.19) TriMesh terrain 20.42
+edge 276 Av. 10 de Agosto at (-195.6, -790.7) s 32 lift -0.23: graph y 20.32, solid at 20.14 (-0.19) TriMesh terrain 20.40
+edge 276 Av. 10 de Agosto at (-195.2, -791.6) s 33 lift -0.28: graph y 20.25, solid at 20.07 (-0.18) TriMesh terrain 20.38
+edge 276 Av. 10 de Agosto at (-194.8, -792.5) s 34 lift -0.34: graph y 20.18, solid at 20.00 (-0.18) TriMesh terrain 20.36
+edge 276 Av. 10 de Agosto at (-194.4, -793.4) s 35 lift -0.41: graph y 20.10, solid at 19.98 (-0.12) TriMesh terrain 20.34
+edge 276 Av. 10 de Agosto at (-193.3, -796.2) s 38 lift -0.61: graph y 19.86, solid at 19.74 (-0.12) TriMesh terrain 20.27
+edge 297 sin nombre at (-791.5, 831.3) s 56 lift -0.17: graph y 25.65, solid at 25.80 (0.15) TriMesh terrain 25.79
+edge 297 sin nombre at (-790.6, 830.9) s 57 lift -0.11: graph y 25.68, solid at 25.83 (0.15) TriMesh terrain 25.77
+edge 297 sin nombre at (-789.7, 830.4) s 58 lift -0.06: graph y 25.72, solid at 25.86 (0.14) TriMesh terrain 25.76
+edge 564 Av. 10 de Agosto at (-206.7, -812.2) s 29 lift -0.56: graph y 20.76, solid at 20.88 (0.12) TriMesh terrain 21.51
+edge 564 Av. 10 de Agosto at (-207.1, -811.3) s 30 lift -0.49: graph y 20.86, solid at 20.99 (0.14) TriMesh terrain 21.54
+edge 564 Av. 10 de Agosto at (-207.5, -810.4) s 31 lift -0.42: graph y 20.95, solid at 21.11 (0.16) TriMesh terrain 21.56
+edge 564 Av. 10 de Agosto at (-207.9, -809.5) s 32 lift -0.36: graph y 21.04, solid at 21.20 (0.16) TriMesh terrain 21.59
+edge 564 Av. 10 de Agosto at (-208.4, -808.6) s 33 lift -0.30: graph y 21.12, solid at 21.28 (0.16) TriMesh terrain 21.63
+edge 564 Av. 10 de Agosto at (-208.8, -807.7) s 34 lift -0.25: graph y 21.17, solid at 21.37 (0.20) TriMesh terrain 21.65
+edge 564 Av. 10 de Agosto at (-209.2, -806.8) s 35 lift -0.19: graph y 21.22, solid at 21.44 (0.22) TriMesh terrain 21.66
+edge 564 Av. 10 de Agosto at (-209.6, -805.9) s 36 lift -0.14: graph y 21.28, solid at 21.51 (0.24) TriMesh terrain 21.67
+edge 564 Av. 10 de Agosto at (-210.1, -805.0) s 37 lift -0.09: graph y 21.32, solid at 21.67 (0.35) TriMesh terrain 21.67
+edge 589 Av. 12 de Octubre at (-126.9, 788.5) s 28 lift -0.10: graph y 22.58, solid at 22.42 (-0.16) TriMesh terrain 22.54
+edge 589 Av. 12 de Octubre at (-126.1, 788.0) s 29 lift -0.17: graph y 22.48, solid at 22.33 (-0.15) TriMesh terrain 22.51
+edge 589 Av. 12 de Octubre at (-125.2, 787.5) s 30 lift -0.25: graph y 22.38, solid at 22.24 (-0.13) TriMesh terrain 22.48
+edge 589 Av. 12 de Octubre at (-124.4, 787.0) s 31 lift -0.33: graph y 22.26, solid at 22.14 (-0.12) TriMesh terrain 22.45
+
+== Joints between roads at lifted ends ==
+ok    #53 sin nombre(start, lift 0.00, y 27.36) ~ #98 Av. América(start, lift 0.00, y 27.36) at (-899.9, -144.3) dy 0.00
+ok    #53 sin nombre(start, lift 0.00, y 27.36) ~ #780 Av. América(end, lift 0.00, y 27.36) at (-899.9, -144.3) dy 0.00
+ok    #53 sin nombre(end, lift -3.90, y 22.99) ~ #357 sin nombre(start, lift -3.81, y 23.08) at (-865.6, -250.4) dy -0.09
+ok    #84 Av. 12 de Octubre(start, lift -5.05, y 15.94) ~ #407 Av. 12 de Octubre(end, lift -4.96, y 16.03) at (-2.1, 705.1) dy -0.09
+ok    #84 Av. 12 de Octubre(end, lift -4.75, y 15.73) ~ #85 Av. 12 de Octubre(start, lift -4.66, y 15.82) at (-86.8, 755.8) dy -0.09
+ok    #85 Av. 12 de Octubre(end, lift 0.00, y 23.49) ~ #411 Av. 12 de Octubre(start, lift 0.00, y 23.49) at (-155.0, 798.1) dy 0.00
+ok    #88 sin nombre(end, lift 0.00, y 22.79) ~ #409 sin nombre(start, lift 0.00, y 22.79) at (-149.8, 808.2) dy 0.00
+ok    #89 sin nombre(start, lift -6.50, y 13.49) ~ #365 sin nombre(end, lift -6.50, y 13.49) at (-56.8, 756.9) dy 0.00
+ok    #90 sin nombre(end, lift 0.00, y 22.42) ~ #406 sin nombre(start, lift 0.00, y 22.42) at (43.5, 671.6) dy 0.00
+ok    #93 Av. Patria(start, lift 4.06, y 28.14) ~ #401 Av. Patria(end, lift 3.97, y 28.05) at (-623.7, 314.3) dy 0.09
+ok    #93 Av. Patria(end, lift 1.11, y 25.81) ~ #689 Alfredo Perez Guerrero(start, lift 1.03, y 25.73) at (-693.2, 217.9) dy 0.08
+ok    #94 Alfredo Perez Guerrero(start, lift 0.00, y 24.92) ~ #689 Alfredo Perez Guerrero(end, lift 0.00, y 24.92) at (-701.7, 198.6) dy 0.00
+ok    #95 Av. Patria(start, lift 0.07, y 25.20) ~ #465 Alfredo Perez Guerrero(end, lift 0.00, y 25.13) at (-701.2, 219.3) dy 0.07
+ok    #95 Av. Patria(end, lift 4.88, y 28.80) ~ #358 Av. Patria(start, lift 4.79, y 28.71) at (-632.9, 323.6) dy 0.09
+ok    #100 Av. América(end, lift 0.00, y 29.87) ~ #357 sin nombre(end, lift 0.00, y 29.87) at (-826.4, -363.5) dy 0.00
+ok    #109 Av. Tarqui(start, lift 0.00, y 23.45) ~ #476 sin nombre(start, lift 0.00, y 23.45) at (-690.3, 790.1) dy 0.00
+ok    #110 Av. Tarqui(end, lift 0.00, y 23.83) ~ #183 sin nombre(end, lift 0.00, y 23.83) at (-718.5, 806.7) dy 0.00
+ok    #115 sin nombre(start, lift -6.37, y 19.28) ~ #476 sin nombre(end, lift -6.32, y 19.33) at (-812.1, 770.0) dy -0.05
+ok    #115 sin nombre(end, lift -5.34, y 20.66) ~ #116 sin nombre(start, lift -5.26, y 20.74) at (-835.5, 787.3) dy -0.08
+ok    #116 sin nombre(end, lift 0.00, y 30.73) ~ #614 Av. 10 de Agosto(start, lift 0.00, y 30.73) at (-889.9, 878.3) dy 0.00
+ok    #116 sin nombre(end, lift 0.00, y 30.73) ~ #680 Av. 10 de Agosto(end, lift 0.00, y 30.73) at (-889.9, 878.3) dy 0.00
+ok    #117 sin nombre(start, lift 0.00, y 24.05) ~ #401 Av. Patria(start, lift 0.00, y 24.05) at (-499.1, 387.7) dy 0.00
+ok    #117 sin nombre(start, lift 0.00, y 24.05) ~ #491 Av. Patria(end, lift 0.00, y 24.05) at (-499.1, 387.7) dy 0.00
+ok    #117 sin nombre(end, lift -4.39, y 19.55) ~ #118 sin nombre(start, lift -4.48, y 19.46) at (-625.9, 320.2) dy 0.09
+ok    #118 sin nombre(end, lift -4.73, y 19.79) ~ #119 sin nombre(start, lift -4.65, y 19.87) at (-668.9, 340.5) dy -0.08
+ok    #119 sin nombre(end, lift 0.00, y 26.29) ~ #120 Av. 10 de Agosto(start, lift 0.00, y 26.29) at (-712.7, 435.3) dy 0.00
+ok    #119 sin nombre(end, lift 0.00, y 26.29) ~ #683 Av. 10 de Agosto(end, lift 0.00, y 26.29) at (-712.7, 435.3) dy 0.00
+ok    #123 Queseras del Medio(start, lift 0.00, y 19.63) ~ #367 sin nombre(end, lift 0.00, y 19.63) at (-69.0, 733.9) dy 0.00
+ok    #135 Paso elevado avenida 10 de Agosto(end, lift 0.00, y 20.36) ~ #136 sin nombre(end, lift 0.00, y 20.36) at (-191.2, -851.9) dy 0.00
+ok    #135 Paso elevado avenida 10 de Agosto(end, lift 0.00, y 20.36) ~ #664 Paso elevado avenida 10 de Agosto(start, lift 0.00, y 20.36) at (-191.2, -851.9) dy 0.00
+ok    #136 sin nombre(start, lift 0.00, y 16.39) ~ #137 sin nombre(end, lift 0.00, y 16.39) at (-76.3, -852.9) dy 0.00
+ok    #136 sin nombre(end, lift 0.00, y 20.36) ~ #664 Paso elevado avenida 10 de Agosto(start, lift 0.00, y 20.36) at (-191.2, -851.9) dy 0.00
+ok    #144 Av. 12 de Octubre(start, lift -4.96, y 16.13) ~ #145 Av. 12 de Octubre(end, lift -5.05, y 16.04) at (1.1, 710.3) dy 0.09
+ok    #144 Av. 12 de Octubre(end, lift 0.00, y 22.56) ~ #408 Av. 12 de Octubre(start, lift 0.00, y 22.56) at (49.6, 682.3) dy 0.00
+ok    #145 Av. 12 de Octubre(start, lift -5.05, y 15.40) ~ #410 Av. 12 de Octubre(end, lift -4.96, y 15.49) at (-83.9, 759.9) dy -0.09
+ok    #163 Av. 10 de Agosto(start, lift -2.46, y 16.23) ~ #395 Av. 10 de Agosto(end, lift -2.44, y 16.25) at (-130.1, -945.8) dy -0.02
+ok    #164 Av. Patria(start, lift 0.00, y 23.62) ~ #358 Av. Patria(end, lift 0.00, y 23.62) at (-549.0, 372.9) dy 0.00
+ok    #167 Av. 10 de Agosto(start, lift 0.00, y 20.55) ~ #574 Av. 10 de Agosto(start, lift 0.00, y 20.55) at (-215.6, -748.0) dy 0.00
+ok    #167 Av. 10 de Agosto(start, lift 0.00, y 20.55) ~ #660 Av. 10 de Agosto(end, lift 0.00, y 20.55) at (-215.6, -748.0) dy 0.00
+ok    #167 Av. 10 de Agosto(end, lift -5.54, y 13.91) ~ #395 Av. 10 de Agosto(start, lift -5.63, y 13.82) at (-176.3, -844.6) dy 0.09
+ok    #181 sin nombre(start, lift -6.19, y 22.51) ~ #182 José Riofrío(end, lift -6.12, y 22.58) at (-883.0, 849.2) dy -0.07
+ok    #181 sin nombre(end, lift -5.44, y 23.22) ~ #183 sin nombre(start, lift -5.37, y 23.29) at (-842.7, 853.6) dy -0.07
+ok    #183 sin nombre(end, lift 0.00, y 23.83) ~ #364 Av. Tarqui(start, lift 0.00, y 23.83) at (-718.5, 806.7) dy 0.00
+ok    #229 sin nombre(start, lift -5.01, y 15.93) ~ #406 sin nombre(end, lift -4.93, y 16.01) at (-4.3, 700.4) dy -0.08
+ok    #229 sin nombre(end, lift -6.42, y 13.42) ~ #367 sin nombre(start, lift -6.42, y 13.42) at (-33.2, 710.9) dy 0.00
+ok    #230 Av. 12 de Octubre(end, lift 0.00, y 22.44) ~ #407 Av. 12 de Octubre(start, lift 0.00, y 22.44) at (45.3, 675.4) dy 0.00
+ok    #349 Av. 10 de Agosto(start, lift 0.00, y 21.36) ~ #396 Av. 10 de Agosto(end, lift 0.00, y 21.36) at (-226.5, -761.3) dy 0.00
+ok    #357 sin nombre(end, lift 0.00, y 29.87) ~ #518 Av. América(end, lift 0.00, y 29.87) at (-826.4, -363.5) dy 0.00
+ok    #365 sin nombre(start, lift -5.16, y 15.27) ~ #409 sin nombre(end, lift -5.07, y 15.36) at (-81.3, 763.7) dy -0.09
+ok    #367 sin nombre(end, lift 0.00, y 19.63) ~ #745 Av. Patria(end, lift 0.00, y 19.63) at (-69.0, 733.9) dy 0.00
+ok    #393 Av. 10 de Agosto(end, lift -3.33, y 17.12) ~ #396 Av. 10 de Agosto(start, lift -3.23, y 17.22) at (-191.1, -837.0) dy -0.10
+ok    #396 Av. 10 de Agosto(end, lift 0.00, y 21.36) ~ #663 Av. 10 de Agosto(end, lift 0.00, y 21.36) at (-226.5, -761.3) dy 0.00
+ok    #401 Av. Patria(start, lift 0.00, y 24.05) ~ #491 Av. Patria(end, lift 0.00, y 24.05) at (-499.1, 387.7) dy 0.00
+ok    #410 Av. 12 de Octubre(start, lift 0.00, y 23.15) ~ #490 Av. 12 de Octubre(end, lift 0.00, y 23.15) at (-151.8, 801.6) dy 0.00
+ok    #476 sin nombre(start, lift 0.00, y 23.45) ~ #522 sin nombre(end, lift 0.00, y 23.45) at (-690.3, 790.1) dy 0.00
+ok    #476 sin nombre(start, lift 0.00, y 23.45) ~ #608 Av. Tarqui(end, lift 0.00, y 23.45) at (-690.3, 790.1) dy 0.00

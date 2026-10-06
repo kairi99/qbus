@@ -1,0 +1,326 @@
+OK   edge 155 Av. 12 de Octubre -> Av. 12 de Octubre(156)
+BAD  edge 156 Av. 12 de Octubre -> Av. 12 de Octubre(590)
+   popular@40: reached=true t=21.9 wallN=0 peakImp=0 stall=0.1 air=0.00 dev=0.2 maxDecel=27.7@(-134,785) end=(-182.6,814.6)
+   popular@75: reached=true t=15.7 wallN=0 peakImp=0 stall=0.1 air=0.00 dev=0.2 maxDecel=20.6@(-131,783) end=(-182.7,814.7)
+   interparroquial@40: reached=true t=22.4 wallN=0 peakImp=0 stall=0.1 air=0.00 dev=0.2 maxDecel=27.9@(-134,785) end=(-182.5,814.6)
+   interparroquial@75: reached=true t=16.0 wallN=0 peakImp=0 stall=0.1 air=0.00 dev=0.2 maxDecel=23.5@(-135,786) end=(-182.7,814.6)
+   buseta@40: reached=true t=21.6 wallN=0 peakImp=0 stall=0.1 air=0.03 dev=0.2 maxDecel=22.0@(-85,754) end=(-182.6,814.6)
+   buseta@75: reached=true t=15.6 wallN=0 peakImp=0 stall=0.1 air=0.03 dev=0.3 maxDecel=31.5@(-131,784) end=(-182.6,814.6)
+   ae86@40: reached=true t=23.8 wallN=2 peakImp=0 stall=0.2 air=0.20 dev=0.0 maxDecel=734.3@(-18,714) end=(-182.6,814.6)
+      walls: (-63.2,741.7) TriMesh imp0 n[-0.86,-0.05,0.51] cpRelnull v10.9 | (-63.2,741.7) TriMesh imp0 n[-0.86,-0.05,0.51] cpRelnull v0.1
+   ae86@75: reached=true t=16.4 wallN=2 peakImp=0 stall=0.1 air=0.20 dev=0.0 maxDecel=944.4@(-17,714) end=(-182.7,814.7)
+      walls: (-17.1,714) TriMesh imp0 n[-0.85,-0.1,0.51] cpRelnull v17 | (-17.1,714) TriMesh imp0 n[-0.85,-0.1,0.51] cpRelnull v1.3
+BAD  edge 160 sin nombre -> Av. 12 de Octubre(460)
+   popular@40: reached=true t=30.0 wallN=526 peakImp=144 stall=4.3 air=0.08 dev=2.0 maxDecel=326.1@(-20,748) end=(19.7,704.8)
+      walls: (-20.1,747.7) TriMesh imp0 n[0.91,-0.42,0.01] cpRelnull v9.6 | (-19.9,746.9) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v-0.1 | (-19.7,746.8) TriMesh imp0 n[0.8,-0.39,0.46] cpRelnull v0.8 | (-16.3,728.7) ConvexPolyhedron imp129 n[0.98,0,0.21] cpRel-0.5 v0.4
+   popular@75: reached=true t=20.4 wallN=394 peakImp=147 stall=4.4 air=0.08 dev=2.0 maxDecel=152.3@(-20,747) end=(19.7,704.9)
+      walls: (-20.1,747.1) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v12.4 | (-16.4,728.8) ConvexPolyhedron imp138 n[0.98,0,0.18] cpRel-0.49 v0.5 | (-16.3,728.5) ConvexPolyhedron imp130 n[0.98,0,0.22] cpRel-1.39 v0.5 | (-16.2,728.1) ConvexPolyhedron imp131 n[0.97,0,0.24] cpRel-0.54 v0.5
+   interparroquial@40: reached=false t=45.0 wallN=1907 peakImp=2616 stall=27.5 air=0.08 dev=0.7 maxDecel=377.6@(-22,751) end=(-20.9,749.1)
+      walls: (-22.1,751.2) ConvexPolyhedron imp2616 n[0.98,0,0.22] cpRel-0.87 v9.1 | (-21.4,749.9) ConvexPolyhedron imp0 n[0.93,0,0.36] cpRel-0.85 v1.1 | (-21,749.2) TriMesh imp0 n[0.92,-0.4,-0.03] cpRelnull v-0.1 | (-21,749.2) TriMesh imp0 n[0.92,-0.4,-0.03] cpRelnull v-0.1
+   interparroquial@75: reached=false t=45.0 wallN=2111 peakImp=6474 stall=21.8 air=0.08 dev=2.3 maxDecel=269.5@(-21,748) end=(-13.1,723.1)
+      walls: (-22.2,751) ConvexPolyhedron imp6474 n[0.98,0,0.22] cpRel-0.87 v14.1 | (-20.5,747.7) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v-0.1 | (-20.4,747.7) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v-0.1 | (-20.4,747.7) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v-0.1
+   buseta@40: reached=true t=25.5 wallN=291 peakImp=138 stall=3.0 air=0.15 dev=1.5 maxDecel=63.1@(13,710) end=(19.6,705)
+      walls: (-106.6,779.4) TriMesh imp0 n[-0.83,-0.2,0.51] cpRelnull v11.2 | (-16.3,728.9) ConvexPolyhedron imp138 n[0.97,0,0.22] cpRel-0.34 v0.6 | (-16.2,728.6) ConvexPolyhedron imp106 n[0.97,0,0.24] cpRel-0.36 v0.5 | (-16.2,728.3) ConvexPolyhedron imp115 n[0.96,0,0.27] cpRel-0.38 v0.6
+   buseta@75: reached=true t=18.5 wallN=298 peakImp=1391 stall=3.1 air=0.15 dev=1.5 maxDecel=60.0@(20,705) end=(20,705.2)
+      walls: (-16.5,730.1) ConvexPolyhedron imp1391 n[0.98,0,0.18] cpRel-0.23 v5.6 | (-16.3,729) ConvexPolyhedron imp116 n[0.98,0,0.22] cpRel-1.29 v0.6 | (-16.3,728.7) ConvexPolyhedron imp117 n[0.97,0,0.23] cpRel-0.36 v0.5 | (-16.2,728.3) ConvexPolyhedron imp118 n[0.96,0,0.26] cpRel-0.38 v0.6
+   ae86@40: reached=true t=26.5 wallN=338 peakImp=1636 stall=4.5 air=0.22 dev=1.6 maxDecel=145.8@(-16,730) end=(19.7,705.1)
+      walls: (-16.5,729.8) ConvexPolyhedron imp1636 n[0.99,0,-0.13] cpRel-0.52 v5.6 | (-16.1,728.8) ConvexPolyhedron imp35 n[0.93,0,0.38] cpRel0.49 v0.3 | (-16.1,728.6) ConvexPolyhedron imp36 n[0.92,0,0.38] cpRel-0.59 v0.3 | (-16,728.4) ConvexPolyhedron imp48 n[0.92,0,0.4] cpRel0.43 v0.4
+   ae86@75: reached=true t=18.6 wallN=311 peakImp=1745 stall=4.1 air=0.22 dev=1.7 maxDecel=155.5@(-16,730) end=(19.7,705.2)
+      walls: (-16.5,729.7) ConvexPolyhedron imp1745 n[0.99,0,-0.13] cpRel-0.52 v5.6 | (-16.1,728.7) ConvexPolyhedron imp39 n[0.92,0,0.4] cpRel-0.09 v0.3 | (-16,728.5) ConvexPolyhedron imp39 n[0.91,0,0.41] cpRel-0.59 v0.3 | (-16,728.3) ConvexPolyhedron imp52 n[0.9,0,0.43] cpRel0.42 v0.4
+BAD  edge 160 sin nombre -> Av. Patria(970)
+   popular@40: reached=true t=20.8 wallN=143 peakImp=0 stall=1.1 air=0.08 dev=0.6 maxDecel=326.1@(-20,748) end=(-23.7,713.7)
+      walls: (-20.1,747.7) TriMesh imp0 n[0.91,-0.42,0.01] cpRelnull v9.6 | (-19.9,746.9) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v0.7 | (-19.9,746.9) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v-0.1 | (-19.9,746.9) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v-0.1
+   popular@75: reached=true t=10.8 wallN=4 peakImp=0 stall=0.1 air=0.08 dev=1.3 maxDecel=204.9@(-20,747) end=(-23.7,713.5)
+      walls: (-20,747.1) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v16.5 | (-20,746.9) TriMesh imp0 n[0.9,-0.44,-0.05] cpRelnull v13 | (-19.9,746.7) TriMesh imp0 n[0.78,-0.39,0.49] cpRelnull v13.1 | (-19.9,746.7) TriMesh imp0 n[0.78,-0.39,0.49] cpRelnull v13.1
+   interparroquial@40: reached=false t=45.0 wallN=1907 peakImp=2616 stall=27.5 air=0.08 dev=0.7 maxDecel=377.6@(-22,751) end=(-20.9,749.1)
+      walls: (-22.1,751.2) ConvexPolyhedron imp2616 n[0.98,0,0.22] cpRel-0.87 v9.1 | (-21.4,749.9) ConvexPolyhedron imp0 n[0.93,0,0.36] cpRel-0.85 v1.1 | (-21,749.2) TriMesh imp0 n[0.92,-0.4,-0.03] cpRelnull v-0.1 | (-21,749.2) TriMesh imp0 n[0.92,-0.4,-0.03] cpRelnull v-0.1
+   interparroquial@75: reached=false t=45.0 wallN=2223 peakImp=8770 stall=35.5 air=0.08 dev=1.4 maxDecel=546.7@(-22,750) end=(-21.1,749.1)
+      walls: (-22.4,751.2) ConvexPolyhedron imp8770 n[0.98,0,0.22] cpRel-0.88 v16 | (-21.2,749.1) TriMesh imp0 n[0.92,-0.4,-0.03] cpRelnull v-0.1 | (-21.2,749.1) TriMesh imp0 n[0.92,-0.4,-0.03] cpRelnull v-0.1 | (-21.2,749.1) TriMesh imp0 n[0.92,-0.4,-0.03] cpRelnull v-0.1
+   buseta@40: reached=true t=17.7 wallN=1 peakImp=0 stall=0.1 air=0.15 dev=0.5 maxDecel=23.8@(-111,782) end=(-23.8,713.7)
+      walls: (-106.6,779.4) TriMesh imp0 n[-0.83,-0.2,0.51] cpRelnull v11.2
+   buseta@75: reached=true t=10.5 wallN=0 peakImp=0 stall=0.1 air=0.15 dev=1.2 maxDecel=22.3@(-41,758) end=(-23.6,713.6)
+   ae86@40: reached=true t=17.7 wallN=0 peakImp=0 stall=0.2 air=0.22 dev=0.8 maxDecel=84.5@(-135,798) end=(-24,713.8)
+   ae86@75: reached=true t=10.4 wallN=0 peakImp=0 stall=0.1 air=0.22 dev=1.9 maxDecel=63.2@(-135,798) end=(-24.6,713.9)
+BAD  edge 165 Av. Patria -> Alfredo Perez Guerrero(895)
+   popular@40: reached=true t=21.3 wallN=60 peakImp=0 stall=0.1 air=0.12 dev=0.2 maxDecel=19.9@(-614,318) end=(-696.3,205.9)
+      walls: (-659.7,278.8) ConvexPolyhedron imp0 n[0.78,0,-0.62] cpRel-1.5 v11.4 | (-660.1,278.2) ConvexPolyhedron imp0 n[0.79,0,-0.61] cpRel-1.5 v10.9 | (-660.5,277.6) ConvexPolyhedron imp0 n[0.8,0,-0.6] cpRel-1.47 v10.4 | (-660.9,277) ConvexPolyhedron imp0 n[0.8,0,-0.59] cpRel-1.49 v10.3
+   popular@75: reached=true t=15.3 wallN=47 peakImp=1156 stall=0.1 air=0.12 dev=0.4 maxDecel=20.1@(-608,321) end=(-696.3,206)
+      walls: (-658.3,280.4) ConvexPolyhedron imp1156 n[0.78,0,-0.63] cpRel-1.5 v20.4 | (-658.9,279.6) ConvexPolyhedron imp512 n[0.78,0,-0.63] cpRel-1.51 v19.8 | (-659.6,278.9) ConvexPolyhedron imp597 n[0.78,0,-0.62] cpRel-1.5 v19.6 | (-660.2,278.1) ConvexPolyhedron imp590 n[0.79,0,-0.62] cpRel-1.5 v19.2
+   interparroquial@40: reached=true t=21.7 wallN=52 peakImp=461 stall=0.1 air=0.13 dev=0.2 maxDecel=18.7@(-614,318) end=(-696.3,206)
+      walls: (-660.3,278) ConvexPolyhedron imp0 n[0.79,0,-0.62] cpRel-1.65 v11.2 | (-660.8,277.4) ConvexPolyhedron imp461 n[0.79,0,-0.61] cpRel-0.9 v11 | (-661.1,276.9) ConvexPolyhedron imp0 n[0.8,0,-0.6] cpRel-1.64 v10.7 | (-661.5,276.3) ConvexPolyhedron imp132 n[0.81,0,-0.59] cpRel-1.63 v10.6
+   interparroquial@75: reached=true t=15.5 wallN=40 peakImp=1825 stall=0.1 air=0.13 dev=0.4 maxDecel=23.9@(-660,279) end=(-696.3,205.8)
+      walls: (-659.4,279.1) ConvexPolyhedron imp1825 n[0.78,0,-0.62] cpRel-1.65 v20.4 | (-659.8,278.6) ConvexPolyhedron imp0 n[0.79,0,-0.62] cpRel-1.65 v19.8 | (-660.4,277.8) ConvexPolyhedron imp817 n[0.79,0,-0.61] cpRel-1.65 v19.4 | (-660.8,277.3) ConvexPolyhedron imp0 n[0.8,0,-0.6] cpRel-1.64 v19.1
+   buseta@40: reached=true t=21.0 wallN=1 peakImp=0 stall=0.1 air=0.17 dev=0.3 maxDecel=21.9@(-614,318) end=(-696.3,206)
+      walls: (-693.1,213.1) TriMesh imp0 n[0.43,0.08,0.9] cpRelnull v7.2
+   buseta@75: reached=true t=15.2 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.3 maxDecel=22.1@(-608,321) end=(-696.3,205.9)
+   ae86@40: reached=false t=45.0 wallN=2261 peakImp=0 stall=37.6 air=0.22 dev=0.1 maxDecel=240.1@(-621,314) end=(-620.7,313.9)
+      walls: (-620.6,313.8) TriMesh imp0 n[-0.8,0.12,-0.58] cpRelnull v5.6 | (-620.7,313.9) TriMesh imp0 n[-0.81,0.1,-0.58] cpRelnull v-0.1 | (-620.7,313.9) TriMesh imp0 n[-0.81,0.1,-0.58] cpRelnull v-0.1 | (-620.7,313.9) TriMesh imp0 n[-0.81,0.1,-0.58] cpRelnull v-0.1
+   ae86@75: reached=true t=15.9 wallN=4 peakImp=2594 stall=0.1 air=0.22 dev=1.1 maxDecel=849.9@(-584,336) end=(-696.3,206)
+      walls: (-657.8,280.2) ConvexPolyhedron imp517 n[0.74,0,-0.67] cpRel0.24 v20.5 | (-657.9,280.2) ConvexPolyhedron imp52 n[0.74,0,-0.67] cpRel0.23 v20 | (-658.1,280) ConvexPolyhedron imp2594 n[0.44,0,-0.9] cpRel0.24 v20 | (-658.1,280) ConvexPolyhedron imp0 n[0.74,0,-0.67] cpRel0.24 v20
+BAD  edge 167 Av. Patria -> Av. Patria(517)
+   popular@40: reached=true t=23.9 wallN=0 peakImp=0 stall=0.2 air=0.15 dev=0.5 maxDecel=290.9@(-743,145) end=(-606.1,341.6)
+   popular@75: reached=true t=13.1 wallN=16 peakImp=0 stall=0.1 air=0.15 dev=0.9 maxDecel=18.6@(-733,165) end=(-606,341.7)
+      walls: (-646.7,315.4) ConvexPolyhedron imp0 n[-0.61,0,0.79] cpRel-1.33 v20.6 | (-646.4,315.7) ConvexPolyhedron imp0 n[-0.61,0,0.79] cpRel-1.87 v20.6 | (-645.9,316.1) ConvexPolyhedron imp0 n[-0.61,0,0.79] cpRel-1.95 v20.7 | (-645.6,316.4) ConvexPolyhedron imp0 n[-0.67,0,0.75] cpRel-1.37 v20.7
+   interparroquial@40: reached=true t=24.2 wallN=74 peakImp=285 stall=0.3 air=0.15 dev=0.6 maxDecel=291.2@(-743,145) end=(-606.2,341.5)
+      walls: (-664.3,296.8) ConvexPolyhedron imp0 n[-0.76,0,0.65] cpRel-1.66 v10.9 | (-663.3,298.1) ConvexPolyhedron imp0 n[-0.77,0,0.64] cpRel-0.96 v11 | (-662.4,299.3) ConvexPolyhedron imp0 n[-0.81,0,0.58] cpRel-0.97 v11 | (-658.2,304.5) ConvexPolyhedron imp285 n[-0.67,0,0.74] cpRel-1.72 v11.1
+   interparroquial@75: reached=true t=13.2 wallN=68 peakImp=564 stall=0.1 air=0.15 dev=0.9 maxDecel=17.4@(-733,165) end=(-606.2,341.7)
+      walls: (-657.1,305.6) ConvexPolyhedron imp564 n[-0.67,0,0.74] cpRel-1.73 v20.4 | (-655.2,307.5) ConvexPolyhedron imp212 n[-0.67,0,0.74] cpRel-1.75 v20 | (-653.6,309.2) ConvexPolyhedron imp0 n[-0.73,0,0.69] cpRel-1.03 v20.3 | (-650.4,312.2) ConvexPolyhedron imp0 n[-0.7,0,0.72] cpRel-1.19 v20.3
+   buseta@40: reached=true t=23.8 wallN=0 peakImp=0 stall=0.2 air=0.18 dev=0.5 maxDecel=352.6@(-743,145) end=(-606.1,341.5)
+   buseta@75: reached=true t=13.0 wallN=0 peakImp=0 stall=0.1 air=0.18 dev=0.8 maxDecel=20.6@(-733,165) end=(-606.2,341.6)
+   ae86@40: reached=true t=23.7 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=0.5 maxDecel=83.2@(-743,145) end=(-606.1,341.6)
+   ae86@75: reached=true t=13.0 wallN=0 peakImp=0 stall=0.1 air=0.27 dev=0.9 maxDecel=69.5@(-743,145) end=(-606.2,341.5)
+BAD  edge 195 sin nombre -> -(null)
+   popular@40: reached=true t=17.2 wallN=423 peakImp=1745 stall=1.8 air=0.17 dev=1.3 maxDecel=375.4@(-821,769) end=(-833,778.5)
+      walls: (-819.7,768.3) ConvexPolyhedron imp1745 n[-0.5,0,-0.87] cpRel-1.34 v9.5 | (-828.3,772) ConvexPolyhedron imp0 n[-0.48,0,-0.88] cpRel1.59 v5.4 | (-828.7,772.6) ConvexPolyhedron imp129 n[-0.96,0,-0.27] cpRel-1.36 v0.3 | (-828.8,772.7) ConvexPolyhedron imp58 n[-0.96,0,-0.27] cpRel-0.71 v0.2
+   popular@75: reached=true t=7.3 wallN=44 peakImp=8610 stall=0.1 air=0.17 dev=1.5 maxDecel=281.5@(-828,772) end=(-833,778.6)
+      walls: (-828.3,772.3) ConvexPolyhedron imp8610 n[-0.96,0,-0.27] cpRel-1.41 v13.8 | (-830.4,774.9) ConvexPolyhedron imp0 n[-0.81,0,-0.59] cpRel-1.24 v9.7 | (-831,775.6) ConvexPolyhedron imp485 n[-0.91,0,-0.42] cpRel-1.21 v8.9 | (-831.3,776) ConvexPolyhedron imp0 n[-0.91,0,-0.42] cpRel1.76 v8.6
+   interparroquial@40: reached=false t=45.0 wallN=2385 peakImp=15871 stall=22.2 air=0.17 dev=1.8 maxDecel=420.3@(-818,768) end=(-831.5,777)
+      walls: (-818.5,768.1) ConvexPolyhedron imp15871 n[-0.85,0,-0.53] cpRel-1.46 v9.4 | (-818.7,768.3) ConvexPolyhedron imp145 n[-0.5,0,-0.87] cpRel-1.48 v0.5 | (-824.9,770) ConvexPolyhedron imp167 n[-0.7,0,-0.71] cpRel-1.52 v1 | (-827.1,771.5) ConvexPolyhedron imp151 n[-0.91,0,-0.42] cpRel-1.54 v0.2
+   interparroquial@75: reached=true t=15.8 wallN=736 peakImp=3464 stall=3.0 air=0.17 dev=1.7 maxDecel=206.8@(-827,771) end=(-832.7,778.7)
+      walls: (-819.5,768.6) ConvexPolyhedron imp3464 n[-0.5,0,-0.87] cpRel-1.45 v15.2 | (-828.8,773.4) ConvexPolyhedron imp135 n[-0.91,0,-0.42] cpRel-1.44 v0.5 | (-829.2,773.9) ConvexPolyhedron imp157 n[-0.91,0,-0.42] cpRel-1.41 v0.8 | (-829.7,774.5) ConvexPolyhedron imp93 n[-0.91,0,-0.42] cpRel-1.37 v0.5
+   buseta@40: reached=true t=11.7 wallN=37 peakImp=538 stall=0.1 air=0.20 dev=0.8 maxDecel=25.0@(-834,778) end=(-833.7,778.4)
+      walls: (-830.7,773.9) ConvexPolyhedron imp538 n[-0.91,0,-0.42] cpRel-1.23 v10.3 | (-831.1,774.4) ConvexPolyhedron imp39 n[-0.91,0,-0.42] cpRel-0.01 v9.9 | (-831.6,775) ConvexPolyhedron imp138 n[-0.91,0,-0.42] cpRel-1.15 v9.8 | (-831.9,775.6) ConvexPolyhedron imp74 n[-0.91,0,-0.42] cpRel-1.13 v9.9
+   buseta@75: reached=true t=6.9 wallN=22 peakImp=1389 stall=0.1 air=0.20 dev=1.1 maxDecel=44.1@(-834,778) end=(-833.6,778.4)
+      walls: (-831.3,775) ConvexPolyhedron imp933 n[-0.91,0,-0.42] cpRel-1.17 v15 | (-831.7,775.5) ConvexPolyhedron imp336 n[-0.91,0,-0.42] cpRel-1.14 v14.4 | (-832,775.9) ConvexPolyhedron imp324 n[-0.91,0,-0.42] cpRel-1.12 v14.2 | (-832.4,776.5) ConvexPolyhedron imp277 n[-0.91,0,-0.42] cpRel-1.11 v14
+   ae86@40: reached=true t=11.7 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=1.3 maxDecel=109.1@(-728,791) end=(-833,778.5)
+   ae86@75: reached=true t=6.8 wallN=0 peakImp=0 stall=0.1 air=0.23 dev=2.1 maxDecel=111.7@(-728,791) end=(-832.6,778.9)
+BAD  edge 197 sin nombre -> sin nombre(198)
+   popular@40: reached=true t=13.2 wallN=0 peakImp=0 stall=0.1 air=0.13 dev=0.5 maxDecel=18.2@(-653,318) end=(-656,319.8)
+   popular@75: reached=true t=9.4 wallN=0 peakImp=0 stall=0.1 air=0.13 dev=0.7 maxDecel=18.8@(-653,318) end=(-656.2,320)
+   interparroquial@40: reached=true t=13.5 wallN=3 peakImp=0 stall=0.1 air=0.13 dev=0.5 maxDecel=17.0@(-653,318) end=(-656.2,319.6)
+      walls: (-655.9,319.5) TriMesh imp0 n[-0.7,0.11,-0.71] cpRelnull v9.4 | (-656.1,319.5) TriMesh imp0 n[-0.7,0.11,-0.71] cpRelnull v9.2 | (-656.2,319.6) TriMesh imp0 n[-0.7,0.11,-0.71] cpRelnull v9.2
+   interparroquial@75: reached=false t=45.0 wallN=5984 peakImp=19012 stall=39.2 air=0.13 dev=0.3 maxDecel=398.4@(-618,325) end=(-618.1,325.1)
+      walls: (-617.9,324.9) ConvexPolyhedron imp19012 n[-0.86,0,-0.51] cpRel1.19 v10.1 | (-618.1,325.2) TriMesh imp0 n[-0.48,-0.4,0.78] cpRelnull v-0.1 | (-618.1,325.2) ConvexPolyhedron imp490 n[-0.83,0,-0.55] cpRel1.17 v-0.1 | (-618.1,325.2) TriMesh imp0 n[-0.49,-0.4,0.78] cpRelnull v-0.1
+   buseta@40: reached=true t=13.1 wallN=1 peakImp=0 stall=0.1 air=0.17 dev=0.5 maxDecel=20.2@(-653,318) end=(-656,319.8)
+      walls: (-647.3,316.5) TriMesh imp0 n[0.94,-0.01,-0.33] cpRelnull v11.3
+   buseta@75: reached=true t=10.8 wallN=3 peakImp=0 stall=0.1 air=0.17 dev=0.7 maxDecel=793.7@(-643,316) end=(-656,320)
+      walls: (-643.5,316) TriMesh imp0 n[-0.97,-0.09,0.24] cpRelnull v16.4 | (-643.5,316) TriMesh imp0 n[-0.97,-0.09,0.24] cpRelnull v3.2 | (-643.5,315.9) TriMesh imp0 n[-0.97,-0.1,0.24] cpRelnull v2.9
+   ae86@40: reached=true t=13.2 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=0.9 maxDecel=152.2@(-548,366) end=(-655.7,320.3)
+   ae86@75: reached=true t=9.9 wallN=1 peakImp=0 stall=0.1 air=0.23 dev=1.4 maxDecel=1242.9@(-644,317) end=(-655.4,320.6)
+      walls: (-644.1,316.9) TriMesh imp0 n[-0.97,-0.08,0.24] cpRelnull v-2.9
+BAD  edge 198 sin nombre -> sin nombre(199)
+   popular@40: reached=true t=18.4 wallN=2 peakImp=0 stall=0.1 air=0.13 dev=0.5 maxDecel=214.9@(-664,327) end=(-679.3,370.8)
+      walls: (-663.6,327.4) TriMesh imp0 n[-0.99,-0.17,0.01] cpRelnull v10.1 | (-663.6,327.5) TriMesh imp0 n[-0.99,-0.17,0.01] cpRelnull v6.5
+   popular@75: reached=true t=13.8 wallN=1 peakImp=0 stall=0.1 air=0.13 dev=0.7 maxDecel=145.9@(-665,330) end=(-679.3,370.8)
+      walls: (-665,330.1) TriMesh imp0 n[-0.98,-0.18,0.02] cpRelnull v9.1
+   interparroquial@40: reached=false t=45.0 wallN=4295 peakImp=17403 stall=38.1 air=0.13 dev=0.3 maxDecel=360.0@(-618,325) end=(-618.1,325.2)
+      walls: (-617.9,324.9) ConvexPolyhedron imp17403 n[-0.86,0,-0.51] cpRel1.19 v9.3 | (-618,325) ConvexPolyhedron imp177 n[-0.85,0,-0.53] cpRel1.16 v-0.1 | (-618.1,325.1) ConvexPolyhedron imp164 n[-0.84,0,-0.55] cpRel1.16 v-0.1 | (-618.1,325.2) TriMesh imp0 n[-0.49,-0.4,0.78] cpRelnull v-0.1
+   interparroquial@75: reached=false t=45.0 wallN=6174 peakImp=17567 stall=40.3 air=0.13 dev=0.3 maxDecel=363.7@(-618,325) end=(-618.1,325.1)
+      walls: (-617.9,324.9) ConvexPolyhedron imp17567 n[-0.86,0,-0.51] cpRel1.19 v9.4 | (-618.1,325.2) TriMesh imp0 n[-0.48,-0.4,0.78] cpRelnull v-0.1 | (-618.1,325.2) TriMesh imp0 n[-0.48,-0.4,0.78] cpRelnull v-0.1 | (-618.1,325.2) ConvexPolyhedron imp484 n[-0.83,0,-0.56] cpRel1.17 v-0.1
+   buseta@40: reached=true t=18.0 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.5 maxDecel=21.4@(-667,336) end=(-679.4,370.9)
+   buseta@75: reached=true t=13.6 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.7 maxDecel=21.7@(-662,325) end=(-679.4,371)
+   ae86@40: reached=true t=19.4 wallN=1 peakImp=0 stall=0.2 air=0.23 dev=1.0 maxDecel=494.2@(-645,316) end=(-679.3,370.8)
+      walls: (-644.5,316.4) TriMesh imp0 n[-0.91,-0.07,0.4] cpRelnull v11
+   ae86@75: reached=true t=14.1 wallN=2 peakImp=0 stall=0.1 air=0.23 dev=1.7 maxDecel=1017.7@(-660,325) end=(-679.4,370.9)
+      walls: (-660,324.6) TriMesh imp0 n[-0.15,0.07,0.99] cpRelnull v13 | (-660.1,324.6) TriMesh imp0 n[-0.15,0.07,0.99] cpRelnull v-4
+BAD  edge 199 sin nombre -> Av. 10 de Agosto(200)
+   popular@40: reached=true t=22.8 wallN=2 peakImp=0 stall=0.1 air=0.00 dev=1.2 maxDecel=209.0@(-664,327) end=(-718.9,446.5)
+      walls: (-663.6,327.4) TriMesh imp0 n[-0.99,-0.17,0.01] cpRelnull v10 | (-663.6,327.5) TriMesh imp0 n[-0.99,-0.17,0.01] cpRelnull v6.5
+   popular@75: reached=true t=16.0 wallN=0 peakImp=0 stall=0.1 air=0.00 dev=1.7 maxDecel=19.6@(-658,321) end=(-718.8,446.5)
+   interparroquial@40: reached=false t=45.0 wallN=4916 peakImp=16403 stall=41.7 air=0.00 dev=0.3 maxDecel=338.1@(-618,325) end=(-618.1,325.1)
+      walls: (-617.9,324.9) ConvexPolyhedron imp16403 n[-0.86,0,-0.51] cpRel1.18 v8.7 | (-618,325.1) ConvexPolyhedron imp185 n[-0.85,0,-0.53] cpRel1.16 v0.1 | (-618.1,325.2) ConvexPolyhedron imp195 n[-0.83,0,-0.55] cpRel1.16 v0.1 | (-618.1,325.2) TriMesh imp0 n[-0.49,-0.4,0.78] cpRelnull v-0.1
+   interparroquial@75: reached=false t=45.0 wallN=6570 peakImp=16682 stall=42.5 air=0.00 dev=0.3 maxDecel=343.5@(-618,325) end=(-618.1,325.1)
+      walls: (-617.9,324.9) ConvexPolyhedron imp16682 n[-0.86,0,-0.51] cpRel1.18 v8.9 | (-618.1,325.2) ConvexPolyhedron imp480 n[-0.83,0,-0.55] cpRel1.19 v-0.1 | (-618.1,325.2) ConvexPolyhedron imp478 n[-0.83,0,-0.56] cpRel1.17 v-0.1 | (-618.1,325.2) ConvexPolyhedron imp500 n[-0.83,0,-0.56] cpRel1.17 v-0.1
+   buseta@40: reached=true t=22.5 wallN=0 peakImp=0 stall=0.1 air=0.10 dev=1.1 maxDecel=21.4@(-667,335) end=(-718.9,446.4)
+   buseta@75: reached=true t=16.0 wallN=0 peakImp=0 stall=0.1 air=0.10 dev=1.7 maxDecel=21.7@(-662,325) end=(-719,446.6)
+   ae86@40: reached=true t=22.6 wallN=0 peakImp=0 stall=0.1 air=0.20 dev=1.1 maxDecel=84.3@(-598,337) end=(-718.5,446.6)
+   ae86@75: reached=false t=45.0 wallN=4538 peakImp=0 stall=37.7 air=0.20 dev=1.4 maxDecel=781.9@(-644,317) end=(-660.9,324.3)
+      walls: (-660.2,324.5) TriMesh imp0 n[-0.36,0.07,0.93] cpRelnull v12.7 | (-660.6,324.3) TriMesh imp0 n[-0.36,0.06,0.93] cpRelnull v0.1 | (-660.7,324.3) TriMesh imp0 n[-0.36,0.06,0.93] cpRelnull v-0.1 | (-660.8,324.3) TriMesh imp0 n[-0.36,0.07,0.93] cpRelnull v-0.1
+BAD  edge 241 Av. 12 de Octubre -> Av. 12 de Octubre(587)
+   popular@40: reached=true t=22.8 wallN=1093 peakImp=0 stall=0.5 air=0.00 dev=0.1 maxDecel=318.3@(0,713) end=(77.4,666.2)
+      walls: (0.5,712.9) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v7.1 | (1.6,712.2) TriMesh imp0 n[0.51,-0.18,0.84] cpRelnull v2.4 | (4.9,710.3) TriMesh imp0 n[0.51,-0.18,0.84] cpRelnull v4 | (8.2,708.3) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v3.4
+   popular@75: reached=true t=12.2 wallN=337 peakImp=0 stall=0.1 air=0.00 dev=0.1 maxDecel=34.8@(1,713) end=(77.6,666.2)
+      walls: (0.5,712.9) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v8.3 | (4.7,710.4) TriMesh imp0 n[0.52,-0.18,0.84] cpRelnull v5.4 | (7.6,708.6) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v9 | (10.8,706.8) TriMesh imp0 n[0.51,-0.2,0.83] cpRelnull v11
+   interparroquial@40: reached=true t=26.6 wallN=1790 peakImp=0 stall=0.7 air=0.00 dev=0.2 maxDecel=295.1@(5,710) end=(77.4,666.2)
+      walls: (-0.3,713.3) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v6.8 | (5.5,709.8) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v1.4 | (8.6,708) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v2 | (12,706) TriMesh imp0 n[0.51,-0.2,0.84] cpRelnull v2.4
+   interparroquial@75: reached=true t=13.1 wallN=399 peakImp=0 stall=0.1 air=0.00 dev=0.2 maxDecel=247.4@(5,710) end=(77.5,666.2)
+      walls: (-0.3,713.3) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v6.8 | (3.5,711.1) TriMesh imp0 n[0.52,-0.18,0.84] cpRelnull v5.6 | (4.9,710.2) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v0.7 | (5.8,709.6) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v4.2
+   buseta@40: reached=true t=18.9 wallN=242 peakImp=0 stall=0.1 air=0.03 dev=0.1 maxDecel=103.3@(-75,757) end=(77.4,666.2)
+      walls: (6.8,709.2) TriMesh imp0 n[0.71,-0.17,0.68] cpRelnull v6.7 | (8.6,708.1) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v6.6 | (10.1,707.3) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v6.7 | (11.6,706.4) TriMesh imp0 n[0.51,-0.2,0.83] cpRelnull v7.1
+   buseta@75: reached=true t=11.8 wallN=36 peakImp=0 stall=0.1 air=0.03 dev=0.1 maxDecel=48.1@(7,709) end=(77.4,666.3)
+      walls: (6.8,709.2) TriMesh imp0 n[0.71,-0.17,0.68] cpRelnull v9.6 | (10.5,707) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v13.4 | (11.1,706.7) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v14 | (11.5,706.4) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v14.4
+   ae86@40: reached=true t=18.6 wallN=1 peakImp=0 stall=0.1 air=0.20 dev=0.1 maxDecel=72.8@(-76,757) end=(77.4,666.2)
+      walls: (-69.8,753.9) TriMesh imp0 n[0.21,0.05,0.98] cpRelnull v9.1
+   ae86@75: reached=true t=13.4 wallN=2 peakImp=0 stall=0.1 air=0.60 dev=0.2 maxDecel=1155.4@(-68,753) end=(77.4,666.2)
+      walls: (-67.9,752.8) TriMesh imp0 n[0.79,-0.39,-0.46] cpRelnull v17.1 | (-21.6,725.8) TriMesh imp0 n[0.86,-0.04,-0.5] cpRelnull v15.8
+BAD  edge 242 Av. 12 de Octubre -> Av. 12 de Octubre(241)
+   popular@40: reached=true t=25.6 wallN=801 peakImp=0 stall=0.1 air=0.12 dev=0.1 maxDecel=34.8@(19,702) end=(29.8,695.9)
+      walls: (0.4,712.9) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v5.5 | (4.4,710.5) TriMesh imp0 n[0.52,-0.18,0.84] cpRelnull v5.4 | (8.2,708.3) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v4.7 | (11.3,706.4) TriMesh imp0 n[0.51,-0.2,0.84] cpRelnull v4.5
+   popular@75: reached=true t=17.8 wallN=318 peakImp=0 stall=0.1 air=0.12 dev=0.4 maxDecel=91.3@(20,702) end=(29.6,695.7)
+      walls: (0.4,712.9) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v5.5 | (2.5,711.7) TriMesh imp0 n[0.52,-0.18,0.84] cpRelnull v5.8 | (4,710.8) TriMesh imp0 n[0.52,-0.18,0.84] cpRelnull v5.4 | (5.6,709.8) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v6.2
+   interparroquial@40: reached=true t=29.9 wallN=1308 peakImp=0 stall=0.4 air=0.13 dev=0.2 maxDecel=193.8@(26,698) end=(29.8,695.9)
+      walls: (-0.3,713.4) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v5.6 | (5.3,710) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v4 | (9.3,707.6) TriMesh imp0 n[0.51,-0.2,0.83] cpRelnull v2.9 | (12.3,705.9) TriMesh imp0 n[0.51,-0.25,0.83] cpRelnull v3
+   interparroquial@75: reached=true t=18.3 wallN=384 peakImp=0 stall=0.1 air=0.13 dev=0.3 maxDecel=76.7@(19,702) end=(29.7,695.7)
+      walls: (-0.3,713.4) TriMesh imp0 n[0.71,-0.15,0.69] cpRelnull v5.6 | (1.7,712.1) TriMesh imp0 n[0.52,-0.18,0.83] cpRelnull v6 | (3.6,711) TriMesh imp0 n[0.52,-0.18,0.84] cpRelnull v5.2 | (5.3,710) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v5.4
+   buseta@40: reached=true t=23.8 wallN=234 peakImp=0 stall=0.1 air=0.17 dev=0.1 maxDecel=38.8@(7,709) end=(29.8,696)
+      walls: (6.8,709.2) TriMesh imp0 n[0.71,-0.17,0.68] cpRelnull v6.7 | (8.6,708.1) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v6.7 | (10,707.3) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v6.7 | (11.5,706.4) TriMesh imp0 n[0.51,-0.2,0.83] cpRelnull v7
+   buseta@75: reached=true t=17.4 wallN=39 peakImp=0 stall=0.1 air=0.17 dev=0.1 maxDecel=47.7@(7,709) end=(29.8,696)
+      walls: (6.9,709.2) TriMesh imp0 n[0.71,-0.17,0.68] cpRelnull v9.6 | (10.4,707.1) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v13.3 | (10.8,706.8) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v13.7 | (11.4,706.5) TriMesh imp0 n[0.52,-0.2,0.83] cpRelnull v14.3
+   ae86@40: reached=true t=25.0 wallN=0 peakImp=0 stall=0.3 air=0.22 dev=0.1 maxDecel=769.6@(-14,721) end=(29.9,695.9)
+   ae86@75: reached=true t=18.3 wallN=0 peakImp=0 stall=0.1 air=0.22 dev=0.5 maxDecel=860.3@(-68,753) end=(29.8,696)
+BAD  edge 276 Av. 10 de Agosto -> -(null)
+   popular@40: reached=true t=10.8 wallN=141 peakImp=0 stall=0.1 air=0.15 dev=0.4 maxDecel=157.5@(-184,-818) end=(-176.7,-835.1)
+      walls: (-191,-801.7) TriMesh imp0 n[0.8,-0.6,0.06] cpRelnull v11.2 | (-186.5,-812.3) TriMesh imp0 n[0.82,-0.41,0.41] cpRelnull v11.4 | (-185.8,-813.9) TriMesh imp0 n[0.81,-0.41,0.41] cpRelnull v11.2 | (-185.1,-815.4) TriMesh imp0 n[0.81,-0.41,0.42] cpRelnull v11.2
+   popular@75: reached=true t=6.1 wallN=47 peakImp=0 stall=0.1 air=0.15 dev=1.5 maxDecel=16.6@(-179,-831) end=(-177.1,-835.4)
+      walls: (-190.2,-803.5) TriMesh imp0 n[0.74,-0.56,0.37] cpRelnull v21.3 | (-189.8,-804.5) TriMesh imp0 n[0.74,-0.55,0.38] cpRelnull v21.1 | (-189.4,-805.5) TriMesh imp0 n[0.74,-0.55,0.38] cpRelnull v21.1 | (-189,-806.4) TriMesh imp0 n[0.74,-0.55,0.39] cpRelnull v21.2
+   interparroquial@40: reached=true t=12.2 wallN=318 peakImp=0 stall=0.2 air=0.17 dev=0.5 maxDecel=586.5@(-179,-831) end=(-176.8,-835.1)
+      walls: (-191.3,-801) TriMesh imp0 n[0.8,-0.6,0.06] cpRelnull v11.1 | (-186.1,-813.3) TriMesh imp0 n[0.81,-0.41,0.41] cpRelnull v10.6 | (-184.7,-816.5) TriMesh imp0 n[0.81,-0.41,0.42] cpRelnull v10.6 | (-183.8,-819) TriMesh imp0 n[0.82,-0.41,0.39] cpRelnull v9.2
+   interparroquial@75: reached=true t=6.2 wallN=43 peakImp=0 stall=0.1 air=0.17 dev=1.6 maxDecel=223.3@(-188,-808) end=(-177.2,-835.4)
+      walls: (-190.4,-803.1) TriMesh imp0 n[0.74,-0.56,0.38] cpRelnull v21.1 | (-190,-804.1) TriMesh imp0 n[0.74,-0.55,0.38] cpRelnull v20.8 | (-189.6,-805) TriMesh imp0 n[0.74,-0.55,0.38] cpRelnull v20.8 | (-189.2,-806) TriMesh imp0 n[0.74,-0.55,0.39] cpRelnull v20.8
+   buseta@40: reached=true t=10.6 wallN=98 peakImp=0 stall=0.1 air=0.18 dev=0.3 maxDecel=143.5@(-187,-810) end=(-176.7,-835)
+      walls: (-190.3,-803.1) TriMesh imp0 n[0.74,-0.56,0.37] cpRelnull v11.1 | (-189.9,-804.1) TriMesh imp0 n[0.74,-0.56,0.38] cpRelnull v11 | (-189.4,-805.3) TriMesh imp0 n[0.74,-0.55,0.38] cpRelnull v11 | (-188.9,-806.3) TriMesh imp0 n[0.74,-0.55,0.39] cpRelnull v10.9
+   buseta@75: reached=true t=6.0 wallN=4 peakImp=0 stall=0.1 air=0.18 dev=2.1 maxDecel=259.6@(-187,-810) end=(-177.6,-835.6)
+      walls: (-187.4,-810) TriMesh imp0 n[0.89,-0.45,0.04] cpRelnull v21.3 | (-187.4,-810.3) TriMesh imp0 n[0.74,-0.56,0.38] cpRelnull v17 | (-187.4,-810.3) TriMesh imp0 n[0.74,-0.56,0.38] cpRelnull v17 | (-187.3,-810.5) TriMesh imp0 n[0.6,-0.45,0.67] cpRelnull v16.8
+   ae86@40: reached=true t=10.6 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=0.3 maxDecel=68.4@(-216,-738) end=(-176.5,-834.9)
+   ae86@75: reached=false t=45.0 wallN=2480 peakImp=10811 stall=41.3 air=0.23 dev=0.4 maxDecel=1316.5@(-195,-791) end=(-195.7,-791.4)
+      walls: (-195.4,-791.3) TriMesh imp10811 n[0.39,-0.1,-0.91] cpRel-0.82 v20.7 | (-195.4,-791.3) TriMesh imp164 n[0.39,-0.1,-0.91] cpRel-0.79 v-0.1 | (-195.5,-791.3) TriMesh imp164 n[0.39,-0.1,-0.91] cpRel-0.79 v-0.1 | (-195.5,-791.3) TriMesh imp160 n[0.39,-0.1,-0.91] cpRel-0.79 v-0.1
+OK   edge 297 sin nombre -> Av. Tarqui(522)
+BAD  edge 349 sin nombre -> sin nombre(524)
+   popular@40: reached=true t=16.1 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.6 maxDecel=19.6@(-30,711) end=(-57.6,713.7)
+   popular@75: reached=true t=14.2 wallN=2 peakImp=0 stall=0.3 air=0.12 dev=0.7 maxDecel=302.0@(-30,711) end=(-57.5,713.8)
+      walls: (-33.8,710.5) TriMesh imp0 n[1,-0.08,0.01] cpRelnull v5.2 | (-36.1,710.4) TriMesh imp0 n[0.99,-0.12,0] cpRelnull v5.4
+   interparroquial@40: reached=true t=18.7 wallN=98 peakImp=97 stall=0.8 air=0.12 dev=0.7 maxDecel=308.0@(-30,711) end=(-57.5,713.7)
+      walls: (-29.9,710.7) TriMesh imp0 n[-1,0,0.06] cpRelnull v5.9 | (-57.3,713.5) ConvexPolyhedron imp0 n[-0.91,0,0.42] cpRel-0.76 v0.7 | (-57.3,713.5) ConvexPolyhedron imp97 n[-0.97,0,-0.25] cpRel-0.74 v0.3 | (-57.3,713.5) ConvexPolyhedron imp30 n[-0.72,0,-0.69] cpRel-0.72 v0.2
+   interparroquial@75: reached=true t=14.0 wallN=3 peakImp=14428 stall=0.1 air=0.12 dev=0.7 maxDecel=384.2@(-57,713) end=(-57.5,713.8)
+      walls: (-57.1,713.3) ConvexPolyhedron imp14428 n[-0.97,0,-0.25] cpRel-0.79 v12.1 | (-57.2,713.4) ConvexPolyhedron imp14 n[-0.97,0,-0.25] cpRel-0.79 v5.7 | (-57.2,713.4) ConvexPolyhedron imp0 n[-0.97,0,-0.25] cpRel-0.78 v5.5
+   buseta@40: reached=true t=15.8 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.5 maxDecel=19.8@(-30,710) end=(-57.5,713.7)
+   buseta@75: reached=true t=13.2 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.6 maxDecel=19.7@(50,668) end=(-57.4,713.8)
+   ae86@40: reached=true t=16.8 wallN=7 peakImp=0 stall=0.3 air=0.22 dev=0.9 maxDecel=272.9@(-32,710) end=(-57.2,714)
+      walls: (-32.1,710.3) TriMesh imp0 n[-0.99,0.03,-0.14] cpRelnull v6.2 | (-32.2,710.4) TriMesh imp0 n[-0.99,0.03,-0.14] cpRelnull v1.7 | (-32.2,710.4) TriMesh imp0 n[-0.99,0.03,-0.14] cpRelnull v1.2 | (-32.2,710.4) TriMesh imp0 n[-0.99,0.03,-0.14] cpRelnull v0.7
+   ae86@75: reached=true t=13.3 wallN=1 peakImp=0 stall=0.1 air=0.22 dev=1.4 maxDecel=143.6@(-55,713) end=(-57,714.4)
+      walls: (-57,714.4) TriMesh imp0 n[0.74,-0.26,-0.61] cpRelnull v13.4
+BAD  edge 516 sin nombre -> -(null)
+   popular@40: reached=false t=45.0 wallN=12338 peakImp=0 stall=3.1 air=0.00 dev=0.4 maxDecel=1749.6@(-860,-258) end=(-859.7,-257.1)
+      walls: (-859.5,-257.5) TriMesh imp0 n[0.96,-0.03,0.29] cpRelnull v0.6 | (-859.7,-257.1) TriMesh imp0 n[0.93,-0.29,0.24] cpRelnull v0.4 | (-859.7,-257.1) TriMesh imp0 n[0.96,-0.01,0.29] cpRelnull v0 | (-859.6,-257.1) TriMesh imp0 n[0.96,-0.01,0.28] cpRelnull v0
+   popular@75: reached=false t=45.0 wallN=11606 peakImp=0 stall=5.0 air=0.00 dev=0.5 maxDecel=1585.8@(-860,-257) end=(-859.7,-257.9)
+      walls: (-859.6,-257.3) TriMesh imp0 n[0.95,0,0.31] cpRelnull v0 | (-859.6,-257) TriMesh imp0 n[0.93,-0.29,0.24] cpRelnull v-0.2 | (-859.6,-257) TriMesh imp0 n[0.93,-0.29,0.24] cpRelnull v0 | (-859.7,-257.1) TriMesh imp0 n[0.96,-0.01,0.29] cpRelnull v0
+   interparroquial@40: reached=false t=45.0 wallN=15378 peakImp=0 stall=4.3 air=0.00 dev=7.9 maxDecel=2496.2@(-862,-251) end=(-862.3,-249.8)
+      walls: (-859.7,-257.1) TriMesh imp0 n[0.96,-0.01,0.3] cpRelnull v0 | (-860.3,-255.1) TriMesh imp0 n[0.95,-0.01,0.32] cpRelnull v0 | (-861.3,-252.2) TriMesh imp0 n[0.96,0.04,0.29] cpRelnull v0.1 | (-861.7,-250.8) TriMesh imp0 n[0.95,0,0.32] cpRelnull v0
+   interparroquial@75: reached=true t=15.0 wallN=1693 peakImp=0 stall=0.7 air=0.00 dev=0.7 maxDecel=2629.5@(-859,-258) end=(-830.7,-340)
+      walls: (-859.5,-257.2) TriMesh imp0 n[0.93,-0.29,0.21] cpRelnull v-0.6 | (-859.4,-257.5) TriMesh imp0 n[0.95,-0.06,0.3] cpRelnull v0.5 | (-859.4,-257.7) TriMesh imp0 n[0.89,-0.36,0.27] cpRelnull v2.4 | (-859.5,-257.8) TriMesh imp0 n[-0.33,-0.11,0.94] cpRelnull v0.1
+   buseta@40: reached=true t=12.8 wallN=915 peakImp=0 stall=0.7 air=0.03 dev=0.1 maxDecel=402.4@(-857,-263) end=(-830.8,-339.8)
+      walls: (-859.2,-258) TriMesh imp0 n[0.89,-0.36,0.27] cpRelnull v2.8 | (-858,-261.5) TriMesh imp0 n[0.9,-0.36,0.27] cpRelnull v4.7 | (-857.3,-263.5) TriMesh imp0 n[0.89,-0.36,0.27] cpRelnull v5.4 | (-857.1,-264.1) TriMesh imp0 n[0.85,-0.46,0.25] cpRelnull v1.9
+   buseta@75: reached=true t=5.4 wallN=298 peakImp=0 stall=0.1 air=0.03 dev=0.1 maxDecel=26.1@(-832,-337) end=(-830.7,-340)
+      walls: (-858.1,-261.1) TriMesh imp0 n[0.88,-0.4,0.26] cpRelnull v10.2 | (-857.7,-262.2) TriMesh imp0 n[0.9,-0.36,0.27] cpRelnull v11.4 | (-857.1,-263.9) TriMesh imp0 n[0.86,-0.46,0.24] cpRelnull v13 | (-856.7,-265.2) TriMesh imp0 n[0.88,-0.4,0.26] cpRelnull v13.9
+   ae86@40: reached=true t=9.8 wallN=0 peakImp=0 stall=0.3 air=0.20 dev=0.1 maxDecel=380.4@(-860,-257) end=(-830.8,-339.7)
+   ae86@75: reached=false t=45.0 wallN=2383 peakImp=10497 stall=39.6 air=0.20 dev=0.5 maxDecel=878.2@(-831,-337) end=(-831.4,-337.4)
+      walls: (-831.5,-337.4) ConvexPolyhedron imp10497 n[0.2,0,-0.98] cpRel-0.55 v20.3 | (-831.1,-337.4) ConvexPolyhedron imp268 n[0.2,0,-0.98] cpRel-0.61 v0.1 | (-831.2,-337.4) ConvexPolyhedron imp215 n[0.2,0,-0.98] cpRel-0.61 v0 | (-831.2,-337.4) ConvexPolyhedron imp200 n[0.2,0,-0.98] cpRel-0.61 v-0.1
+BAD  edge 517 Av. Patria -> Av. Patria(274)
+   popular@40: reached=true t=22.6 wallN=0 peakImp=0 stall=0.4 air=0.00 dev=0.9 maxDecel=18.4@(-585,354) end=(-523.3,392.5)
+   popular@75: reached=true t=13.6 wallN=8 peakImp=0 stall=0.1 air=0.00 dev=0.9 maxDecel=18.7@(-583,355) end=(-523.4,392.6)
+      walls: (-645.6,316.4) ConvexPolyhedron imp0 n[-0.61,0,0.79] cpRel-1.99 v20.7 | (-645.3,316.6) ConvexPolyhedron imp0 n[-0.61,0,0.79] cpRel-2.03 v20.7 | (-645,316.8) ConvexPolyhedron imp0 n[-0.61,0,0.79] cpRel-2.06 v20.7 | (-644.8,317) ConvexPolyhedron imp0 n[-0.61,0,0.79] cpRel-2.1 v20.7
+   interparroquial@40: reached=true t=24.5 wallN=79 peakImp=152 stall=0.4 air=0.00 dev=0.8 maxDecel=549.4@(-655,308) end=(-523.4,392.5)
+      walls: (-657.8,304.9) ConvexPolyhedron imp0 n[-0.67,0,0.74] cpRel-1.72 v11.3 | (-656.6,306.1) ConvexPolyhedron imp0 n[-0.75,0,0.66] cpRel-1.02 v11 | (-655.5,307.3) ConvexPolyhedron imp66 n[-0.67,0,0.74] cpRel-1.75 v10.9 | (-654.8,307.9) ConvexPolyhedron imp152 n[-0.67,-0.01,0.74] cpRel-1.02 v1.3
+   interparroquial@75: reached=true t=15.5 wallN=120 peakImp=28620 stall=0.1 air=0.00 dev=0.8 maxDecel=1020.2@(-657,306) end=(-523.3,392.7)
+      walls: (-656.8,305.9) ConvexPolyhedron imp443 n[-0.67,0,0.74] cpRel-1.74 v20.4 | (-656.6,305.9) ConvexPolyhedron imp0 n[-0.67,-0.02,0.74] cpRel-1 v1.7 | (-655.9,306.5) ConvexPolyhedron imp0 n[-0.67,0,0.74] cpRel-1.74 v4.7 | (-654.9,307.6) ConvexPolyhedron imp77 n[-0.67,0,0.74] cpRel-1.75 v7.2
+   buseta@40: reached=true t=22.2 wallN=0 peakImp=0 stall=0.3 air=0.05 dev=0.8 maxDecel=108.3@(-687,254) end=(-523.4,392.4)
+   buseta@75: reached=true t=13.5 wallN=0 peakImp=0 stall=0.1 air=0.05 dev=0.8 maxDecel=20.7@(-583,355) end=(-523.3,392.7)
+   ae86@40: reached=true t=22.2 wallN=0 peakImp=0 stall=0.3 air=0.20 dev=1.0 maxDecel=379.7@(-687,254) end=(-523.4,392.4)
+   ae86@75: reached=true t=14.2 wallN=0 peakImp=0 stall=0.1 air=0.23 dev=1.0 maxDecel=1300.3@(-588,352) end=(-523.3,392.5)
+BAD  edge 523 sin nombre -> sin nombre(160)
+   popular@40: reached=true t=13.9 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.6 maxDecel=19.8@(-41,759) end=(-26.2,754.8)
+   popular@75: reached=true t=8.2 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=1.3 maxDecel=20.2@(-41,758) end=(-26.4,754.3)
+   interparroquial@40: reached=true t=14.2 wallN=0 peakImp=0 stall=0.1 air=0.13 dev=0.7 maxDecel=18.8@(-141,802) end=(-26,754.9)
+   interparroquial@75: reached=true t=8.4 wallN=0 peakImp=0 stall=0.1 air=0.13 dev=1.4 maxDecel=18.9@(-41,758) end=(-26.2,754.5)
+   buseta@40: reached=true t=13.8 wallN=3 peakImp=0 stall=0.1 air=0.15 dev=0.5 maxDecel=23.4@(-116,785) end=(-26.2,754.7)
+      walls: (-109.1,781) TriMesh imp0 n[-0.83,-0.21,0.51] cpRelnull v11.4 | (-109.1,781) TriMesh imp0 n[-0.83,-0.21,0.51] cpRelnull v11.4 | (-100.3,775.6) TriMesh imp0 n[-0.68,-0.6,0.42] cpRelnull v11.3
+   buseta@75: reached=true t=8.1 wallN=0 peakImp=0 stall=0.1 air=0.15 dev=1.3 maxDecel=22.3@(-41,758) end=(-26.4,754.4)
+   ae86@40: reached=true t=13.9 wallN=0 peakImp=0 stall=0.2 air=0.22 dev=0.8 maxDecel=165.0@(-141,802) end=(-26.6,754.4)
+   ae86@75: reached=true t=8.1 wallN=0 peakImp=0 stall=0.1 air=0.22 dev=1.6 maxDecel=82.6@(-141,802) end=(-27,753.6)
+BAD  edge 524 sin nombre -> Queseras del Medio(207)
+   popular@40: reached=true t=20.0 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=1.2 maxDecel=24.9@(-60,715) end=(-62.9,755.3)
+   popular@75: reached=true t=15.5 wallN=1 peakImp=0 stall=0.1 air=0.12 dev=1.6 maxDecel=26.7@(-59,715) end=(-62.8,755.2)
+      walls: (-36.1,710.4) TriMesh imp0 n[0.99,-0.12,0] cpRelnull v5.4
+   interparroquial@40: reached=true t=24.4 wallN=34 peakImp=9762 stall=0.1 air=0.13 dev=1.1 maxDecel=258.3@(-57,713) end=(-63.1,755.4)
+      walls: (-57.1,713.3) ConvexPolyhedron imp9762 n[-0.97,0,-0.25] cpRel-0.76 v8.7 | (-57.3,713.5) ConvexPolyhedron imp0 n[-0.72,0,-0.69] cpRel-0.75 v3.4 | (-58.1,714.1) TriMesh imp0 n[-0.75,-0.52,0.4] cpRelnull v1.8 | (-58.4,714.4) TriMesh imp0 n[-0.67,-0.47,-0.57] cpRelnull v1.8
+   interparroquial@75: reached=true t=20.2 wallN=13 peakImp=13859 stall=0.7 air=0.13 dev=1.4 maxDecel=369.0@(-57,713) end=(-62.9,755.5)
+      walls: (-29.3,710.6) TriMesh imp0 n[-0.99,0,-0.15] cpRelnull v7 | (-29.3,710.6) TriMesh imp0 n[-0.99,0,-0.15] cpRelnull v0.7 | (-29.3,710.6) TriMesh imp0 n[-0.99,-0.01,-0.15] cpRelnull v0.2 | (-29.3,710.6) TriMesh imp0 n[-0.99,0,-0.15] cpRelnull v0.2
+   buseta@40: reached=true t=19.6 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=1.2 maxDecel=22.8@(-60,715) end=(-62.9,755.4)
+   buseta@75: reached=true t=15.3 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=1.5 maxDecel=23.5@(-55,712) end=(-62.8,755.5)
+   ae86@40: reached=true t=19.6 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=1.5 maxDecel=128.4@(50,667) end=(-62.3,755)
+   ae86@75: reached=true t=17.0 wallN=52 peakImp=0 stall=1.2 air=0.23 dev=2.6 maxDecel=600.7@(-55,713) end=(-61.6,754.6)
+      walls: (-54.6,713.1) TriMesh imp0 n[-0.69,0.12,0.72] cpRelnull v13.7 | (-54.8,712.9) TriMesh imp0 n[-0.69,0.14,0.71] cpRelnull v1.3 | (-54.8,712.9) TriMesh imp0 n[-0.69,0.15,0.71] cpRelnull v-0.1 | (-54.8,712.9) TriMesh imp0 n[-0.69,0.15,0.71] cpRelnull v-0.1
+BAD  edge 524 sin nombre -> Av. 12 de Octubre(277)
+   popular@40: reached=true t=20.3 wallN=18 peakImp=1453 stall=0.1 air=0.12 dev=0.6 maxDecel=37.9@(-62,717) end=(-91.9,754.4)
+      walls: (-61.3,716.7) TriMesh imp0 n[-0.56,-0.57,-0.6] cpRelnull v10.2 | (-61.9,717.2) ConvexPolyhedron imp1453 n[-0.9,0,-0.44] cpRel-0.75 v10.4 | (-62.2,717.5) ConvexPolyhedron imp504 n[-0.9,0,-0.44] cpRel-0.75 v9.6 | (-62.5,717.8) ConvexPolyhedron imp499 n[-0.9,-0.01,-0.44] cpRel-0.75 v9.1
+   popular@75: reached=true t=15.9 wallN=16 peakImp=1435 stall=0.1 air=0.12 dev=0.9 maxDecel=234.9@(-63,718) end=(-92.1,754.3)
+      walls: (-36.1,710.4) TriMesh imp0 n[0.99,-0.12,0] cpRelnull v5.4 | (-61.4,716.8) TriMesh imp0 n[-0.62,-0.63,-0.47] cpRelnull v14.6 | (-61.6,717) TriMesh imp0 n[-0.62,-0.63,-0.47] cpRelnull v14.6 | (-61.7,717.1) TriMesh imp0 n[-0.62,-0.63,-0.47] cpRelnull v14.6
+   interparroquial@40: reached=false t=45.0 wallN=1873 peakImp=9762 stall=27.7 air=0.13 dev=0.7 maxDecel=258.3@(-57,713) end=(-60.7,715.9)
+      walls: (-57.1,713.3) ConvexPolyhedron imp9762 n[-0.97,0,-0.25] cpRel-0.76 v8.7 | (-60.6,716.2) ConvexPolyhedron imp0 n[-0.9,0,-0.44] cpRel-0.62 v-0.1 | (-60.6,716.2) TriMesh imp0 n[-0.62,-0.63,0.47] cpRelnull v-0.1 | (-60.6,716.1) TriMesh imp0 n[-0.61,-0.63,0.48] cpRelnull v-0.1
+   interparroquial@75: reached=true t=22.7 wallN=273 peakImp=472 stall=3.1 air=0.13 dev=0.9 maxDecel=369.0@(-57,713) end=(-91.9,754.5)
+      walls: (-29.3,710.6) TriMesh imp0 n[-0.99,0,-0.15] cpRelnull v7 | (-61.4,717.1) ConvexPolyhedron imp472 n[-0.9,0,-0.44] cpRel-0.73 v2 | (-61.8,717.5) ConvexPolyhedron imp0 n[-0.84,0,-0.54] cpRel-0.73 v-0.1 | (-61.8,717.5) ConvexPolyhedron imp59 n[-0.9,0,-0.44] cpRel-0.72 v0.2
+   buseta@40: reached=true t=19.8 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.6 maxDecel=29.4@(-68,724) end=(-92,754.3)
+   buseta@75: reached=true t=16.1 wallN=2 peakImp=3645 stall=0.1 air=0.17 dev=1.2 maxDecel=422.0@(-64,719) end=(-92.1,754.2)
+      walls: (-63.8,719.1) ConvexPolyhedron imp3645 n[-0.9,0,-0.44] cpRel-0.81 v16.5 | (-63.9,719.3) ConvexPolyhedron imp0 n[-0.9,0,-0.44] cpRel-0.71 v9.4
+   ae86@40: reached=true t=19.9 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=0.9 maxDecel=128.4@(50,667) end=(-92.2,754)
+   ae86@75: reached=true t=16.9 wallN=13 peakImp=0 stall=0.7 air=0.37 dev=1.4 maxDecel=666.3@(-55,713) end=(-92.5,753.6)
+      walls: (-54.6,713.1) TriMesh imp0 n[-0.69,0.13,0.72] cpRelnull v15.2 | (-54.7,713.1) TriMesh imp0 n[-0.69,0.14,0.71] cpRelnull v3.5 | (-54.7,713) TriMesh imp0 n[-0.69,0.14,0.71] cpRelnull v2.3 | (-54.8,713) TriMesh imp0 n[-0.69,0.15,0.71] cpRelnull v1.7
+BAD  edge 564 Av. 10 de Agosto -> Av. 10 de Agosto(508)
+   popular@40: reached=true t=23.5 wallN=760 peakImp=50 stall=8.8 air=0.00 dev=0.9 maxDecel=223.0@(-200,-825) end=(-227.8,-763.7)
+      walls: (-196.9,-831.1) ConvexPolyhedron imp50 n[-0.85,0,-0.53] cpRel0.25 v-0.1 | (-198,-829) TriMesh imp0 n[-0.79,-0.39,-0.47] cpRelnull v0.3 | (-199.3,-827) TriMesh imp0 n[-0.79,-0.44,-0.43] cpRelnull v0.9 | (-201.6,-822.4) TriMesh imp0 n[-0.79,-0.61,0.08] cpRelnull v0.9
+   popular@75: reached=true t=6.2 wallN=124 peakImp=89 stall=0.3 air=0.00 dev=0.8 maxDecel=341.4@(-202,-823) end=(-227.9,-763.5)
+      walls: (-197.3,-830.5) ConvexPolyhedron imp89 n[-0.85,0,-0.53] cpRel0.15 v2.3 | (-197.8,-829.7) ConvexPolyhedron imp53 n[-0.85,0,-0.53] cpRel0.67 v4.5 | (-200.7,-824.7) TriMesh imp0 n[-0.79,-0.49,-0.38] cpRelnull v12.1 | (-203.2,-819.5) TriMesh imp0 n[-0.76,-0.59,-0.28] cpRelnull v7.3
+   interparroquial@40: reached=false t=45.0 wallN=28 peakImp=0 stall=40.7 air=41.30 dev=4.1 maxDecel=465.5@(-195,-830) end=(-194.2,-829.3)
+      walls: (-196.6,-830.9) TriMesh imp0 n[-0.87,-0.03,-0.5] cpRelnull v0 | (-196.6,-830.8) TriMesh imp0 n[-0.85,-0.03,-0.52] cpRelnull v0 | (-196.5,-830.8) TriMesh imp0 n[-0.85,-0.02,-0.53] cpRelnull v0 | (-196.6,-830.8) TriMesh imp0 n[-0.85,-0.03,-0.52] cpRelnull v0
+   interparroquial@75: reached=true t=10.3 wallN=106 peakImp=0 stall=3.9 air=0.00 dev=1.5 maxDecel=973.9@(-202,-821) end=(-228,-763.6)
+      walls: (-196.8,-830.7) TriMesh imp0 n[-0.87,-0.03,-0.5] cpRelnull v0 | (-196.8,-830.7) TriMesh imp0 n[-0.86,-0.03,-0.5] cpRelnull v0 | (-196.8,-830.7) TriMesh imp0 n[-0.86,-0.01,-0.52] cpRelnull v0 | (-196.7,-830.7) TriMesh imp0 n[-0.85,-0.02,-0.52] cpRelnull v0
+   buseta@40: reached=true t=10.7 wallN=244 peakImp=0 stall=0.4 air=0.00 dev=0.4 maxDecel=577.6@(-202,-821) end=(-227.8,-763.6)
+      walls: (-197.9,-830.8) TriMesh imp0 n[-0.87,-0.29,-0.39] cpRelnull v1.5 | (-198,-830.6) TriMesh imp0 n[-0.87,-0.31,-0.39] cpRelnull v1.9 | (-198.1,-830.4) TriMesh imp0 n[-0.87,-0.31,-0.39] cpRelnull v2.3 | (-198.2,-830.1) TriMesh imp0 n[-0.87,-0.29,-0.39] cpRelnull v2.7
+   buseta@75: reached=true t=4.8 wallN=9 peakImp=0 stall=0.1 air=0.00 dev=1.1 maxDecel=130.5@(-203,-821) end=(-228,-763.7)
+      walls: (-199.6,-827.3) TriMesh imp0 n[-0.87,-0.31,-0.38] cpRelnull v10.1 | (-199.7,-827.1) TriMesh imp0 n[-0.87,-0.31,-0.38] cpRelnull v10.3 | (-199.8,-827) TriMesh imp0 n[-0.87,-0.31,-0.38] cpRelnull v10.5 | (-202.5,-821.2) TriMesh imp0 n[-0.79,-0.61,0.08] cpRelnull v16.5
+   ae86@40: reached=true t=8.7 wallN=0 peakImp=0 stall=0.3 air=0.18 dev=0.3 maxDecel=351.0@(-198,-831) end=(-227.8,-763.5)
+   ae86@75: reached=true t=4.7 wallN=0 peakImp=0 stall=0.1 air=0.18 dev=0.5 maxDecel=315.3@(-198,-831) end=(-227.7,-763.5)
+OK   edge 575 Av. Patria -> Av. Patria(165)
+BAD  edge 585 sin nombre -> sin nombre(349)
+   popular@40: reached=true t=13.1 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.3 maxDecel=17.6@(50,667) end=(-24.5,709.5)
+   popular@75: reached=true t=10.7 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.5 maxDecel=17.7@(58,663) end=(-24.4,709.3)
+   interparroquial@40: reached=true t=13.3 wallN=0 peakImp=0 stall=0.1 air=0.13 dev=0.2 maxDecel=17.5@(73,654) end=(-24.4,709.6)
+   interparroquial@75: reached=true t=10.8 wallN=0 peakImp=0 stall=0.1 air=0.13 dev=0.4 maxDecel=16.5@(58,663) end=(-24.4,709.4)
+   buseta@40: reached=true t=13.0 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.2 maxDecel=19.7@(55,665) end=(-24.4,709.5)
+   buseta@75: reached=true t=10.7 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.5 maxDecel=19.8@(64,659) end=(-24.5,709.3)
+   ae86@40: reached=true t=14.0 wallN=2 peakImp=0 stall=0.2 air=0.23 dev=0.4 maxDecel=534.4@(-19,708) end=(-24.5,709.4)
+      walls: (-19.4,707.6) TriMesh imp0 n[-0.91,-0.11,0.41] cpRelnull v9.6 | (-19.4,707.6) TriMesh imp0 n[-0.91,-0.11,0.41] cpRelnull v0.7
+   ae86@75: reached=true t=11.3 wallN=2 peakImp=0 stall=0.1 air=0.23 dev=0.8 maxDecel=727.2@(-19,707) end=(-24.6,709.1)
+      walls: (-19.4,707.3) TriMesh imp0 n[-0.91,-0.11,0.41] cpRelnull v17 | (-19.5,707.3) TriMesh imp0 n[-0.91,-0.11,0.41] cpRelnull v4.9
+OK   edge 586 Av. 12 de Octubre -> Av. 12 de Octubre(155)
+BAD  edge 588 sin nombre -> sin nombre(523)
+   popular@40: reached=true t=11.9 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.3 maxDecel=17.5@(-66,758) end=(-65.5,757.8)
+   popular@75: reached=true t=7.0 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.5 maxDecel=16.9@(-117,786) end=(-65.6,757.9)
+   interparroquial@40: reached=true t=12.1 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.2 maxDecel=16.9@(-157,813) end=(-65.6,757.7)
+   interparroquial@75: reached=true t=7.2 wallN=0 peakImp=0 stall=0.1 air=0.12 dev=0.4 maxDecel=15.6@(-115,785) end=(-65.6,757.8)
+   buseta@40: reached=true t=11.8 wallN=2 peakImp=0 stall=0.1 air=0.17 dev=0.3 maxDecel=20.0@(-148,807) end=(-65.7,757.8)
+      walls: (-109.1,781) TriMesh imp0 n[-0.83,-0.22,0.51] cpRelnull v11.5 | (-109.1,781) TriMesh imp0 n[-0.83,-0.22,0.51] cpRelnull v11.5
+   buseta@75: reached=true t=7.0 wallN=0 peakImp=0 stall=0.1 air=0.17 dev=0.5 maxDecel=19.1@(-119,787) end=(-65.7,757.9)
+   ae86@40: reached=true t=11.9 wallN=0 peakImp=0 stall=0.2 air=0.22 dev=0.5 maxDecel=132.4@(-157,813) end=(-65.6,758.1)
+   ae86@75: reached=true t=7.0 wallN=0 peakImp=0 stall=0.1 air=0.22 dev=0.9 maxDecel=115.3@(-157,813) end=(-65.6,758.5)
+OK   edge 589 Av. 12 de Octubre -> Av. 12 de Octubre(242)
+BAD  edge 681 sin nombre -> sin nombre(195)
+   popular@40: reached=true t=16.5 wallN=421 peakImp=1819 stall=1.2 air=0.17 dev=1.3 maxDecel=176.7@(-831,776) end=(-833,778.6)
+      walls: (-819.7,768.3) ConvexPolyhedron imp1819 n[-0.5,0,-0.87] cpRel-1.34 v9.6 | (-828.7,772.6) ConvexPolyhedron imp148 n[-0.96,0,-0.27] cpRel-1.36 v0.3 | (-828.8,772.7) ConvexPolyhedron imp81 n[-0.91,0,-0.42] cpRel-1.35 v0.5 | (-829.4,773.3) ConvexPolyhedron imp119 n[-0.91,0,-0.42] cpRel-1.32 v1.5
+   popular@75: reached=true t=9.2 wallN=206 peakImp=8511 stall=0.7 air=0.17 dev=1.5 maxDecel=383.0@(-832,777) end=(-832.9,778.6)
+      walls: (-828.4,772.3) ConvexPolyhedron imp8511 n[-0.96,0,-0.27] cpRel-1.41 v13.5 | (-831.6,776.3) ConvexPolyhedron imp306 n[-0.91,0,-0.42] cpRel-1.15 v8.1 | (-831.9,777) ConvexPolyhedron imp63 n[-0.96,0,-0.27] cpRel-1.16 v0.4 | (-832,777.1) ConvexPolyhedron imp105 n[-0.96,0,-0.27] cpRel-1.15 v0.7
+   interparroquial@40: reached=false t=45.0 wallN=2324 peakImp=16038 stall=20.3 air=0.17 dev=1.8 maxDecel=423.8@(-818,768) end=(-832.4,778.4)
+      walls: (-818.5,768.1) ConvexPolyhedron imp16038 n[-0.85,0,-0.53] cpRel-1.45 v9.5 | (-818.6,768.3) ConvexPolyhedron imp0 n[-1,0,0.02] cpRel-1.5 v0.1 | (-826,770.6) ConvexPolyhedron imp108 n[-0.7,0,-0.71] cpRel-1.54 v2 | (-827.5,771.8) ConvexPolyhedron imp100 n[-0.96,0,-0.27] cpRel-1.55 v0.1
+   interparroquial@75: reached=true t=16.9 wallN=788 peakImp=3652 stall=4.5 air=0.17 dev=1.7 maxDecel=193.9@(-827,771) end=(-832.7,778.7)
+      walls: (-819.7,768.6) ConvexPolyhedron imp3652 n[-0.5,0,-0.87] cpRel-1.45 v15.3 | (-828.1,772.7) ConvexPolyhedron imp151 n[-0.91,0,-0.42] cpRel-1.48 v0.4 | (-828.6,773.2) ConvexPolyhedron imp153 n[-0.91,0,-0.42] cpRel-1.45 v0.5 | (-829,773.6) ConvexPolyhedron imp145 n[-0.91,0,-0.42] cpRel-1.43 v0.6
+   buseta@40: reached=true t=11.9 wallN=35 peakImp=500 stall=0.1 air=0.18 dev=0.8 maxDecel=25.1@(-833,778) end=(-833.6,778.3)
+      walls: (-830.7,773.9) ConvexPolyhedron imp500 n[-0.91,0,-0.42] cpRel-1.22 v10.2 | (-831.1,774.5) ConvexPolyhedron imp15 n[-0.91,0,-0.42] cpRel1.17 v9.8 | (-831.6,775.1) ConvexPolyhedron imp133 n[-0.91,0,-0.42] cpRel-1.15 v9.8 | (-832,775.6) ConvexPolyhedron imp64 n[-0.91,0,-0.42] cpRel-1.12 v9.9
+   buseta@75: reached=true t=7.0 wallN=22 peakImp=1380 stall=0.1 air=0.18 dev=1.1 maxDecel=43.9@(-833,778) end=(-833.6,778.3)
+      walls: (-831.3,774.9) ConvexPolyhedron imp907 n[-0.91,0,-0.42] cpRel-1.17 v14.7 | (-831.7,775.5) ConvexPolyhedron imp347 n[-0.91,0,-0.42] cpRel-1.14 v14.1 | (-832,775.9) ConvexPolyhedron imp323 n[-0.91,0,-0.42] cpRel-1.12 v14 | (-832.4,776.4) ConvexPolyhedron imp271 n[-0.91,0,-0.42] cpRel-1.11 v13.8
+   ae86@40: reached=true t=11.9 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=1.3 maxDecel=142.4@(-726,792) end=(-833,778.6)
+   ae86@75: reached=true t=6.9 wallN=0 peakImp=0 stall=0.1 air=0.23 dev=2.1 maxDecel=149.6@(-726,792) end=(-832.6,778.8)
+BAD  edge 895 Alfredo Perez Guerrero -> Alfredo Perez Guerrero(166)
+   popular@40: reached=true t=15.9 wallN=72 peakImp=453 stall=0.2 air=0.15 dev=1.5 maxDecel=292.0@(-647,294) end=(-709.2,166.9)
+      walls: (-659.2,279.3) ConvexPolyhedron imp57 n[0.78,0,-0.63] cpRel-1.51 v11 | (-659.7,278.7) ConvexPolyhedron imp0 n[0.78,0,-0.62] cpRel-1.5 v10.4 | (-660.2,278.1) ConvexPolyhedron imp453 n[0.79,0,-0.61] cpRel-1.5 v9.9 | (-660.6,277.6) ConvexPolyhedron imp0 n[0.8,0,-0.61] cpRel-1.49 v9.7
+   popular@75: reached=true t=11.6 wallN=65 peakImp=566 stall=0.1 air=0.15 dev=1.5 maxDecel=18.7@(-698,202) end=(-709,166.9)
+      walls: (-657,281.9) ConvexPolyhedron imp324 n[0.76,0,-0.64] cpRel-1.49 v18.7 | (-657.8,281) ConvexPolyhedron imp0 n[0.77,0,-0.64] cpRel-1.5 v18.5 | (-658.8,279.8) ConvexPolyhedron imp461 n[0.77,0,-0.64] cpRel-0.78 v18.2 | (-659.5,278.9) ConvexPolyhedron imp0 n[0.77,0,-0.64] cpRel-1.5 v17.8
+   interparroquial@40: reached=true t=16.2 wallN=76 peakImp=714 stall=0.3 air=0.17 dev=1.4 maxDecel=320.3@(-647,294) end=(-709.1,166.9)
+      walls: (-659.4,279.1) ConvexPolyhedron imp0 n[0.77,0,-0.64] cpRel-1.66 v10.8 | (-659.9,278.5) ConvexPolyhedron imp714 n[0.78,0,-0.63] cpRel-1.65 v10.2 | (-660.4,277.8) ConvexPolyhedron imp494 n[0.79,0,-0.62] cpRel-1.65 v9.8 | (-660.9,277.2) ConvexPolyhedron imp345 n[0.8,0,-0.61] cpRel-1.64 v9.6
+   interparroquial@75: reached=true t=11.9 wallN=68 peakImp=767 stall=0.1 air=0.17 dev=1.4 maxDecel=17.2@(-698,202) end=(-708.9,166.9)
+      walls: (-657.3,281.5) ConvexPolyhedron imp433 n[0.76,0,-0.65] cpRel-1.64 v18.4 | (-658.1,280.6) ConvexPolyhedron imp0 n[0.76,0,-0.64] cpRel-1.65 v18 | (-659.1,279.5) ConvexPolyhedron imp643 n[0.77,0,-0.64] cpRel-1.65 v17.5 | (-659.8,278.6) ConvexPolyhedron imp0 n[0.77,0,-0.64] cpRel-1.65 v17.1
+   buseta@40: reached=true t=15.6 wallN=0 peakImp=0 stall=0.2 air=0.18 dev=1.5 maxDecel=353.4@(-647,294) end=(-709.2,167)
+   buseta@75: reached=true t=11.4 wallN=45 peakImp=437 stall=0.1 air=0.18 dev=1.5 maxDecel=20.7@(-698,202) end=(-709.1,166.8)
+      walls: (-658,280.7) ConvexPolyhedron imp437 n[0.78,0,-0.63] cpRel-1.38 v19.6 | (-658.6,279.9) ConvexPolyhedron imp267 n[0.78,0,-0.63] cpRel-1.39 v19.4 | (-659.2,279.2) ConvexPolyhedron imp308 n[0.78,0,-0.63] cpRel-1.39 v19.3 | (-659.8,278.4) ConvexPolyhedron imp355 n[0.78,0,-0.62] cpRel-1.4 v19.1
+   ae86@40: reached=true t=15.5 wallN=0 peakImp=0 stall=0.2 air=0.23 dev=1.7 maxDecel=169.1@(-647,294) end=(-709.2,166.9)
+   ae86@75: reached=true t=11.5 wallN=1 peakImp=1918 stall=0.1 air=0.23 dev=1.7 maxDecel=137.0@(-659,280) end=(-709.3,166.8)
+      walls: (-658.5,279.7) ConvexPolyhedron imp1918 n[0.58,0,-0.81] cpRel0.24 v20.1

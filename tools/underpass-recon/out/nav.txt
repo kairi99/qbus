@@ -1,0 +1,187 @@
+== 1. locate on lifted edges ==
+NO-Y    edge 165 Av. Patria s 34 (-648.6, 291.5) lift 6.50 -> edge 671 Av. 10 de Agosto y 24.59 (callers without y: guidance picks the wrong level)
+NO-Y    edge 165 Av. Patria s 36 (-649.9, 290.0) lift 6.50 -> edge 671 Av. 10 de Agosto y 24.61 (callers without y: guidance picks the wrong level)
+NO-Y    edge 167 Av. Patria s 64 (-667.9, 291.4) lift 6.50 -> edge 890 Av. 10 de Agosto y 24.86 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 54 (-186.9, -810.8) lift -2.07 -> edge 951 Av. 10 de Agosto y 20.12 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 56 (-186.1, -812.6) lift -2.27 -> edge 951 Av. 10 de Agosto y 20.05 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 58 (-185.4, -814.5) lift -2.47 -> edge 951 Av. 10 de Agosto y 19.98 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 60 (-184.6, -816.3) lift -2.67 -> edge 951 Av. 10 de Agosto y 19.92 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 62 (-183.8, -818.1) lift -2.87 -> edge 951 Av. 10 de Agosto y 19.92 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 64 (-183.0, -819.9) lift -3.07 -> edge 951 Av. 10 de Agosto y 19.92 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 66 (-182.2, -821.8) lift -3.28 -> edge 951 Av. 10 de Agosto y 19.91 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 68 (-181.4, -823.6) lift -3.47 -> edge 951 Av. 10 de Agosto y 19.91 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 70 (-180.6, -825.4) lift -3.67 -> edge 951 Av. 10 de Agosto y 19.84 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 80 (-176.7, -834.5) lift -4.66 -> edge 221 Av. 10 de Agosto y 19.53 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 82 (-175.9, -836.4) lift -4.85 -> edge 221 Av. 10 de Agosto y 19.52 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 84 (-175.1, -838.2) lift -5.05 -> edge 221 Av. 10 de Agosto y 19.48 (callers without y: guidance picks the wrong level)
+NO-Y    edge 276 Av. 10 de Agosto s 86 (-174.3, -840.0) lift -5.23 -> edge 221 Av. 10 de Agosto y 19.45 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 2 (-861.5, -251.1) lift -3.62 -> edge 729 Av. América y 26.85 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 4 (-860.9, -253.0) lift -3.43 -> edge 729 Av. América y 26.85 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 6 (-860.2, -254.8) lift -3.24 -> edge 729 Av. América y 26.85 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 8 (-859.6, -256.7) lift -3.05 -> edge 729 Av. América y 26.85 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 10 (-858.9, -258.6) lift -2.85 -> edge 729 Av. América y 26.84 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 12 (-858.3, -260.5) lift -2.65 -> edge 729 Av. América y 26.84 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 14 (-857.6, -262.4) lift -2.45 -> edge 729 Av. América y 26.84 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 16 (-857.0, -264.3) lift -2.26 -> edge 729 Av. América y 26.84 (callers without y: guidance picks the wrong level)
+NO-Y    edge 516 sin nombre s 18 (-856.3, -266.2) lift -2.06 -> edge 729 Av. América y 26.86 (callers without y: guidance picks the wrong level)
+NO-Y    edge 564 Av. 10 de Agosto s 2 (-195.2, -836.7) lift -3.04 -> edge 870 Paso elevado avenida 10 de Agosto y 20.74 (callers without y: guidance picks the wrong level)
+NO-Y    edge 564 Av. 10 de Agosto s 4 (-196.1, -834.9) lift -2.85 -> edge 870 Paso elevado avenida 10 de Agosto y 20.85 (callers without y: guidance picks the wrong level)
+NO-Y    edge 564 Av. 10 de Agosto s 6 (-196.9, -833.1) lift -2.67 -> edge 870 Paso elevado avenida 10 de Agosto y 20.95 (callers without y: guidance picks the wrong level)
+NO-Y    edge 564 Av. 10 de Agosto s 8 (-197.8, -831.3) lift -2.47 -> edge 870 Paso elevado avenida 10 de Agosto y 21.02 (callers without y: guidance picks the wrong level)
+NO-Y    edge 564 Av. 10 de Agosto s 10 (-198.6, -829.4) lift -2.28 -> edge 870 Paso elevado avenida 10 de Agosto y 21.02 (callers without y: guidance picks the wrong level)
+NO-Y    edge 564 Av. 10 de Agosto s 12 (-199.5, -827.6) lift -2.08 -> edge 870 Paso elevado avenida 10 de Agosto y 21.03 (callers without y: guidance picks the wrong level)
+WITH-Y  edge 564 Av. 10 de Agosto s 24 (-204.6, -816.8) lift -0.95 y 20.21 -> edge 511 Paso elevado avenida 10 de Agosto y 21.35
+locate with y: 1 wrong picks
+
+== 2. snapToRoad (R reset) ==
+reset on edge 156 Av. 12 de Octubre s 51 (-130.2, 782.7) y 22.94 -> (-142.0, 790.0) y 23.32 (moved 13.9 m, dy 0.37) on road #85 Av. 12 de Octubre (surface off by 0.00)
+reset on edge 241 Av. 12 de Octubre s 45 (41.0, 689.5) y 22.02 -> (41.8, 690.7) y 22.34 (moved 1.4 m, dy 0.32) on road #314 Av. 12 de Octubre (surface off by 0.00)
+reset on edge 241 Av. 12 de Octubre s 51 (46.2, 686.5) y 22.44 -> (46.8, 687.4) y 22.47 (moved 1.0 m, dy 0.03) on road #314 Av. 12 de Octubre (surface off by 0.00)
+reset on edge 276 Av. 10 de Agosto s 3 (-207.0, -764.2) y 20.60 -> (-207.1, -763.9) y 20.48 (moved 0.3 m, dy -0.12) on road #574 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 276 Av. 10 de Agosto s 9 (-204.7, -769.7) y 20.63 -> (-205.1, -768.8) y 20.52 (moved 0.9 m, dy -0.10) on road #574 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 276 Av. 10 de Agosto s 15 (-202.4, -775.2) y 20.57 -> (-199.7, -774.0) y 20.32 (moved 2.9 m, dy -0.25) on road #574 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 276 Av. 10 de Agosto s 21 (-200.0, -780.7) y 20.62 -> (-197.3, -779.5) y 20.34 (moved 2.9 m, dy -0.27) on road #574 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 276 Av. 10 de Agosto s 27 (-197.6, -786.1) y 20.60 -> (-195.0, -785.0) y 20.40 (moved 2.9 m, dy -0.19) on road #574 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 276 Av. 10 de Agosto s 33 (-195.2, -791.6) y 20.25 -> (-192.6, -790.5) y 20.28 (moved 2.9 m, dy 0.03) on road #574 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 276 Av. 10 de Agosto s 39 (-192.9, -797.1) y 19.78 -> (-190.8, -794.7) y 20.16 (moved 3.2 m, dy 0.38) on road #574 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 516 sin nombre s 27 (-853.4, -274.7) y 25.81 -> (-851.1, -273.9) y 26.88 (moved 2.4 m, dy 1.07) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 33 (-851.4, -280.4) y 26.33 -> (-849.1, -279.6) y 26.88 (moved 2.4 m, dy 0.55) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 39 (-849.4, -286.0) y 26.80 -> (-847.1, -285.2) y 26.90 (moved 2.4 m, dy 0.11) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 45 (-847.5, -291.7) y 27.11 -> (-845.2, -290.9) y 26.96 (moved 2.4 m, dy -0.15) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 51 (-845.5, -297.4) y 27.24 -> (-843.2, -296.6) y 27.09 (moved 2.4 m, dy -0.15) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 57 (-843.5, -303.0) y 27.28 -> (-841.3, -302.2) y 27.14 (moved 2.4 m, dy -0.13) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 63 (-841.6, -308.7) y 27.36 -> (-839.3, -307.9) y 27.24 (moved 2.4 m, dy -0.12) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 69 (-839.6, -314.4) y 27.56 -> (-839.1, -315.7) y 27.50 (moved 1.4 m, dy -0.06) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 75 (-837.6, -320.0) y 27.82 -> (-837.2, -321.3) y 27.74 (moved 1.4 m, dy -0.08) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 81 (-835.7, -325.7) y 27.95 -> (-833.6, -328.4) y 27.97 (moved 3.4 m, dy 0.02) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 87 (-833.7, -331.4) y 28.17 -> (-833.0, -331.2) y 28.09 (moved 0.7 m, dy -0.07) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 93 (-831.7, -337.0) y 28.43 -> (-832.6, -333.2) y 28.18 (moved 3.9 m, dy -0.25) on road #518 Av. América (surface off by 0.00)
+reset on edge 516 sin nombre s 99 (-829.8, -342.7) y 28.79 -> (-829.4, -348.9) y 29.04 (moved 6.2 m, dy 0.25) on road #518 Av. América (surface off by 0.00)
+reset on edge 517 Av. Patria s 93 (-553.7, 372.4) y 23.56 -> (-553.8, 372.3) y 23.54 (moved 0.2 m, dy -0.03) on road #164 Av. Patria (surface off by 0.00)
+reset on edge 564 Av. 10 de Agosto s 27 (-205.8, -814.0) y 20.56 -> (-209.0, -815.3) y 21.61 (moved 3.4 m, dy 1.06) on road #351 Paso elevado avenida 10 de Agosto (surface off by 0.00)
+reset on edge 564 Av. 10 de Agosto s 33 (-208.4, -808.6) y 21.12 -> (-211.2, -809.7) y 21.80 (moved 3.0 m, dy 0.68) on road #351 Paso elevado avenida 10 de Agosto (surface off by 0.00)
+reset on edge 564 Av. 10 de Agosto s 39 (-210.9, -803.2) y 21.40 -> (-213.4, -804.2) y 21.88 (moved 2.7 m, dy 0.47) on road #351 Paso elevado avenida 10 de Agosto (surface off by 0.00)
+reset on edge 564 Av. 10 de Agosto s 45 (-213.4, -797.7) y 21.45 -> (-215.6, -798.6) y 21.87 (moved 2.3 m, dy 0.43) on road #351 Paso elevado avenida 10 de Agosto (surface off by 0.00)
+reset on edge 564 Av. 10 de Agosto s 51 (-216.0, -792.3) y 21.50 -> (-216.8, -795.5) y 21.79 (moved 3.3 m, dy 0.29) on road #351 Paso elevado avenida 10 de Agosto (surface off by 0.00)
+reset on edge 564 Av. 10 de Agosto s 57 (-218.5, -786.9) y 21.43 -> (-219.0, -785.8) y 21.53 (moved 1.2 m, dy 0.10) on road #351 Paso elevado avenida 10 de Agosto (surface off by 0.00)
+reset on edge 564 Av. 10 de Agosto s 63 (-221.1, -781.4) y 21.42 -> (-221.5, -780.4) y 21.49 (moved 1.1 m, dy 0.07) on road #663 Av. 10 de Agosto (surface off by 0.00)
+reset on edge 895 Alfredo Perez Guerrero s 15 (-697.5, 203.4) y 24.93 -> (-697.3, 203.8) y 24.80 (moved 0.5 m, dy -0.13) on road #94 Alfredo Perez Guerrero (surface off by 0.00)
+-- resets from the street crossing over/under --
+reset from street level at (-625.9, 320.2) (ground 23.92, sin nombre below/above at 19.55), heading 0.00 -> (-624.6, 320.9) y 19.65: changed level
+reset from street level at (-625.9, 320.2) (ground 23.92, sin nombre below/above at 19.55), heading 1.57 -> (-624.6, 320.9) y 19.65: changed level
+reset from street level at (-625.9, 320.2) (ground 23.92, sin nombre below/above at 19.55), heading 3.14 -> (-624.6, 320.9) y 19.65: changed level
+reset from street level at (-625.9, 320.2) (ground 23.92, sin nombre below/above at 19.55), heading -1.57 -> (-624.6, 320.9) y 19.65: changed level
+reset from street level at (-668.9, 340.5) (ground 24.50, sin nombre below/above at 19.87), heading 0.00 -> (-669.4, 341.9) y 20.02: changed level
+reset from street level at (-668.9, 340.5) (ground 24.50, sin nombre below/above at 19.87), heading 1.57 -> (-669.4, 341.9) y 20.02: changed level
+reset from street level at (-668.9, 340.5) (ground 24.50, sin nombre below/above at 19.87), heading 3.14 -> (-669.4, 341.9) y 20.02: changed level
+reset from street level at (-668.9, 340.5) (ground 24.50, sin nombre below/above at 19.87), heading -1.57 -> (-669.4, 341.9) y 20.02: changed level
+reset from street level at (-842.7, 853.6) (ground 28.41, sin nombre below/above at 23.29), heading 0.00 -> (-841.5, 853.3) y 23.38: changed level
+reset from street level at (-842.7, 853.6) (ground 28.41, sin nombre below/above at 23.29), heading 1.57 -> (-841.5, 853.3) y 23.38: changed level
+reset from street level at (-842.7, 853.6) (ground 28.41, sin nombre below/above at 23.29), heading 3.14 -> (-841.5, 853.3) y 23.38: changed level
+reset from street level at (-842.7, 853.6) (ground 28.41, sin nombre below/above at 23.29), heading -1.57 -> (-841.5, 853.3) y 23.38: changed level
+reset from street level at (-865.6, -250.4) (ground 26.87, sin nombre below/above at 23.08), heading 0.00 -> (-861.7, -250.6) y 23.23: changed level
+reset from street level at (-865.6, -250.4) (ground 26.87, sin nombre below/above at 23.08), heading 1.57 -> (-861.7, -250.6) y 23.23: changed level
+reset from street level at (-865.6, -250.4) (ground 26.87, sin nombre below/above at 23.08), heading 3.14 -> (-861.7, -250.6) y 23.23: changed level
+reset from street level at (-865.6, -250.4) (ground 26.87, sin nombre below/above at 23.08), heading -1.57 -> (-861.7, -250.6) y 23.23: changed level
+reset from street level at (-632.9, 323.6) (ground 23.95, Av. Patria below/above at 28.71), heading 0.00 -> (-632.5, 326.0) y 28.53: changed level
+reset from street level at (-632.9, 323.6) (ground 23.95, Av. Patria below/above at 28.71), heading 1.57 -> (-632.5, 326.0) y 28.53: changed level
+reset from street level at (-632.9, 323.6) (ground 23.95, Av. Patria below/above at 28.71), heading 3.14 -> (-632.5, 326.0) y 28.53: changed level
+reset from street level at (-632.9, 323.6) (ground 23.95, Av. Patria below/above at 28.71), heading -1.57 -> (-632.5, 326.0) y 28.53: changed level
+reset from street level at (-191.1, -837.0) (ground 20.45, Av. 10 de Agosto below/above at 17.22), heading 0.00 -> (-195.0, -837.2) y 17.41: changed level
+reset from street level at (-191.1, -837.0) (ground 20.45, Av. 10 de Agosto below/above at 17.22), heading 1.57 -> (-195.0, -837.2) y 17.41: changed level
+reset from street level at (-191.1, -837.0) (ground 20.45, Av. 10 de Agosto below/above at 17.22), heading 3.14 -> (-195.0, -837.2) y 17.41: changed level
+reset from street level at (-191.1, -837.0) (ground 20.45, Av. 10 de Agosto below/above at 17.22), heading -1.57 -> (-195.0, -837.2) y 17.41: changed level
+reset from street level at (-623.7, 314.3) (ground 24.07, Av. Patria below/above at 28.05), heading 0.00 -> (-621.4, 313.4) y 27.89: changed level
+reset from street level at (-623.7, 314.3) (ground 24.07, Av. Patria below/above at 28.05), heading 1.57 -> (-621.4, 313.4) y 27.89: changed level
+reset from street level at (-623.7, 314.3) (ground 24.07, Av. Patria below/above at 28.05), heading 3.14 -> (-621.4, 313.4) y 27.89: changed level
+reset from street level at (-623.7, 314.3) (ground 24.07, Av. Patria below/above at 28.05), heading -1.57 -> (-621.4, 313.4) y 27.89: changed level
+reset from street level at (-2.1, 705.1) (ground 20.96, Av. 12 de Octubre below/above at 16.03), heading 0.00 -> (-0.9, 704.3) y 16.22: changed level
+reset from street level at (-2.1, 705.1) (ground 20.96, Av. 12 de Octubre below/above at 16.03), heading 1.57 -> (-0.9, 704.3) y 16.22: changed level
+reset from street level at (-2.1, 705.1) (ground 20.96, Av. 12 de Octubre below/above at 16.03), heading 3.14 -> (-0.9, 704.3) y 16.22: changed level
+reset from street level at (-2.1, 705.1) (ground 20.96, Av. 12 de Octubre below/above at 16.03), heading -1.57 -> (-0.9, 704.3) y 16.22: changed level
+reset from street level at (-83.9, 759.9) (ground 20.39, Av. 12 de Octubre below/above at 15.49), heading 0.00 -> (-84.1, 762.3) y 15.69: changed level
+reset from street level at (-83.9, 759.9) (ground 20.39, Av. 12 de Octubre below/above at 15.49), heading 1.57 -> (-84.1, 762.3) y 15.69: changed level
+reset from street level at (-83.9, 759.9) (ground 20.39, Av. 12 de Octubre below/above at 15.49), heading 3.14 -> (-84.1, 762.3) y 15.69: changed level
+reset from street level at (-83.9, 759.9) (ground 20.39, Av. 12 de Octubre below/above at 15.49), heading -1.57 -> (-84.1, 762.3) y 15.69: changed level
+reset from street level at (-812.1, 770.0) (ground 25.63, sin nombre below/above at 19.33), heading 0.00 -> (-810.7, 768.2) y 19.38: changed level
+reset from street level at (-812.1, 770.0) (ground 25.63, sin nombre below/above at 19.33), heading 1.57 -> (-810.7, 768.2) y 19.38: changed level
+reset from street level at (-812.1, 770.0) (ground 25.63, sin nombre below/above at 19.33), heading 3.14 -> (-810.7, 768.2) y 19.38: changed level
+reset from street level at (-812.1, 770.0) (ground 25.63, sin nombre below/above at 19.33), heading -1.57 -> (-810.7, 768.2) y 19.38: changed level
+
+== 2b. reset from the street directly over/under each crossing ==
+ok  bus on Av. Patria #774 (y 20.33) over/under Av. 12 de Octubre edge 155 (y 13.85) at (-17.5, 714.3) heading 0.00 -> (-18.2, 714.4) y 20.31
+ok  bus on Av. Patria #774 (y 20.33) over/under Av. 12 de Octubre edge 155 (y 13.85) at (-17.5, 714.3) heading 1.57 -> (-18.2, 714.4) y 20.31
+ok  bus on Av. Patria #774 (y 20.33) over/under Av. 12 de Octubre edge 155 (y 13.85) at (-17.5, 714.3) heading 3.14 -> (-18.2, 714.4) y 20.31
+ok  bus on Av. Patria #774 (y 20.33) over/under Av. 12 de Octubre edge 155 (y 13.85) at (-17.5, 714.3) heading -1.57 -> (-18.2, 714.4) y 20.31
+ok  bus on sin nombre #89 (y 20.19) over/under Av. 12 de Octubre edge 155 (y 13.75) at (-20.1, 715.9) heading 0.00 -> (-18.2, 714.4) y 20.31
+ok  bus on sin nombre #89 (y 20.19) over/under Av. 12 de Octubre edge 155 (y 13.75) at (-20.1, 715.9) heading 1.57 -> (-18.2, 714.4) y 20.31
+ok  bus on sin nombre #89 (y 20.19) over/under Av. 12 de Octubre edge 155 (y 13.75) at (-20.1, 715.9) heading 3.14 -> (-18.2, 714.4) y 20.31
+ok  bus on sin nombre #89 (y 20.19) over/under Av. 12 de Octubre edge 155 (y 13.75) at (-20.1, 715.9) heading -1.57 -> (-18.2, 714.4) y 20.31
+ok  bus on Queseras del Medio #123 (y 19.61) over/under Av. 12 de Octubre edge 155 (y 13.20) at (-66.3, 743.5) heading 0.00 -> (-69.2, 743.9) y 19.67
+ok  bus on Queseras del Medio #123 (y 19.61) over/under Av. 12 de Octubre edge 155 (y 13.20) at (-66.3, 743.5) heading 1.57 -> (-69.2, 743.9) y 19.67
+ok  bus on Queseras del Medio #123 (y 19.61) over/under Av. 12 de Octubre edge 155 (y 13.20) at (-66.3, 743.5) heading 3.14 -> (-69.2, 743.9) y 19.67
+ok  bus on Queseras del Medio #123 (y 19.61) over/under Av. 12 de Octubre edge 155 (y 13.20) at (-66.3, 743.5) heading -1.57 -> (-69.2, 743.9) y 19.67
+ok  bus on Queseras del Medio #123 (y 19.97) over/under sin nombre edge 160 (y 13.49) at (-56.8, 756.9) heading 0.00 -> (-59.9, 759.1) y 19.96
+ok  bus on Queseras del Medio #123 (y 19.97) over/under sin nombre edge 160 (y 13.49) at (-56.8, 756.9) heading 1.57 -> (-59.9, 759.1) y 19.96
+ok  bus on Queseras del Medio #123 (y 19.97) over/under sin nombre edge 160 (y 13.49) at (-56.8, 756.9) heading 3.14 -> (-59.9, 759.1) y 19.96
+ok  bus on Queseras del Medio #123 (y 19.97) over/under sin nombre edge 160 (y 13.49) at (-56.8, 756.9) heading -1.57 -> (-59.9, 759.1) y 19.96
+ok  bus on Av. 10 de Agosto #466 (y 24.59) over/under Av. Patria edge 165 (y 31.08) at (-647.4, 295.6) heading 0.00 -> (-647.7, 295.6) y 24.59
+ok  bus on Av. 10 de Agosto #466 (y 24.59) over/under Av. Patria edge 165 (y 31.08) at (-647.4, 295.6) heading 1.57 -> (-647.7, 295.6) y 24.59
+ok  bus on Av. 10 de Agosto #466 (y 24.59) over/under Av. Patria edge 165 (y 31.08) at (-647.4, 295.6) heading 3.14 -> (-647.7, 295.6) y 24.59
+ok  bus on Av. 10 de Agosto #466 (y 24.59) over/under Av. Patria edge 165 (y 31.08) at (-647.4, 295.6) heading -1.57 -> (-647.7, 295.6) y 24.59
+ok  bus on Av. 10 de Agosto #685 (y 24.55) over/under Av. Patria edge 165 (y 31.06) at (-662.1, 279.4) heading 0.00 -> (-666.6, 278.6) y 24.59
+ok  bus on Av. 10 de Agosto #685 (y 24.55) over/under Av. Patria edge 165 (y 31.06) at (-662.1, 279.4) heading 1.57 -> (-666.6, 278.6) y 24.59
+ok  bus on Av. 10 de Agosto #685 (y 24.55) over/under Av. Patria edge 165 (y 31.06) at (-662.1, 279.4) heading 3.14 -> (-666.6, 278.6) y 24.59
+ok  bus on Av. 10 de Agosto #685 (y 24.55) over/under Av. Patria edge 165 (y 31.06) at (-662.1, 279.4) heading -1.57 -> (-666.6, 278.6) y 24.59
+ok  bus on Av. 10 de Agosto #685 (y 24.76) over/under Av. Patria edge 167 (y 31.28) at (-668.0, 287.9) heading 0.00 -> (-668.2, 287.8) y 24.76
+ok  bus on Av. 10 de Agosto #685 (y 24.76) over/under Av. Patria edge 167 (y 31.28) at (-668.0, 287.9) heading 1.57 -> (-668.2, 287.8) y 24.76
+ok  bus on Av. 10 de Agosto #685 (y 24.76) over/under Av. Patria edge 167 (y 31.28) at (-668.0, 287.9) heading 3.14 -> (-668.2, 287.8) y 24.76
+ok  bus on Av. 10 de Agosto #685 (y 24.76) over/under Av. Patria edge 167 (y 31.28) at (-668.0, 287.9) heading -1.57 -> (-668.2, 287.8) y 24.76
+ok  bus on Av. 10 de Agosto #466 (y 24.54) over/under Av. Patria edge 167 (y 31.04) at (-652.3, 307.8) heading 0.00 -> (-652.0, 316.6) y 24.40
+ok  bus on Av. 10 de Agosto #466 (y 24.54) over/under Av. Patria edge 167 (y 31.04) at (-652.3, 307.8) heading 1.57 -> (-652.0, 316.6) y 24.40
+ok  bus on Av. 10 de Agosto #466 (y 24.54) over/under Av. Patria edge 167 (y 31.04) at (-652.3, 307.8) heading 3.14 -> (-652.0, 316.6) y 24.40
+ok  bus on Av. 10 de Agosto #466 (y 24.54) over/under Av. Patria edge 167 (y 31.04) at (-652.3, 307.8) heading -1.57 -> (-652.0, 316.6) y 24.40
+ok  bus on sin nombre #118 (y 17.96) over/under Av. Patria edge 167 (y 30.51) at (-643.8, 315.2) heading 0.00 -> (-644.4, 315.6) y 17.90
+ok  bus on sin nombre #118 (y 17.96) over/under Av. Patria edge 167 (y 30.51) at (-643.8, 315.2) heading 1.57 -> (-644.4, 315.6) y 17.90
+ok  bus on sin nombre #118 (y 17.96) over/under Av. Patria edge 167 (y 30.51) at (-643.8, 315.2) heading 3.14 -> (-644.4, 315.6) y 17.90
+ok  bus on sin nombre #118 (y 17.96) over/under Av. Patria edge 167 (y 30.51) at (-643.8, 315.2) heading -1.57 -> (-644.4, 315.6) y 17.90
+ok  bus on Av. 10 de Agosto #130 (y 25.92) over/under sin nombre edge 195 (y 19.46) at (-821.9, 769.6) heading 0.00 -> (-820.9, 769.9) y 25.89
+ok  bus on Av. 10 de Agosto #130 (y 25.92) over/under sin nombre edge 195 (y 19.46) at (-821.9, 769.6) heading 1.57 -> (-820.9, 769.9) y 25.89
+ok  bus on Av. 10 de Agosto #130 (y 25.92) over/under sin nombre edge 195 (y 19.46) at (-821.9, 769.6) heading 3.14 -> (-820.9, 769.9) y 25.89
+ok  bus on Av. 10 de Agosto #130 (y 25.92) over/under sin nombre edge 195 (y 19.46) at (-821.9, 769.6) heading -1.57 -> (-820.9, 769.9) y 25.89
+ok  bus on Av. Patria #95 (y 30.25) over/under sin nombre edge 198 (y 18.20) at (-641.1, 315.2) heading 0.00 -> (-643.8, 317.5) y 30.34
+ok  bus on Av. Patria #95 (y 30.25) over/under sin nombre edge 198 (y 18.20) at (-641.1, 315.2) heading 1.57 -> (-643.8, 317.5) y 30.34
+ok  bus on Av. Patria #95 (y 30.25) over/under sin nombre edge 198 (y 18.20) at (-641.1, 315.2) heading 3.14 -> (-643.8, 317.5) y 30.34
+ok  bus on Av. Patria #95 (y 30.25) over/under sin nombre edge 198 (y 18.20) at (-641.1, 315.2) heading -1.57 -> (-643.8, 317.5) y 30.34
+ok  bus on Av. 10 de Agosto #466 (y 24.38) over/under sin nombre edge 198 (y 17.89) at (-651.9, 318.0) heading 0.00 -> (-652.4, 317.9) y 24.39
+ok  bus on Av. 10 de Agosto #466 (y 24.38) over/under sin nombre edge 198 (y 17.89) at (-651.9, 318.0) heading 1.57 -> (-652.4, 317.9) y 24.39
+ok  bus on Av. 10 de Agosto #466 (y 24.38) over/under sin nombre edge 198 (y 17.89) at (-651.9, 318.0) heading 3.14 -> (-652.4, 317.9) y 24.39
+ok  bus on Av. 10 de Agosto #466 (y 24.38) over/under sin nombre edge 198 (y 17.89) at (-651.9, 318.0) heading -1.57 -> (-652.4, 317.9) y 24.39
+ok  bus on Queseras del Medio #123 (y 19.71) over/under Av. 12 de Octubre edge 242 (y 13.31) at (-65.8, 749.4) heading 0.00 -> (-69.2, 743.9) y 19.67
+ok  bus on Queseras del Medio #123 (y 19.71) over/under Av. 12 de Octubre edge 242 (y 13.31) at (-65.8, 749.4) heading 1.57 -> (-69.2, 743.9) y 19.67
+ok  bus on Queseras del Medio #123 (y 19.71) over/under Av. 12 de Octubre edge 242 (y 13.31) at (-65.8, 749.4) heading 3.14 -> (-69.2, 743.9) y 19.67
+ok  bus on Queseras del Medio #123 (y 19.71) over/under Av. 12 de Octubre edge 242 (y 13.31) at (-65.8, 749.4) heading -1.57 -> (-69.2, 743.9) y 19.67
+ok  bus on sin nombre #89 (y 20.25) over/under Av. 12 de Octubre edge 242 (y 13.76) at (-19.5, 722.3) heading 0.00 -> (-18.4, 723.2) y 20.25
+ok  bus on sin nombre #89 (y 20.25) over/under Av. 12 de Octubre edge 242 (y 13.76) at (-19.5, 722.3) heading 1.57 -> (-18.4, 723.2) y 20.25
+ok  bus on sin nombre #89 (y 20.25) over/under Av. 12 de Octubre edge 242 (y 13.76) at (-19.5, 722.3) heading 3.14 -> (-18.4, 723.2) y 20.25
+ok  bus on sin nombre #89 (y 20.25) over/under Av. 12 de Octubre edge 242 (y 13.76) at (-19.5, 722.3) heading -1.57 -> (-18.4, 723.2) y 20.25
+ok  bus on Av. Patria #774 (y 20.32) over/under Av. 12 de Octubre edge 242 (y 13.86) at (-16.9, 720.8) heading 0.00 -> (-14.0, 720.0) y 20.48
+ok  bus on Av. Patria #774 (y 20.32) over/under Av. 12 de Octubre edge 242 (y 13.86) at (-16.9, 720.8) heading 1.57 -> (-14.0, 720.0) y 20.48
+ok  bus on Av. Patria #774 (y 20.32) over/under Av. 12 de Octubre edge 242 (y 13.86) at (-16.9, 720.8) heading 3.14 -> (-14.0, 720.0) y 20.48
+ok  bus on Av. Patria #774 (y 20.32) over/under Av. 12 de Octubre edge 242 (y 13.86) at (-16.9, 720.8) heading -1.57 -> (-14.0, 720.0) y 20.48
+ok  bus on Av. Patria #774 (y 20.08) over/under sin nombre edge 349 (y 13.61) at (-24.6, 710.1) heading 0.00 -> (-25.0, 709.2) y 20.08
+ok  bus on Av. Patria #774 (y 20.08) over/under sin nombre edge 349 (y 13.61) at (-24.6, 710.1) heading 1.57 -> (-25.0, 709.2) y 20.08
+ok  bus on Av. Patria #774 (y 20.08) over/under sin nombre edge 349 (y 13.61) at (-24.6, 710.1) heading 3.14 -> (-25.0, 709.2) y 20.08
+ok  bus on Av. Patria #774 (y 20.08) over/under sin nombre edge 349 (y 13.61) at (-24.6, 710.1) heading -1.57 -> (-25.0, 709.2) y 20.08
+ok  bus on Av. Patria #74 (y 19.87) over/under sin nombre edge 349 (y 13.41) at (-30.7, 710.9) heading 0.00 -> (-25.0, 709.2) y 20.08
+ok  bus on Av. Patria #74 (y 19.87) over/under sin nombre edge 349 (y 13.41) at (-30.7, 710.9) heading 1.57 -> (-25.0, 709.2) y 20.08
+ok  bus on Av. Patria #74 (y 19.87) over/under sin nombre edge 349 (y 13.41) at (-30.7, 710.9) heading 3.14 -> (-25.0, 709.2) y 20.08
+ok  bus on Av. Patria #74 (y 19.87) over/under sin nombre edge 349 (y 13.41) at (-30.7, 710.9) heading -1.57 -> (-25.0, 709.2) y 20.08
+ok  bus on Queseras del Medio #123 (y 19.89) over/under sin nombre edge 523 (y 13.47) at (-61.8, 756.8) heading 0.00 -> (-61.7, 756.7) y 19.89
+ok  bus on Queseras del Medio #123 (y 19.89) over/under sin nombre edge 523 (y 13.47) at (-61.8, 756.8) heading 1.57 -> (-61.7, 756.7) y 19.89
+ok  bus on Queseras del Medio #123 (y 19.89) over/under sin nombre edge 523 (y 13.47) at (-61.8, 756.8) heading 3.14 -> (-61.7, 756.7) y 19.89
+ok  bus on Queseras del Medio #123 (y 19.89) over/under sin nombre edge 523 (y 13.47) at (-61.8, 756.8) heading -1.57 -> (-61.7, 756.7) y 19.89
+
+== 3. stuff on or near ramps ==
+stop osm4309716468 El Ejido (-770.5, 763.9): near ramp sin nombre #476 (lift -2.67, 12.2 m from its edge)
+0 trees within 1.5 m of a ramp's asphalt

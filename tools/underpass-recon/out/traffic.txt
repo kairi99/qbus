@@ -1,0 +1,156 @@
+
+== Patria / 12 de Octubre, seed 1: 0 cars knocked loose with no bus around; lifted edges used: 589,588,585,524,523,586,241,242,160,155,349,156,197,198,199,575,165,895
+  longest wait 14.3 s at Av. 12 de Octubre edge 590 (-202, 826)
+  worst body height vs lane surface -18.23 m at Queseras del Medio edge 945 (5, 853)
+  clips into static (266 samples): sin nombre edge 160 near (-20, 715) TriMesh turning: corner/other
+  clips into static (255 samples): sin nombre edge 160 near (-20, 725) TriMesh turning: corner/other
+  clips into static (189 samples): Av. 12 de Octubre edge 157 near (-65, 765) TriMesh: corner/other
+  clips into static (160 samples): Av. 12 de Octubre edge 277 near (-135, 780) ConvexPolyhedron: corner/other
+  clips into static (124 samples): Av. 12 de Octubre edge 157 near (-70, 765) TriMesh: corner/other
+  clips into static (120 samples): sin nombre edge 524 near (-60, 720) TriMesh: corner/other
+  clips into static (113 samples): Av. 12 de Octubre edge 277 near (-140, 785) ConvexPolyhedron: corner/other
+  clips into static (88 samples): Av. 12 de Octubre edge 277 near (-125, 775) TriMesh: corner/other
+  clips into static (82 samples): sin nombre edge 524 near (-60, 715) TriMesh: corner/other
+  clips into static (78 samples): Av. 12 de Octubre edge 277 near (-145, 785) TriMesh: corner/other
+
+== Patria / 12 de Octubre, seed 2: 0 cars knocked loose with no bus around; lifted edges used: 588,585,242,589,155,160,349,524,241,156,586,523,197,198,199,575,165,895
+  stuck>24s t 36.0 car 1 sin nombre edge 524 (-62, 718)
+  stuck>24s t 36.9 car 38 sin nombre edge 524 (-57, 713)
+  stuck>24s t 66.6 car 21 sin nombre edge 524 (-62, 718)
+  stuck>24s t 72.9 car 16 sin nombre edge 524 (-62, 718)
+  longest wait 25.0 s at sin nombre edge 524 (-62, 718)
+  worst body height vs lane surface -17.44 m at Yader edge 402 (-106, 872)
+  clips into static (626 samples): sin nombre edge 524 near (-60, 720) TriMesh: corner/other
+  clips into static (551 samples): Av. Patria edge 300 near (-65, 740) TriMesh turning: corner/other
+  clips into static (508 samples): sin nombre edge 524 near (-55, 715) TriMesh: corner/other
+  clips into static (358 samples): Av. Patria edge 300 near (-70, 735) TriMesh turning: corner/other
+  clips into static (301 samples): Av. Patria edge 300 near (-65, 745) TriMesh turning: corner/other
+  clips into static (281 samples): sin nombre edge 524 near (-50, 710) TriMesh: corner/other
+  clips into static (268 samples): Av. Patria edge 300 near (-70, 745) TriMesh turning: corner/other
+  clips into static (262 samples): Av. 12 de Octubre edge 242 near (-65, 750) TriMesh: corner/other
+  clips into static (240 samples): Av. 12 de Octubre edge 242 near (-75, 750) TriMesh: corner/other
+  clips into static (166 samples): Av. Patria edge 300 near (-65, 750) TriMesh turning: corner/other
+
+== Puente del Guambra + link under Patria, seed 1: 0 cars knocked loose with no bus around; lifted edges used: 165,167,199,197,575,517,895,198,681,195
+  stuck>24s t 34.2 car 29 sin nombre edge 887 (-572, 370)
+  longest wait 25.0 s at sin nombre edge 887 (-572, 370)
+  worst body height vs lane surface -24.60 m at Av. Patria edge 167 (-668, 285)
+  clips into static (70 samples): Av. 10 de Agosto edge 884 near (-780, 610) ConvexPolyhedron: corner/other
+  clips into static (69 samples): Av. 10 de Agosto edge 884 near (-775, 610) ConvexPolyhedron: corner/other
+  clips into static (59 samples): Av. Patria edge 167 near (-670, 280) TriMesh: corner/other
+  clips into static (57 samples): Av. 10 de Agosto edge 889 near (-690, 360) TriMesh: corner/other
+  clips into static (55 samples): Av. 10 de Agosto edge 888 near (-695, 375) TriMesh: corner/other
+  clips into static (46 samples): Manuel Larrea edge 690 near (-820, 295) ConvexPolyhedron: corner/other
+  clips into static (42 samples): Av. 10 de Agosto edge 884 near (-775, 615) ConvexPolyhedron: corner/other
+  clips into static (39 samples): Asunción edge 749 near (-695, 365) TriMesh: corner/other
+  clips into static (35 samples): Asunción edge 749 near (-695, 370) TriMesh turning: corner/other
+  clips into static (35 samples): Manuel Larrea edge 690 near (-820, 290) ConvexPolyhedron: corner/other
+
+== Puente del Guambra + link under Patria, seed 2: 0 cars knocked loose with no bus around; lifted edges used: 197,165,575,198,517,895,199,167
+  longest wait 16.8 s at sin nombre edge 164 (-646, 271)
+  worst body height vs lane surface -21.38 m at Juan Salinas edge 934 (-778, 364)
+  clips into static (706 samples): sin nombre edge 164 near (-615, 310) TriMesh: corner/other
+  clips into static (645 samples): sin nombre edge 164 near (-600, 320) TriMesh: corner/other
+  clips into static (388 samples): sin nombre edge 164 near (-605, 320) TriMesh: corner/other
+  clips into static (287 samples): sin nombre edge 164 near (-625, 305) TriMesh: corner/other
+  clips into static (262 samples): sin nombre edge 164 near (-635, 295) TriMesh: corner/other
+  clips into static (169 samples): sin nombre edge 164 near (-595, 325) TriMesh: corner/other
+  clips into static (91 samples): sin nombre edge 164 near (-590, 325) TriMesh: corner/other
+  clips into static (64 samples): Av. 10 de Agosto edge 884 near (-775, 610) ConvexPolyhedron: corner/other
+  clips into static (56 samples): Av. 10 de Agosto edge 888 near (-695, 375) TriMesh: corner/other
+  clips into static (51 samples): sin nombre edge 164 near (-585, 330) TriMesh: corner/other
+
+== West edge (El Ejido link, -835,779), seed 1: 0 cars knocked loose with no bus around; lifted edges used: 297,681,195
+  stuck>24s t 40.1 car 3 Av. 6 de Diciembre edge 973 (-558, 840)
+  stuck>24s t 46.1 car 2 Av. 6 de Diciembre edge 973 (-555, 842)
+  stuck>24s t 67.8 car 29 Av. 6 de Diciembre edge 973 (-557, 838)
+  longest wait 25.0 s at Av. 6 de Diciembre edge 973 (-558, 840)
+  worst body height vs lane surface -20.26 m at Luis Felipe Borja edge 193 (-725, 840)
+  clips into static (893 samples): sin nombre edge 195 near (-835, 785) TriMesh: corner/other
+  clips into static (836 samples): sin nombre edge 195 near (-835, 790) TriMesh: sunk 0.25 m into the floor
+  clips into static (399 samples): sin nombre edge 195 near (-825, 775) TriMesh: corner/other
+  clips into static (236 samples): sin nombre edge 195 near (-830, 770) TriMesh: corner/other
+  clips into static (218 samples): sin nombre edge 195 near (-820, 770) TriMesh: corner/other
+  clips into static (107 samples): sin nombre edge 195 near (-825, 770) TriMesh: corner/other
+  clips into static (37 samples): sin nombre edge 297 near (-780, 825) TriMesh: corner/other
+  clips into static (35 samples): Av. 10 de Agosto edge 850 near (-675, 385) TriMesh: corner/other
+  clips into static (34 samples): Av. 10 de Agosto edge 851 near (-665, 355) TriMesh: corner/other
+  clips into static (34 samples): Av. 10 de Agosto edge 851 near (-660, 345) TriMesh turning: corner/other
+
+== West edge (El Ejido link, -835,779), seed 2: 0 cars knocked loose with no bus around; lifted edges used: 681,297,195
+  stuck>24s t 41.3 car 12 Av. 6 de Diciembre edge 973 (-557, 838)
+  stuck>24s t 69.5 car 0 Av. 6 de Diciembre edge 973 (-558, 840)
+  stuck>24s t 71.4 car 19 Av. Tarqui edge 323 (-561, 804)
+  stuck>24s t 72.1 car 24 Av. Tarqui edge 323 (-568, 803)
+  stuck>24s t 72.4 car 2 Av. 6 de Diciembre edge 973 (-555, 842)
+  stuck>24s t 77.5 car 5 Av. 6 de Diciembre edge 973 (-556, 841)
+  longest wait 25.0 s at Av. 6 de Diciembre edge 973 (-557, 838)
+  worst body height vs lane surface -20.39 m at Av. 10 de Agosto edge 883 (-790, 635)
+  clips into static (891 samples): sin nombre edge 195 near (-835, 785) TriMesh: corner/other
+  clips into static (804 samples): sin nombre edge 195 near (-835, 790) TriMesh: sunk 0.25 m into the floor
+  clips into static (72 samples): Av. 10 de Agosto edge 851 near (-665, 350) TriMesh: corner/other
+  clips into static (38 samples): Av. 10 de Agosto edge 851 near (-670, 360) TriMesh: corner/other
+  clips into static (31 samples): Av. 10 de Agosto edge 851 near (-665, 355) TriMesh: corner/other
+  clips into static (26 samples): Av. 10 de Agosto edge 851 near (-655, 340) TriMesh turning: corner/other
+  clips into static (23 samples): sin nombre edge 150 near (-650, 340) TriMesh: corner/other
+  clips into static (23 samples): sin nombre edge 150 near (-600, 350) TriMesh: corner/other
+  clips into static (22 samples): sin nombre edge 150 near (-625, 340) TriMesh: corner/other
+  clips into static (21 samples): Av. Tarqui edge 678 near (-800, 755) TriMesh: corner/other
+
+== 10 de Agosto south tunnel, seed 1: 0 cars knocked loose with no bus around; lifted edges used: 564,276
+  stuck>24s t 55.1 car 17 Av. 10 de Agosto edge 221 (-170, -837)
+  stuck>24s t 58.0 car 0 sin nombre edge 674 (-140, -859)
+  longest wait 25.0 s at Av. 10 de Agosto edge 221 (-170, -837)
+  worst body height vs lane surface -18.40 m at Luis Mosquera Narváez edge 9 (-332, -789)
+  clips into static (487 samples): Av. 10 de Agosto edge 221 near (-170, -835) TriMesh: corner/other
+  clips into static (415 samples): Av. 10 de Agosto edge 951 near (-175, -830) TriMesh turning: corner/other
+  clips into static (261 samples): Av. 10 de Agosto edge 951 near (-180, -825) TriMesh turning: corner/other
+  clips into static (202 samples): Av. 10 de Agosto edge 221 near (-175, -840) TriMesh turning: corner/other
+  clips into static (181 samples): Av. 10 de Agosto edge 951 near (-175, -825) TriMesh turning: corner/other
+  clips into static (133 samples): Javier Azcasubi edge 19 near (-175, -800) TriMesh: corner/other
+  clips into static (122 samples): Av. 10 de Agosto edge 951 near (-170, -830) TriMesh turning: corner/other
+  clips into static (121 samples): Av. 10 de Agosto edge 951 near (-175, -820) TriMesh turning: corner/other
+  clips into static (95 samples): Av. 10 de Agosto edge 951 near (-185, -810) TriMesh: corner/other
+  clips into static (92 samples): Av. 10 de Agosto edge 782 near (-190, -800) ConvexPolyhedron: corner/other
+
+== 10 de Agosto south tunnel, seed 2: 0 cars knocked loose with no bus around; lifted edges used: 564,276
+  longest wait 17.3 s at Av. 10 de Agosto edge 276 (-176, -845)
+  worst body height vs lane surface -17.99 m at Luis Mosquera Narváez edge 9 (-318, -784)
+  clips into static (459 samples): Av. 10 de Agosto edge 951 near (-175, -825) TriMesh turning: corner/other
+  clips into static (397 samples): Av. 10 de Agosto edge 951 near (-175, -830) TriMesh turning: corner/other
+  clips into static (371 samples): Av. 10 de Agosto edge 221 near (-170, -835) TriMesh: corner/other
+  clips into static (310 samples): Av. 10 de Agosto edge 951 near (-180, -820) TriMesh: corner/other
+  clips into static (262 samples): Av. 10 de Agosto edge 276 near (-185, -835) TriMesh: corner/other
+  clips into static (231 samples): Av. 10 de Agosto edge 951 near (-180, -825) TriMesh turning: corner/other
+  clips into static (142 samples): Javier Azcasubi edge 19 near (-175, -800) TriMesh: corner/other
+  clips into static (139 samples): Av. 10 de Agosto edge 951 near (-175, -820) TriMesh turning: corner/other
+  clips into static (70 samples): Javier Azcasubi edge 19 near (-185, -805) TriMesh turning: corner/other
+  clips into static (68 samples): Av. 10 de Agosto edge 951 near (-185, -810) TriMesh: corner/other
+
+== Av. America link west edge, seed 1: 0 cars knocked loose with no bus around; lifted edges used: 516
+  longest wait 17.7 s at Av. América edge 939 (-838, -378)
+  worst body height vs lane surface -26.53 m at Av. América edge 698 (-812, -434)
+  clips into static (565 samples): Av. América edge 729 near (-830, -340) ConvexPolyhedron: corner/other
+  clips into static (262 samples): sin nombre edge 516 near (-830, -340) ConvexPolyhedron: corner/other
+  clips into static (181 samples): Av. América edge 729 near (-840, -305) TriMesh: corner/other
+  clips into static (18 samples): Av. América edge 729 near (-845, -295) TriMesh: corner/other
+  clips into static (17 samples): Av. América edge 729 near (-840, -300) TriMesh: corner/other
+  clips into static (17 samples): Antonio de Ulloa edge 715 near (-560, -830) ConvexPolyhedron: corner/other
+  clips into static (15 samples): Av. América edge 729 near (-845, -290) TriMesh: corner/other
+  clips into static (11 samples): Av. América edge 729 near (-830, -340) ConvexPolyhedron: sunk 0.25 m into the floor
+  clips into static (11 samples): Antonio de Ulloa edge 715 near (-560, -825) ConvexPolyhedron: corner/other
+  clips into static (10 samples): Av. América edge 729 near (-850, -280) ConvexPolyhedron: corner/other
+
+== Av. America link west edge, seed 2: 0 cars knocked loose with no bus around; lifted edges used: 516
+  longest wait 22.6 s at sin nombre edge 174 (-809, -168)
+  worst body height vs lane surface -26.61 m at Av. América edge 698 (-820, -433)
+  clips into static (744 samples): Av. América edge 729 near (-830, -340) ConvexPolyhedron: corner/other
+  clips into static (23 samples): Av. América edge 729 near (-845, -295) TriMesh: corner/other
+  clips into static (19 samples): Av. América edge 729 near (-840, -305) TriMesh: corner/other
+  clips into static (18 samples): Antonio de Ulloa edge 715 near (-565, -830) ConvexPolyhedron: corner/other
+  clips into static (16 samples): Av. América edge 729 near (-840, -300) TriMesh: corner/other
+  clips into static (15 samples): Av. América edge 729 near (-845, -290) TriMesh: corner/other
+  clips into static (13 samples): Av. América edge 729 near (-850, -280) ConvexPolyhedron: corner/other
+  clips into static (12 samples): Av. América edge 729 near (-845, -285) ConvexPolyhedron: corner/other
+  clips into static (12 samples): Antonio de Ulloa edge 715 near (-560, -830) ConvexPolyhedron: corner/other
+  clips into static (11 samples): Antonio de Ulloa edge 715 near (-565, -825) ConvexPolyhedron: corner/other
