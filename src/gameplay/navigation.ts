@@ -15,6 +15,11 @@ export interface NavPath {
 }
 
 const SEARCH = 40;
+/**
+ * Meters of sideways distance one meter of height mismatch is worth in `locate`: near a ramp's
+ * top a street about 1 m above runs 2–3 m beside it, and the ramp the bus is on must win.
+ */
+const LEVEL_WEIGHT = 4;
 const POINT_STEP = 6;
 
 /**
@@ -41,7 +46,7 @@ export class Navigator {
       const { s } = proj;
       let d = proj.d;
       if (d > SEARCH) continue;
-      if (y !== undefined && ground) d += 1.5 * Math.abs((edgeY(e, s) ?? ground(p)) - y);
+      if (y !== undefined && ground) d += LEVEL_WEIGHT * Math.abs((edgeY(e, s) ?? ground(p)) - y);
       if (!any || d < any.d) any = { edge: e.id, s, d };
       const dir = dirAt(e.center, s);
       if (dir.x * fx + dir.z * fz < 0.3) continue;
@@ -131,7 +136,6 @@ export class Navigator {
     return { edge: e.id, s };
   }
 
-  /** Position and heading of a spot, in its curb lane. */
   /** Position, heading, and surface height (null on the ground) of a spot, in its curb lane. */
   pose(spot: GraphSpot): { pos: Vec2; heading: number; y: number | null } {
     const e = this.graph.edges[spot.edge];

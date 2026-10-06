@@ -27,6 +27,7 @@ import { groundHeightAt, inPlayArea, nearestRoad } from '../world/cityData';
 import { pointInPolygon } from '../world/geom';
 import { TrafficSim, type Obstacle } from './traffic';
 import { TrafficBodies, laneSurface } from './trafficBodies';
+import type { RoadPose } from '../world/roadSnap';
 import { PedestrianSim } from './pedestrians';
 import { MetroCrowd } from './metroCrowd';
 import { PedestrianView, TrafficView } from './trafficView';
@@ -88,7 +89,7 @@ export class GameSession {
   private busPos = new THREE.Vector3();
   private runs = 0;
   private startedFlag = false;
-  private start0: { pos: Vec2; heading: number; y: number };
+  private start0: RoadPose;
   readonly traffic: TrafficSim;
   readonly trafficBodies: TrafficBodies;
   readonly peds: PedestrianSim;
@@ -157,7 +158,7 @@ export class GameSession {
     const { city, bus } = this.d;
     this.runs++;
     this.passengers.clear();
-    const { pos, heading, y } = this.start0;
+    const { pos, heading, y, pitch } = this.start0;
     this.scorer = new TrickScorer();
     this.nitro.reset();
     this.startedFlag = false;
@@ -178,7 +179,7 @@ export class GameSession {
       this.arrow.point(null);
     }
     this.hud.showResults(null);
-    bus.reset({ x: pos.x, y, z: pos.z, heading });
+    bus.reset({ x: pos.x, y, z: pos.z, heading, pitch });
   }
 
   /** The player honked: traffic ahead hurries, people on the crosswalk run. */
@@ -436,8 +437,10 @@ export class GameSession {
     const offPath = this.path && !this.path.points.some((p) => Math.hypot(p.x - here.x, p.z - here.z) < 20);
     if (!this.game.over && (this.sinceReplan > 0.5 || offPath)) {
       this.sinceReplan = 0;
-      const from = this.nav.locate(here, bus.heading, bus.body.translation().y - 1.5, (p) => groundHeightAt(this.d.city, p));
-      const to = this.nav.locate(zone, stop.heading);
+      const ground = (p: Vec2) => groundHeightAt(this.d.city, p);
+      const from = this.nav.locate(here, bus.heading, bus.roadHeight(), ground);
+      // Stops are never on ramps or decks: at street level.
+      const to = this.nav.locate(zone, stop.heading, ground(zone), ground);
       this.path = from && to ? this.nav.route(from, to) : null;
     }
     const close = Math.hypot(zone.x - here.x, zone.z - here.z) < 45;
