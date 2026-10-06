@@ -1,33 +1,37 @@
 # Radio music generator
 
-Three original songs for the bus radio (`src/core/radio.ts`), one per station, synthesized from
-scores written in code. Nothing is sampled: every instrument is additive/subtractive synthesis
+Six original songs for the bus radio (`src/core/radio.ts`), two per station (each station plays
+its pair as a playlist), synthesized from scores written in code. Nothing is sampled: every instrument is additive/subtractive synthesis
 and filtered noise (numpy/scipy), so the output is reproducible and free of third-party rights
 (CC0, see `public/music/CREDITS.md`).
 
 ```sh
 pip install -r tools/music/requirements.txt   # numpy, scipy, pyloudnorm, lameenc
-python3 tools/music/render.py                 # all three -> public/music/*.mp3 (~15-25 s each)
+python3 tools/music/render.py                 # all six -> public/music/*.mp3 (~10-15 s each)
 python3 tools/music/render.py chicha --wav    # one song, plus a WAV in tools/music/out/ (ignored by git)
 ```
 
 Files:
 
-- `synth.py`: instruments (plucked strings, quena/rondador, Farfisa-style organ, pads, plucks,
-  basses, 808 sub, bombo, kick, snares, claps, hats, shakers, güiro, congas, timbales, cymbals,
-  risers) and effects (convolution reverb from synthetic impulse responses, spring reverb,
+- `synth.py`: instruments (plucked strings, bowed violin, quena/rondador, Farfisa-style organ,
+  tine electric piano, pads, plucks, basses, 808 sub, bombo, kick, snares, claps, hats, shakers,
+  güiro, congas, timbales, cowbell, cymbals, risers) and effects (convolution reverb from synthetic impulse responses, spring reverb,
   ping-pong delay, tremolo, sidechain pump, compressor, look-ahead limiter).
 - `score.py`: the text notation (`E5.2` = E5 for two sixteenths, `A3+C4+E4.4` a chord, `r.4` a
   rest, `>` an accent, `|` bar lines that are checked), the song timeline, the mixdown, and the
   mastering (high-pass, 2:1 glue compression, -16 LUFS integrated, -1.5 dBFS ceiling), MP3
-  encoding (96 kbps stereo).
-- `sanjuanito.py`, `chicha.py`, `reggaeton.py`: the compositions and arrangements.
+  encoding (64 kbps joint stereo at 32 kHz: radio quality, and all six fit in about 6 MB).
+- `sanjuanito.py`, `sanjuanito2.py`, `chicha.py`, `chicha2.py`, `reggaeton.py`, `reggaeton2.py`:
+  the compositions and arrangements (one module per MP3, listed in `render.py`).
 - `analyze.py`: objective checks, since we can't listen from here: loudness, peaks, clipping,
   spectral balance, tempo from the onset autocorrelation, average rhythm per sixteenth of the bar
   (low band and high band, to see the bombo/güiro/dembow patterns), and the key (Krumhansl
   profiles). `render.py` prints it for each song.
 
-Each song ends (a final hit and its tail) and the game loops it, like a radio playing it again.
+Each song ends (a final hit and its tail) and the station goes on to its next one, looping the
+playlist. The game schedules the broadcast from each song's length, kept in
+`src/core/radioStations.ts` (`duration`): update it when a song's length changes
+(`tests/radio.test.ts` checks it against the MP3 sizes, and the 6 MB budget).
 
 ## What makes each genre recognizable (research notes)
 
@@ -106,6 +110,25 @@ Each song ends (a final hit and its tail) and the game loops it, like a radio pl
 | Form | intro, estribillo, A, estribillo, B, charango solo, breakdown, estribillo, A', B', coda, "tan-tan-taaan" | intro, A, A + organ answers, B (organ), guitar solo, percussion break, A (guitar + organ), coda tag, final hit | filtered intro + riser, hook, verse, pre-hook (no kick, snare roll), hook + countermelody, bridge (no kick), hook, outro, final hit |
 | Lead | quena; rondador in parallel thirds | reverb/echo electric guitar with wide vibrato, bends, tremolo; Farfisa-style organ | synth pluck hook (dotted-eighth delay), "sung" synth lead |
 | Rhythm section | strummed guitar on the sanjuan cell, charango rasgueo, bass, bombo (q q / 8 8 q), wooden rim, chajchas | upstroke guitar chops, cumbia bass (1, 2&, 3, 4&), güiro, congas, timbales, soft kick | 808 kick on every beat, rim/snare on the dembow, hats, 808 sub on the tresillo, nylon guitar arpeggios, pad pumped by the kick |
+
+The second song of each station is built to sound clearly different from the first while
+keeping the genre's markers (meter, rhythm cells, scale, the rhythm section's roles):
+
+| | San Juanito 2 | Chicha 2 | Reggaeton 2 |
+|---|---|---|---|
+| Title | Neblina en el Pichincha | La Psicodélica del Playón | Bajo la Lluvia de las Cuatro |
+| Character | slower, melancholic ("sanjuanito triste") | brisker, psychedelic/Amazonian | romantic, early-2000s "old school" |
+| Tempo, meter | 112 bpm, 2/4 | 108 bpm, 4/4 | 90 bpm, 4/4 |
+| Key | A minor <-> C major | D minor, A7 as the dominant (F major in B) | B minor, Bm-G-Em-F# (i-VI-iv-V) |
+| Length | 1:40 | 1:50 | 2:01 |
+| Form | rondador call over the bombo, harp in, estribillo, A, estribillo (rondador), B (C major), harp interlude, A', estribillo/coda, "tan-tan-taaan" | riff intro, A (organ), A + wah answers, B (twin guitars), organ solo, percussion break, A (organ + guitar in octaves), coda, final hit | rain + filtered e-piano intro, hook, verse, hook + harmony, bridge (D-A-G-F#, drums out, rain), hook + countermelody, rain outro, final hit |
+| Lead | bowed violin (slides, late vibrato) on the short-long-short cell and dotted sighs; rondador answers and thirds | Farfisa-style organ; wah guitar answers; two guitars in parallel thirds with tremolo-picked long notes | "sung" synth lead with a harmony a third below; a countermelody on top |
+| Rhythm section | Andean harp (bass strings on the beats, chord tones on the sanjuan cell), soft brushed guitar, bombo (q q / 8 8 q), chajchas; no charango, no electric bass | palm-muted surf riff, upstroke chops (+ a ghost chop), cumbia bass with a walk-up, güiro, cowbell, congas, timbal cáscara and fills | 808 kick on every beat, rim + real snare on the dembow, timbal fills between sections, 808 sub, tine e-piano on the tresillo, string pads pumped by the kick |
+
+Notes from the analysis: the key finder (chroma above 80 Hz) hears Chicha 2 as A minor, because
+the organ theme dwells on A, the dominant; with the bass included D minor edges ahead (0.70 vs
+0.69), which suits the genre's modal ambiguity. Reggaeton 2 first used Bm-Em-A-D, which read as
+D major (A-D is a V-I); the i-VI-iv-V loop with the A# leading tone made it plainly B minor.
 
 The melodies are new: built from the genre's scale and rhythm cells, not from any existing
 tune.
