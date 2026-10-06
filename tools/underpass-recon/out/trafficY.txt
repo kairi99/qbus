@@ -1,0 +1,11 @@
+t 0.0: 40 driving, 38 off their lane height by > 1 m
+  car 0 gen 2 at (66, 663) body y 14.1 want 23.8 enabled true dist 128 on Av. 12 de Octubre
+  car 1 gen 2 at (-109, 765) body y 14.1 want 22.6 enabled true dist 75 on Av. 12 de Octubre
+  car 2 gen 2 at (-17, 702) body y 14.1 want 21.2 enabled true dist 40 on Av. 12 de Octubre
+  car 3 gen 2 at (-142, 849) body y 14.1 want 23.7 enabled true dist 153 on Alejandro Andrade
+  car 4 gen 2 at (-128, 789) body y 14.1 want 23.4 enabled true dist 103 on Av. 12 de Octubre
+  car 5 gen 2 at (-94, 861) body y 14.1 want 24.6 enabled true dist 137 on Yader
+t 1.0: 40 driving, 0 off their lane height by > 1 m
+t 10.0: 40 driving, 0 off their lane height by > 1 m
+t 30.0: 40 driving, 0 off their lane height by > 1 m
+t 58.3: 40 driving, 0 off their lane height by > 1 m
