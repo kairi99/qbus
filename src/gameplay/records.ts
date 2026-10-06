@@ -39,15 +39,19 @@ export interface Placing {
 
 export const TOP_N = 5;
 const KEY = 'qbus.records';
-/** Bumped if the stored shape changes; an unknown version starts over. */
-const VERSION = 1;
+/**
+ * Bumped if the stored shape or meaning changes; an unknown version starts over.
+ * Version 2: harder star targets. Version 1 shifts keep their money, but the stars they won
+ * against the old, easy targets are forgotten (screens rate saved money against today's targets).
+ */
+const VERSION = 2;
 
 export const routeKey = (zone: string, route: string) => `${zone}/${route}`;
 
 const empty = (): Records => ({ routes: {}, missions: {} });
 const count = (v: unknown, max = 1e7) => (typeof v === 'number' && isFinite(v) && v >= 0 ? Math.min(max, Math.floor(v)) : null);
 
-function cleanShift(v: unknown): ShiftRecord | null {
+function cleanShift(v: unknown, keepStars: boolean): ShiftRecord | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
   const cents = count(o.cents);
@@ -56,7 +60,7 @@ function cleanShift(v: unknown): ShiftRecord | null {
     cents,
     delivered: count(o.delivered) ?? 0,
     bestCombo: count(o.bestCombo) ?? 0,
-    stars: count(o.stars, 3) ?? 0,
+    stars: keepStars ? (count(o.stars, 3) ?? 0) : 0,
     bus: typeof o.bus === 'string' ? o.bus : '',
     date: count(o.date, 1e14) ?? 0,
   };
@@ -70,7 +74,9 @@ export function loadRecords(store: KeyValueStore = localStorage): Records {
   } catch {
     return empty();
   }
-  if (!raw || typeof raw !== 'object' || (raw as { v?: unknown }).v !== VERSION) return empty();
+  const v = raw && typeof raw === 'object' ? (raw as { v?: unknown }).v : null;
+  if (v !== VERSION && v !== 1) return empty();
+  const keepStars = v === VERSION;
   const out = empty();
   const { routes, missions } = raw as Record<string, unknown>;
   if (routes && typeof routes === 'object') {
@@ -78,11 +84,11 @@ export function loadRecords(store: KeyValueStore = localStorage): Records {
       if (!r || typeof r !== 'object') continue;
       const list = (r as { top?: unknown }).top;
       const top = (Array.isArray(list) ? list : [])
-        .map(cleanShift)
+        .map((x) => cleanShift(x, keepStars))
         .filter((s): s is ShiftRecord => !!s)
         .sort((a, b) => b.cents - a.cents)
         .slice(0, TOP_N);
-      const stars = Math.max(count((r as { stars?: unknown }).stars, 3) ?? 0, ...top.map((s) => s.stars));
+      const stars = keepStars ? Math.max(count((r as { stars?: unknown }).stars, 3) ?? 0, ...top.map((s) => s.stars)) : 0;
       if (top.length || stars) out.routes[k] = { top, stars };
     }
   }

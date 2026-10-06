@@ -189,6 +189,10 @@ body {
   color: #ff8a7a;
 }
 
+.gh-pop.star {
+  color: #ffd23f;
+}
+
 @keyframes gh-pop {
   0% {
     transform: translateY(8px) scale(0.9);
@@ -215,6 +219,32 @@ body {
   font-weight: 800;
   color: #9dff7a;
   font-variant-numeric: tabular-nums;
+}
+
+/* Star meter beside the money: stars reached, then the money for the next one. */
+.gh-goal {
+  margin-left: 10px;
+  font-size: 17px;
+  letter-spacing: 1px;
+  color: rgb(255 210 63 / 55%);
+  vertical-align: 0.3em;
+}
+
+.gh-goal[hidden] {
+  display: none;
+}
+
+.gh-goal b {
+  color: #ffd23f;
+  text-shadow: 0 0 8px rgb(255 210 63 / 70%);
+}
+
+.gh-goal small {
+  margin-left: 4px;
+  font-size: 14px;
+  letter-spacing: 0;
+  color: #fff;
+  opacity: 0.85;
 }
 
 .gh-riders {
@@ -289,6 +319,18 @@ body {
   text-align: center;
   font-size: 26px;
   font-weight: 700;
+}
+
+/* The route's star targets, under the start prompt. */
+.gh-targets {
+  display: block;
+  margin-top: 6px;
+  font-size: 17px;
+  color: #ffd23f;
+}
+
+.gh-targets[hidden] {
+  display: none;
 }
 
 .gh-results {
@@ -397,6 +439,23 @@ body {
 .gh-results-card p.gh-next {
   margin: 2px 0 0;
   font-size: 13px;
+}
+
+/* The three targets, ticked when reached. */
+.gh-results-card p.gh-rtargets {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.gh-rtargets span {
+  margin: 0 4px;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.gh-rtargets span.ok {
+  color: #ffd23f;
+  opacity: 1;
 }
 
 .gh-results-card ul,
@@ -889,6 +948,13 @@ body {
   color: #6a675e;
 }
 
+/* The route's star targets. */
+.mn-placard-goal {
+  font-size: 13px;
+  font-weight: 700;
+  color: #b06f00;
+}
+
 .mn-map {
   position: sticky;
   top: 16px;
@@ -1342,6 +1408,19 @@ body {
   left: calc(104px + var(--sl));
   top: 8px;
   font-size: 22px;
+}
+
+.touch .gh-goal {
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+.touch .gh-goal small {
+  font-size: 11px;
+}
+
+.touch .gh-targets {
+  font-size: 12px;
 }
 
 .touch .gh-free .gh-money {

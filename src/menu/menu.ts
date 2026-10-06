@@ -2,12 +2,13 @@ import type { BusPreset } from '../vehicle/busPreset';
 import { BUSES, VEHICLES, busStats } from '../vehicle/buses';
 import { ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
-import { type RouteDef, routePaths, routesFor } from '../gameplay/routes';
+import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose } from '../gameplay/routes';
+import { type StarThresholds, starThresholds, starsFor } from '../gameplay/stars';
 import { buildRoadGraph } from '../world/roadGraph';
 import { HILLS_OPTIONS, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
 import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
 import { MISSIONS } from '../gameplay/missions';
-import { money, starText } from '../ui/gameHud';
+import { money, starText, targetsText } from '../ui/gameHud';
 
 export interface Selection {
   mode: 'route' | 'free';
@@ -217,7 +218,8 @@ export class Menu {
     if (!routes.some((r) => r.id === this.settings.route)) this.pick('route', routes[0].id);
     const names = new Map(city.stops.map((st) => [st.id, st.name]));
     const records = loadRecords();
-    box.innerHTML = routes.map((r) => placard(r, names, r.id === this.settings.route, records.routes[routeKey(zone, r.id)])).join('');
+    const targets = (r: RouteDef) => starThresholds(routeStops(city, r), routeLegs(city, r, graph), startPose(city, graph, r).pos);
+    box.innerHTML = routes.map((r) => placard(r, names, r.id === this.settings.route, targets(r), records.routes[routeKey(zone, r.id)])).join('');
     const done = MISSIONS.filter((m) => records.missions[m.id]).length;
     this.root.querySelector('.mn-missions-done')!.textContent = done ? `Misiones cumplidas: ${done} de ${MISSIONS.length}` : '';
     box.querySelectorAll<HTMLElement>('[data-route]').forEach((el) =>
@@ -330,18 +332,22 @@ function zoneCard(z: { id: string; name: string; blurb: string }, checked: boole
 }
 
 /** Route as a windshield placard: route name on top, main stops underneath. */
-function placard(r: RouteDef, names: Map<string, string>, checked: boolean, best?: RouteRecords): string {
+function placard(r: RouteDef, names: Map<string, string>, checked: boolean, targets: StarThresholds, best?: RouteRecords): string {
   const stops = r.stops.map((id) => names.get(id) ?? '');
   const shown = [...new Set(stops)];
   const list = shown.length > 4 ? [...shown.slice(0, 3), '…', shown[shown.length - 1]] : shown;
+  // Stars always read from the best money against today's targets (older shifts were rated against easier ones).
+  const top = best?.top[0];
+  const stars = top ? starsFor(top.cents, targets) : 0;
   return `
     <button class="mn-placard" role="radio" aria-checked="${checked}" data-route="${r.id}">
       <span class="mn-placard-head">
         <span class="mn-placard-name">${r.name}</span>
-        ${best ? `<span class="mn-placard-best" title="Su mejor turno"><span class="mn-stars" aria-label="${best.stars} de 3 estrellas">${starText(best.stars)}</span>${best.top.length ? ` ${money(best.top[0].cents)}` : ''}</span>` : ''}
+        ${top ? `<span class="mn-placard-best" title="Su mejor turno"><span class="mn-stars" aria-label="${stars} de 3 estrellas">${starText(stars)}</span> ${money(top.cents)}</span>` : ''}
       </span>
       <span class="mn-placard-stops">${list.join(' · ')}</span>
       <span class="mn-placard-meta">${r.stops.length} paradas · ${(r.lengthM / 1000).toFixed(1)} km · ${r.blurb}</span>
+      <span class="mn-placard-goal" title="Plata para ganar cada estrella">${targetsText(targets)}</span>
     </button>`;
 }
 

@@ -170,6 +170,7 @@ export class GameSession {
       this.game = game;
       this.missions = new Missions(pickMissions(this.rng.int(0, 0xffff)));
       this.hud.showMissions(this.missions.list);
+      this.hud.showTargets(this.stars);
       game.route.forEach((r, i) => this.passengers.showWaiting(r, game.waitingAt(i)));
       this.retarget();
     } else {

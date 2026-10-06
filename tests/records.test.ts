@@ -69,7 +69,7 @@ describe('records', () => {
     }
     const messy = memory({
       'qbus.records': JSON.stringify({
-        v: 1,
+        v: 2,
         routes: {
           'a/b': { top: [shift(5), { cents: 'lots' }, null, { ...shift(9), stars: 7, delivered: -3 }, shift(NaN)], stars: 'many' },
           'a/c': 'nope',
@@ -83,6 +83,22 @@ describe('records', () => {
     expect(r.routes['a/b'].stars).toBe(3);
     expect(r.routes['a/c']).toBeUndefined();
     expect(r.missions).toEqual({ nitro: 2 });
+  });
+
+  it('keeps version 1 shifts and missions, but forgets the stars won against the old, easy targets', () => {
+    const store = memory({
+      'qbus.records': JSON.stringify({ v: 1, routes: { 'a/b': { top: [shift(400, { stars: 3 }), shift(90, { stars: 1 })], stars: 3 } }, missions: { nitro: 2 } }),
+    });
+    const r = loadRecords(store);
+    expect(r.routes['a/b'].top.map((s) => [s.cents, s.stars])).toEqual([
+      [400, 0],
+      [90, 0],
+    ]);
+    expect(r.routes['a/b'].stars).toBe(0);
+    expect(r.missions).toEqual({ nitro: 2 });
+    // The next shift saves as version 2: earned stars count again.
+    expect(recordShift('a', 'b', shift(100, { stars: 1 }), store).newStars).toBe(true);
+    expect(loadRecords(store).routes['a/b'].stars).toBe(1);
   });
 
   it('a store that refuses writes loses nothing but the save', () => {
