@@ -1742,7 +1742,7 @@ body {
 .radio-toast {
   position: absolute;
   left: 50%;
-  top: 150px;
+  top: 158px;
   transform: translate(-50%, -8px);
   padding: 6px 14px 8px;
   border-left: 4px solid #ffc83d;
