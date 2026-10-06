@@ -104,7 +104,7 @@ export class Menu {
           </section>
           <section>
             <h2>Música</h2>
-            <p>Las tres canciones de la radio son originales, compuestas y sintetizadas por código para QBus (CC0).
+            <p>Las seis canciones de la radio (dos por emisora) son originales, compuestas y sintetizadas por código para QBus (CC0).
             Las radios, locutores y artistas son inventados.</p>
           </section>
           <section>

@@ -177,7 +177,48 @@ def panpipe(f, dur, vel=1.0, rng=None, **kw):
     return flute(f, dur, vel, rng, **args)
 
 
+# ---- bowed strings ---------------------------------------------------------------------------
+
+# Violin body resonances (Hz, gain, width): a wooden "air" mode, the main wood modes, the bridge hill.
+_VIOLIN_BODY = ((280, 0.9, 80), (460, 0.6, 120), (1050, 0.55, 300), (2600, 1.0, 700), (4300, 0.45, 900))
+
+
+def violin(f, dur, vel=1.0, rng=None, glide_from=None, attack=0.07, vib_cents=22, vib_rate=5.6, bow=0.06, tail=0.18):
+    """Bowed violin by additive synthesis: a sawtooth-like series shaped by body resonances,
+    slow bow attack, late vibrato, a slide from the previous note, bow-hair noise."""
+    n = int((dur + tail) * SR)
+    t = secs(n)
+    ft = vibrato_track(n, f, vib_rate, vib_cents, delay=min(0.22, dur * 0.45), rng=rng, scoop_cents=-18, scoop_t=0.04)
+    if glide_from is not None:
+        ft = ft * (glide_from / f) ** np.exp(-t / 0.035)
+    ph = osc_phase(ft)
+    K = int(max(1, min(40, 9000 / f)))
+    y = np.zeros(n)
+    for k in range(1, K + 1):
+        fk = k * f
+        body = 0.25 + sum(g / (1 + ((fk - c) / w) ** 2) for c, g, w in _VIOLIN_BODY)
+        y += body / k * np.sin(k * ph + rng.uniform(0, TAU))
+    env = ramp_env(n, attack, dur, 0.09)
+    # The bow digs in, eases, then swells a little through long notes.
+    env *= 1 + 0.25 * np.exp(-t / 0.05) + 0.1 * np.clip(t / max(dur, 0.1), 0, 1)
+    hair = sos_filter(noise(n, rng), "bandpass", [2500, 7000], 1) * bow
+    return vel * 0.35 * (y + hair) * env
+
+
 # ---- keys ------------------------------------------------------------------------------------
+
+
+def epiano(f, dur, vel=1.0, rng=None, bell=0.35, decay=1.6, tail=0.25):
+    """Tine electric piano (Rhodes-like) by FM: a mellow 1:1 tone plus a fast-fading bell (1:14)."""
+    n = int((dur + tail) * SR)
+    t = secs(n)
+    ph = TAU * f * t + rng.uniform(0, TAU)
+    idx = (1.2 + 1.5 * vel) * np.exp(-t / 0.35)
+    tone = np.sin(ph + idx * np.sin(ph))
+    tine = bell * np.sin(14 * ph) * np.exp(-t / 0.03)
+    env = np.exp(-t / (decay * (220 / f) ** 0.3)) * ramp_env(n, 0.002, dur, 0.12)
+    return vel * 0.5 * (tone + tine) * env
+
 
 
 def organ(f, dur, vel=1.0, rng=None, vib_cents=10, vib_rate=6.2, bright=1.0, tail=0.05):
@@ -381,6 +422,15 @@ def timbal(vel=1.0, rng=None, f=520, decay=0.35):
     y = sum(a * np.sin(TAU * f * r * t) * np.exp(-t / (decay * d)) for r, a, d in ((1, 1, 1), (1.51, 0.5, 0.7), (1.99, 0.35, 0.5), (2.44, 0.25, 0.4), (3.1, 0.15, 0.3)))
     stick = sos_filter(noise(n, rng), "highpass", 3000) * np.exp(-t / 0.006) * 0.8
     return vel * 0.55 * (y + stick)
+
+
+def cowbell(vel=1.0, rng=None, decay=0.09):
+    """Campana: two detuned square-ish tones through a band-pass, a sharp stick."""
+    n = int(0.4 * SR)
+    t = secs(n)
+    y = np.sign(np.sin(TAU * 562 * t)) + np.sign(np.sin(TAU * 845 * t))
+    y = sos_filter(y, "bandpass", [500, 3500]) * (0.6 * np.exp(-t / 0.012) + np.exp(-t / decay))
+    return vel * 0.35 * y
 
 
 def cymbal(vel=1.0, rng=None, decay=1.6):

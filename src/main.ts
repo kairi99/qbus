@@ -100,7 +100,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // The radio keeps its own level (under the engine) and plays straight to the speakers.
   const radio = new Radio(settings.radio, settings.volume * settings.musicVolume);
   const radioToast = new RadioToast(hudRoot);
-  radio.onTune = (st) => st && radioToast.show(st.id);
+  radio.onTune = (st, song) => st && radioToast.show(st.id, song);
+  radio.onSong = (_st, song) => radioToast.showSong(song);
   if (settings.camera === 'cockpit') rig.toggle();
 
   let paused = false;
@@ -150,7 +151,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       }
       if (action === 'pause') setPaused(!paused);
       if (action === 'radio') {
-        radioToast.show(radio.next());
+        radioToast.show(radio.next(), radio.onAir()?.song ?? null);
         // The station you leave it on is the one the next game starts with.
         saveSettings({ ...loadSettings(), radio: radio.station });
       }

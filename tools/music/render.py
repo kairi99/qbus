@@ -1,6 +1,6 @@
 """Renders the radio songs to public/music/*.mp3 and prints an analysis of each mix.
 
-    python3 tools/music/render.py              # all three
+    python3 tools/music/render.py              # all six
     python3 tools/music/render.py chicha       # one
     python3 tools/music/render.py --wav        # also write 16-bit WAVs to tools/music/out/
 
@@ -18,20 +18,20 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import importlib  # noqa: E402
+
 import analyze  # noqa: E402
-import chicha  # noqa: E402
-import reggaeton  # noqa: E402
-import sanjuanito  # noqa: E402
 from score import encode_mp3, master  # noqa: E402
 from synth import SR  # noqa: E402
 
-SONGS = {"sanjuanito": sanjuanito, "chicha": chicha, "reggaeton": reggaeton}
+# Each station's playlist, in order (a module per song, named like its MP3).
+SONGS = ["sanjuanito", "sanjuanito2", "chicha", "chicha2", "reggaeton", "reggaeton2"]
 OUT = os.path.join(HERE, "..", "..", "public", "music")
 
 
 def render(name: str, wav: bool) -> None:
     t0 = time.time()
-    song, buses = SONGS[name].build()
+    song, buses = importlib.import_module(name).build()
     mix, levels = song.render(buses)
     pre_peak = 20 * np.log10(np.max(np.abs(mix)) + 1e-12)
     out = master(mix)
