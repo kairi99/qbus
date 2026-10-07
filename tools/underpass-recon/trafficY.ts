@@ -29,7 +29,7 @@ async function main() {
   const sim = new TrafficSim(graph, city, { seed: 1, count: 40 });
   sim.setBudget(40, focus);
   sim.recycle({ pos: focus, heading: 0 }, true);
-  const ground = laneSurface(city, graph, sim);
+  const ground = laneSurface(city, graph, sim, world);
   const bodies = new TrafficBodies(world, sim, ground);
   for (let t = 0; t < 60; t += PHYSICS_STEP) {
     sim.step(PHYSICS_STEP, bodies.obstacles());

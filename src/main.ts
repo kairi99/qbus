@@ -15,6 +15,7 @@ import { buildRoadGraph } from './world/roadGraph';
 import { DEFAULT_ZONE } from './world/loadCity';
 import type { CityData } from './world/cityData';
 import { snapToRoad } from './world/roadSnap';
+import { vehicleClearance } from './physics/clearance';
 import { Hud } from './ui/hud';
 import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
@@ -83,6 +84,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const route = free ? null : (routes.find((r) => r.id === params.get('route')) ?? routes[0]);
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
+  const fits = vehicleClearance(world, preset.body);
   const model = new BusModel(preset);
   model.setHeadlights(LIGHTING[tod].headlights);
   scene.add(model.root);
@@ -145,9 +147,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       if (action === 'camera') rig.toggle();
       if (action === 'reset') {
         const t = bus.body.translation();
-        // The bus's center is ~1.5 m over the road: look for a road at about that height.
-        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, t.y - 1.5);
-        bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading });
+        // A road at the level the bus is on, on a spot where it fits (clear of walls and roofs).
+        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length });
+        bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
       }
       if (action === 'pause') setPaused(!paused);
       if (action === 'radio') {

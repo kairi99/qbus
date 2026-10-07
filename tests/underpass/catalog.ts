@@ -182,16 +182,18 @@ function extend(graph: RoadGraph, from: number, len: number, way: 'back' | 'ahea
 /** A NavPath (curb lane polyline) along `route`, from `s0` on the first edge to `s1` on the last. */
 export function routePath(graph: RoadGraph, route: number[], s0 = 0, s1?: number): NavPath {
   const points: Vec2[] = [];
+  const lifts: number[] = [];
   let length = 0;
   route.forEach((id, i) => {
     const e = graph.edges[id];
     const a = i === 0 ? s0 : 0;
     const b = i === route.length - 1 ? (s1 ?? e.len) : e.len;
-    for (let s = a; s < b; s += 3) points.push(lanePoint(e, s, 0));
+    for (let s = a; s < b; s += 3) points.push(lanePoint(e, s, 0)), lifts.push(edgeLift(e, s));
     points.push(lanePoint(e, b, 0));
+    lifts.push(edgeLift(e, b));
     length += b - a;
   });
-  return { edges: route, points, length };
+  return { edges: route, points, lifts, length };
 }
 
 /**

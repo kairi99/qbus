@@ -1,10 +1,10 @@
 import type { CityData, Stop, TransitSystem, Vec2 } from '../world/cityData';
-import { forward, stopZone } from '../world/cityData';
+import { forward, groundHeightAt, stopZone } from '../world/cityData';
 import { distToPolyline } from '../world/geom';
 import type { RouteStop } from './routeGame';
 import { type RoadGraph, buildRoadGraph } from '../world/roadGraph';
 import { type GraphSpot, Navigator } from './navigation';
-import { snapToRoad } from '../world/roadSnap';
+import { type RoadPose, snapToRoad } from '../world/roadSnap';
 
 /** A route the player can pick: an ordered loop of stop ids. */
 export interface RouteDef {
@@ -130,12 +130,21 @@ class LegalLegs {
   }
 
   private spot(s: Stop): GraphSpot | null {
-    if (!this.spots.has(s.id)) this.spots.set(s.id, this.nav.locate(zone(s), s.heading));
+    if (!this.spots.has(s.id)) this.spots.set(s.id, locateStop(this.nav, this.city, zone(s), s.heading));
     return this.spots.get(s.id)!;
   }
 }
 
 const zone = stopZone;
+
+/**
+ * The lane spot of a stop. Stops are never on ramps or decks, so they're located at street
+ * level: a bridge or underpass passing over or under one doesn't count.
+ */
+function locateStop(nav: Navigator, city: CityData, p: Vec2, heading: number): GraphSpot | null {
+  const ground = (q: Vec2) => groundHeightAt(city, q);
+  return nav.locate(p, heading, ground(p), ground);
+}
 
 /** Stops of a route with the spot on the road where the bus has to stop. */
 export function routeStops(city: CityData, route: RouteDef): RouteStop[] {
@@ -153,20 +162,21 @@ const LEAD_IN = 70;
  * Where the bus starts a route: on the lane that leads into the first stop, `LEAD_IN` meters
  * back along legal traffic flow, facing it (clear of ramps and humps).
  */
-export function startPose(city: CityData, graph: RoadGraph, route: RouteDef): { pos: Vec2; heading: number; y: number } {
+export function startPose(city: CityData, graph: RoadGraph, route: RouteDef): RoadPose {
   const nav = new Navigator(graph);
   const first = routeStops(city, route)[0];
-  const spot = nav.locate(first.zone, first.stop.heading);
+  const spot = locateStop(nav, city, first.zone, first.stop.heading);
   if (!spot) {
     const f = forward(first.stop.heading);
-    return snapToRoad(city, { x: first.zone.x - f.x * LEAD_IN, z: first.zone.z - f.z * LEAD_IN }, first.stop.heading);
+    const back = { x: first.zone.x - f.x * LEAD_IN, z: first.zone.z - f.z * LEAD_IN };
+    return snapToRoad(city, back, first.stop.heading, groundHeightAt(city, back));
   }
   const { pos, heading, y } = nav.pose(nav.behind(spot, LEAD_IN));
-  return snapToRoad(city, pos, heading, y ?? undefined);
+  return snapToRoad(city, pos, heading, y ?? groundHeightAt(city, pos));
 }
 
 /** Where a free drive starts: in the curb lane of a street near the middle of the zone. */
-export function freeStartPose(city: CityData, graph: RoadGraph): { pos: Vec2; heading: number; y: number } {
+export function freeStartPose(city: CityData, graph: RoadGraph): RoadPose {
   const nav = new Navigator(graph);
   const mid = { x: (city.bounds.min.x + city.bounds.max.x) / 2, z: (city.bounds.min.z + city.bounds.max.z) / 2 };
   // The nearest long enough drivable street on the ground (not on a ramp) to the middle.
@@ -176,16 +186,16 @@ export function freeStartPose(city: CityData, graph: RoadGraph): { pos: Vec2; he
     const d = Math.hypot(e.center.pts[0].x - mid.x, e.center.pts[0].z - mid.z);
     if (!best || d < best.d) best = { edge: e.id, d };
   }
-  if (!best) return snapToRoad(city, city.spawn.pos, city.spawn.heading);
+  if (!best) return snapToRoad(city, city.spawn.pos, city.spawn.heading, groundHeightAt(city, city.spawn.pos));
   const { pos, heading } = nav.pose({ edge: best.edge, s: graph.edges[best.edge].len / 2 });
-  return snapToRoad(city, pos, heading);
+  return snapToRoad(city, pos, heading, groundHeightAt(city, pos));
 }
 
 /** The streets a route drives along, one polyline per leg, following traffic rules. */
 export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = buildRoadGraph(city)): Vec2[][] {
   const nav = new Navigator(graph);
   const stops = routeStops(city, route);
-  const spots = stops.map((s) => nav.locate(s.zone, s.stop.heading));
+  const spots = stops.map((s) => locateStop(nav, city, s.zone, s.stop.heading));
   return stops.map((s, i) => {
     const next = stops[(i + 1) % stops.length];
     const a = spots[i];
@@ -199,7 +209,7 @@ export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = b
 export function routeLegs(city: CityData, route: RouteDef, graph: RoadGraph): number[] {
   const nav = new Navigator(graph);
   const stops = routeStops(city, route);
-  const spots = stops.map((s) => nav.locate(s.zone, s.stop.heading));
+  const spots = stops.map((s) => locateStop(nav, city, s.zone, s.stop.heading));
   return stops.map((s, i) => {
     const j = (i + stops.length - 1) % stops.length;
     const a = spots[j];

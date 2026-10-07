@@ -31,7 +31,7 @@ describe('traffic through the bridges and underpasses', () => {
     const sim = new TrafficSim(graph, city, { seed: 3, count: 40 });
     sim.setBudget(40, focus);
     sim.recycle({ pos: focus, heading: 0 }, true);
-    const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim));
+    const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim, world));
     let stuck = 0;
     const used = new Set<number>();
     const prev = sim.cars.map((c) => c.state);
