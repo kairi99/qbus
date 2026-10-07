@@ -244,7 +244,9 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   // dropping a way only moves what's on it, not furniture all over the city.
   const props = scatterProps(roads, stops, buildings, opts.seed ?? 1, inside).filter((pr) => !onJunction(pr.pos) && !occupied(pr.pos, 1) && !nearLifted(roads, pr.pos, 4));
   // Humps only where the game happens, and never on a ramp, bridge or underpass.
-  const features = placeFeatures(roads, opts.seed ?? 1).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20));
+  // Humps also keep well clear of a ramp's ends along the road (a car comes off the top of a
+  // ramp pitched up and fast): nearLifted only looks across the lifted stretch.
+  const features = placeFeatures(roads, opts.seed ?? 1).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20) && !nearRampPoint(roads, f.pos, 25));
   const spawn = pickSpawn(roads.filter((r) => !r.lift), bounds);
 
   return {
@@ -584,6 +586,11 @@ function nearLifted(roads: Road[], p: Vec2, margin: number): boolean {
     const { s, d } = projectOnRoad(r, p);
     return d < r.width / 2 + margin && Math.abs(liftAlong(r, s)) > 0.05;
   });
+}
+
+/** Within `reach` of any point of a road that's off the ground (a ramp, deck or cut). */
+function nearRampPoint(roads: Road[], p: Vec2, reach: number): boolean {
+  return roads.some((r) => r.lift && r.points.some((q, i) => Math.abs(r.lift![i]) > 0.05 && Math.hypot(q.x - p.x, q.z - p.z) < reach));
 }
 
 function placeFeatures(roads: Road[], seed: number): Feature[] {
