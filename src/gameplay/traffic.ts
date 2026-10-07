@@ -1,7 +1,7 @@
 import { Rng } from '../core/rng';
 import type { CityData, Vec2 } from '../world/cityData';
 import { forward, right } from '../world/cityData';
-import { type LaneEdge, type RoadGraph, edgeDir, laneOffset, lanePoint, projectOnPath } from '../world/roadGraph';
+import { type LaneEdge, type RoadGraph, edgeDir, edgeLift, laneOffset, lanePoint, projectOnPath } from '../world/roadGraph';
 
 export interface CarKind {
   name: 'sedan' | 'taxi' | 'buseta';
@@ -28,7 +28,15 @@ export interface Obstacle {
   heading: number;
   length: number;
   width: number;
+  /**
+   * Height off the ground (negative down in an underpass, positive on a bridge). Things more
+   * than `LEVEL_SEP` apart pass over each other; left out, it blocks every level.
+   */
+  lift?: number;
 }
+
+/** Two things whose lifts differ by more than this are on different levels (a road passing over another). */
+export const LEVEL_SEP = 2;
 
 export type TrafficEvent = { type: 'honk'; carId: number; pos: Vec2 };
 
@@ -162,7 +170,7 @@ export class TrafficSim {
     const events: TrafficEvent[] = [];
     const driving = this.cars.filter((c) => c.state === 'driving');
     const others: Obstacle[] = [
-      ...driving.map((c) => ({ id: `car${c.id}`, pos: c.pos, heading: c.heading, length: c.kind.length, width: c.kind.width })),
+      ...driving.map((c) => ({ id: `car${c.id}`, pos: c.pos, heading: c.heading, length: c.kind.length, width: c.kind.width, lift: this.liftOf(c) })),
       ...obstacles,
     ];
     for (const car of driving) this.drive(car, dt, others, obstacles, events);
@@ -223,6 +231,11 @@ export class TrafficSim {
     }
   }
 
+  /** How far above (or below) the ground the car is: its lane's lift, or its junction's mid-turn. */
+  liftOf(car: Car): number {
+    return car.turn ? this.graph.nodes[car.turn.node].lift : edgeLift(this.graph.edges[car.edge], car.s);
+  }
+
   private drive(car: Car, dt: number, others: Obstacle[], external: Obstacle[], events: TrafficEvent[]): void {
     if (car.wait > STUCK_WAIT || car.blockedTime > STUCK_WAIT) {
       this.place(car, this.focus.pos, 0, (p) => hiddenFrom(this.focus, p));
@@ -252,6 +265,8 @@ export class TrafficSim {
       for (const p of path) {
         const rel = { x: p.pos.x - o.pos.x, z: p.pos.z - o.pos.z };
         if (Math.abs(dot(rel, of)) > o.length / 2 + pad || Math.abs(dot(rel, or)) > o.width / 2 + pad) continue;
+        // Over or under our path (a bridge, an underpass): not in the way.
+        if (o.lift !== undefined && Math.abs(o.lift - p.lift) > LEVEL_SEP) continue;
         const v = Math.sqrt(2 * DECEL * Math.max(0, p.d - car.kind.length / 2 - MIN_GAP));
         if (v < vTarget) {
           vTarget = v;
@@ -385,7 +400,9 @@ export class TrafficSim {
       if (c !== car && c.state === 'driving' && !c.turn && c.edge === next.id && c.lane === car.nextLane && c.s < EXIT_CLEAR) return false;
     }
     const exit = lanePoint(next, 4, car.nextLane);
-    for (const o of external) if (Math.hypot(o.pos.x - exit.x, o.pos.z - exit.z) < o.length / 2 + 3) return false;
+    const exitLift = edgeLift(next, 4);
+    for (const o of external)
+      if (Math.hypot(o.pos.x - exit.x, o.pos.z - exit.z) < o.length / 2 + 3 && (o.lift === undefined || Math.abs(o.lift - exitLift) <= LEVEL_SEP)) return false;
     return true;
   }
 
@@ -442,18 +459,19 @@ export class TrafficSim {
   }
 
   /** Points along the route ahead, every PATH_STEP meters up to `reach`, with distance from the car. */
-  private futurePath(car: Car, reach: number): { d: number; pos: Vec2 }[] {
-    const out: { d: number; pos: Vec2 }[] = [];
+  private futurePath(car: Car, reach: number): { d: number; pos: Vec2; lift: number }[] {
+    const out: { d: number; pos: Vec2; lift: number }[] = [];
     const e = this.graph.edges[car.edge];
     const next = car.next >= 0 ? this.graph.edges[car.next] : null;
     let d = PATH_STEP;
     const alongEdge = (edge: LaneEdge, s0: number, lane: number, offset: number | undefined, base: number) => {
-      for (; d <= reach && s0 + (d - base) <= edge.len; d += PATH_STEP) out.push({ d, pos: lanePoint(edge, s0 + d - base, lane, offset) });
+      for (; d <= reach && s0 + (d - base) <= edge.len; d += PATH_STEP) out.push({ d, pos: lanePoint(edge, s0 + d - base, lane, offset), lift: edgeLift(edge, s0 + d - base) });
     };
     const alongTurn = (turn: { pts: Vec2[]; cum: number[] }, t0: number, base: number) => {
       const len = turn.cum[turn.cum.length - 1];
       const t = { ...turn, len, t: 0, node: 0, speed: 0 };
-      for (; d <= reach && t0 + (d - base) <= len; d += PATH_STEP) out.push({ d, pos: sampleCurve(t, t0 + d - base)[0] });
+      const lift = this.graph.nodes[e.to].lift;
+      for (; d <= reach && t0 + (d - base) <= len; d += PATH_STEP) out.push({ d, pos: sampleCurve(t, t0 + d - base)[0], lift });
       return len - t0;
     };
     const settled = Math.abs(car.offset - laneOffset(e, car.lane)) < 1e-6;
@@ -536,8 +554,13 @@ export class TrafficSim {
       const s = this.rng.range(3, e.len - 10);
       const p = lanePoint(e, s, lane);
       if (Math.hypot(p.x - avoid.x, p.z - avoid.z) < radius || !accept(p)) continue;
+      const lift = edgeLift(e, s);
       const free = this.cars.every(
-        (c) => c === car || c.state !== 'driving' || Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 6 + (c.kind.length + car.kind.length) / 2,
+        (c) =>
+          c === car ||
+          c.state !== 'driving' ||
+          Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 6 + (c.kind.length + car.kind.length) / 2 ||
+          Math.abs(this.liftOf(c) - lift) > LEVEL_SEP,
       );
       if (!free) continue;
       const dir = edgeDir(e, s);

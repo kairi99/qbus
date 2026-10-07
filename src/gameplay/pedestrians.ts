@@ -1,10 +1,13 @@
 import { Rng } from '../core/rng';
-import type { CityData, Vec2 } from '../world/cityData';
+import type { CityData, Road, Vec2 } from '../world/cityData';
 import { forward, inPlayArea, right } from '../world/cityData';
 import { pointInPolygon } from '../world/geom';
 import { RoadIndex } from '../world/roadIndex';
 import { type Path, type RoadGraph, edgeLift, makePath, offsetPath, pointAt } from '../world/roadGraph';
 import { LIFTED } from '../world/elevation';
+
+/** An open cut's edge reaches this far past its asphalt (shoulder, retaining wall, a little more). */
+const CUT_EDGE = 1.4;
 
 export interface BusState {
   pos: Vec2;
@@ -94,6 +97,15 @@ export class PedestrianSim {
     const walkOffset = city.blocks.length ? 1.8 : 1.1;
     this.roadsIdx = new RoadIndex(city.roads);
     const idx = this.roadsIdx;
+    // Down in a cut (or on its wall) unless on a street-level road's asphalt (one over a tunnel).
+    const cuts = new RoadIndex(pieces(city.roads, (l) => l < -LIFTED));
+    const level = new RoadIndex(pieces(city.roads, (l) => Math.abs(l) <= LIFTED));
+    const inCut = (q: Vec2) => cuts.onAsphalt(q, CUT_EDGE) && !level.onAsphalt(q);
+    const overCut = (a: Vec2, b: Vec2) => {
+      const n = Math.max(2, Math.ceil(dist(a, b) / 0.7));
+      for (let i = 0; i <= n; i++) if (inCut({ x: a.x + ((b.x - a.x) * i) / n, z: a.z + ((b.z - a.z) * i) / n })) return true;
+      return false;
+    };
     // Sidewalk lines along both sides of every road piece, cut wherever they'd run over asphalt
     // (other roads at junctions, the far carriageway of divided avenues).
     for (const e of graph.edges) {
@@ -108,11 +120,12 @@ export class PedestrianSim {
         for (let d = 0; d <= line.len; d += 1) {
           const q = pointAt(line, Math.min(d, line.len));
           // Nobody walks past the roadworks at the map edge, or along ramps, bridges and underpasses.
-          if (idx.onAsphalt(q, 0.3) || !inPlayArea(city, q, 2) || Math.abs(edgeLift(e, Math.min(d, e.len))) > LIFTED) flush();
+          // Nor along the edge of a cut beside them.
+          if (idx.onAsphalt(q, 0.3) || !inPlayArea(city, q, 2) || Math.abs(edgeLift(e, Math.min(d, e.len))) > LIFTED || inCut(q)) flush();
           else run.push(q);
         }
         const last = pointAt(line, line.len);
-        if (!idx.onAsphalt(last, 0.3) && inPlayArea(city, last, 2)) run.push(last);
+        if (!idx.onAsphalt(last, 0.3) && inPlayArea(city, last, 2) && !inCut(last)) run.push(last);
         flush();
       }
     }
@@ -133,9 +146,9 @@ export class PedestrianSim {
       const cands = around(e.pos)
         .filter((j) => this.ends[j].strip !== e.strip)
         .sort((a, b) => dist(this.ends[a].pos, e.pos) - dist(this.ends[b].pos, e.pos));
-      e.corner = cands.find((j) => dist(this.ends[j].pos, e.pos) < 14 && idx.lineClear(e.pos, this.ends[j].pos)) ?? -1;
+      e.corner = cands.find((j) => dist(this.ends[j].pos, e.pos) < 14 && idx.lineClear(e.pos, this.ends[j].pos) && !overCut(e.pos, this.ends[j].pos)) ?? -1;
       if (nearJunction(e.pos)) {
-        e.cross = cands.find((j) => j !== e.corner && dist(this.ends[j].pos, e.pos) < 28 && !idx.lineClear(e.pos, this.ends[j].pos)) ?? -1;
+        e.cross = cands.find((j) => j !== e.corner && dist(this.ends[j].pos, e.pos) < 28 && !idx.lineClear(e.pos, this.ends[j].pos) && !overCut(e.pos, this.ends[j].pos)) ?? -1;
       }
     });
 
@@ -332,3 +345,26 @@ export class PedestrianSim {
 }
 
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
+
+/** The stretches of `roads` whose lift passes `keep` (roads without one have lift 0), as roads. */
+function pieces(roads: Road[], keep: (lift: number) => boolean): Road[] {
+  const out: Road[] = [];
+  for (const r of roads) {
+    let run: Vec2[] = [];
+    const flush = () => {
+      if (run.length >= 2) out.push({ ...r, points: run, lift: undefined });
+      run = [];
+    };
+    for (let i = 0; i < r.points.length - 1; i++) {
+      const mid = r.lift ? (r.lift[i] + r.lift[i + 1]) / 2 : 0;
+      if (!keep(mid)) {
+        flush();
+        continue;
+      }
+      if (!run.length) run.push(r.points[i]);
+      run.push(r.points[i + 1]);
+    }
+    flush();
+  }
+  return out;
+}

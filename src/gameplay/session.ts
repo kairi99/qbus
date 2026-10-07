@@ -23,10 +23,11 @@ import { NavArrow } from '../ui/arrow';
 import { GameHud, money, RATING_LABEL, TRICK_LABEL } from '../ui/gameHud';
 import { LINES, SPEAKER, type LineKind } from './lines';
 import type { RoadGraph } from '../world/roadGraph';
-import { groundHeightAt, inPlayArea, nearestRoad } from '../world/cityData';
+import { groundHeightAt, inPlayArea, nearestRoad, terrainAt } from '../world/cityData';
 import { pointInPolygon } from '../world/geom';
 import { TrafficSim, type Obstacle } from './traffic';
 import { TrafficBodies, laneSurface } from './trafficBodies';
+import type { RoadPose } from '../world/roadSnap';
 import { PedestrianSim } from './pedestrians';
 import { MetroCrowd } from './metroCrowd';
 import { PedestrianView, TrafficView } from './trafficView';
@@ -88,7 +89,7 @@ export class GameSession {
   private busPos = new THREE.Vector3();
   private runs = 0;
   private startedFlag = false;
-  private start0: { pos: Vec2; heading: number; y: number };
+  private start0: RoadPose;
   readonly traffic: TrafficSim;
   readonly trafficBodies: TrafficBodies;
   readonly peds: PedestrianSim;
@@ -119,7 +120,7 @@ export class GameSession {
     const graph = d.graph;
     this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 } });
     this.traffic.setBudget(this.budget, spawn);
-    this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic));
+    this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic, d.world));
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
     this.nearMiss = new NearMissDetector(d.world, d.bus, (c) => this.trafficBodies.isCar(c));
     this.trafficView = new TrafficView(d.scene, this.traffic, this.trafficBodies);
@@ -157,7 +158,7 @@ export class GameSession {
     const { city, bus } = this.d;
     this.runs++;
     this.passengers.clear();
-    const { pos, heading, y } = this.start0;
+    const { pos, heading, y, pitch } = this.start0;
     this.scorer = new TrickScorer();
     this.nitro.reset();
     this.startedFlag = false;
@@ -178,7 +179,7 @@ export class GameSession {
       this.arrow.point(null);
     }
     this.hud.showResults(null);
-    bus.reset({ x: pos.x, y, z: pos.z, heading });
+    bus.reset({ x: pos.x, y, z: pos.z, heading, pitch });
   }
 
   /** The player honked: traffic ahead hurries, people on the crosswalk run. */
@@ -200,9 +201,10 @@ export class GameSession {
       this.peds.recycle({ pos: busPos, heading: bus.heading });
     }
     const obstacles: Obstacle[] = [
-      { id: 'bus', pos: busPos, heading: bus.heading, length: bus.preset.body.length, width: bus.preset.body.width },
+      // The bus at its level (in an underpass it doesn't hold up the street over it), people on the street.
+      { id: 'bus', pos: busPos, heading: bus.heading, length: bus.preset.body.length, width: bus.preset.body.width, lift: bus.roadHeight() - terrainAt(this.d.city, busPos) },
       ...this.trafficBodies.obstacles(),
-      ...this.peds.peds.filter((p) => p.onRoad).map((p) => ({ id: `ped${p.id}`, pos: p.pos, heading: p.heading, length: 0.8, width: 0.8 })),
+      ...this.peds.peds.filter((p) => p.onRoad).map((p) => ({ id: `ped${p.id}`, pos: p.pos, heading: p.heading, length: 0.8, width: 0.8, lift: 0 })),
     ];
     for (const e of this.traffic.step(dt, obstacles)) {
       const d = Math.hypot(e.pos.x - t.x, e.pos.z - t.z);
@@ -436,12 +438,16 @@ export class GameSession {
     const offPath = this.path && !this.path.points.some((p) => Math.hypot(p.x - here.x, p.z - here.z) < 20);
     if (!this.game.over && (this.sinceReplan > 0.5 || offPath)) {
       this.sinceReplan = 0;
-      const from = this.nav.locate(here, bus.heading, bus.body.translation().y - 1.5, (p) => groundHeightAt(this.d.city, p));
-      const to = this.nav.locate(zone, stop.heading);
+      const ground = (p: Vec2) => groundHeightAt(this.d.city, p);
+      const from = this.nav.locate(here, bus.heading, bus.roadHeight(), ground);
+      // Stops are never on ramps or decks: at street level.
+      const to = this.nav.locate(zone, stop.heading, ground(zone), ground);
       this.path = from && to ? this.nav.route(from, to) : null;
     }
     const close = Math.hypot(zone.x - here.x, zone.z - here.z) < 45;
-    if (!this.game.over) this.arrow.point(close || !this.path ? zone : this.nav.guidePoint(this.path, here, 35));
+    // The arrow follows the path on the bus's own level (not the street over its underpass).
+    const lift = bus.roadHeight() - terrainAt(this.d.city, here);
+    if (!this.game.over) this.arrow.point(close || !this.path ? zone : this.nav.guidePoint(this.path, here, 35, lift));
     if (this.minimapClock >= 1 / 30) {
       this.minimapClock = 0;
       const stops = this.game.route.map((r) => r.zone);

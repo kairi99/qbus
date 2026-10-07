@@ -173,6 +173,7 @@ all agree within 0.1 m: no steps at OSM joints.
   ramp is within a bus length of an at-grade junction it turns into.
 
 ### UP-007: N→S link top (e524 → Queseras / 12 de Octubre): wall at the junction corner; traffic jams there
+- **Status: traffic part fixed (AI/Nav); wall and the e524/e277 1.15 m step open (Collision/Physics).** The sim's obstacle test was 2D, so cars on the street over the link's tunnel held up cars in it (also the harness's car stuck > 20 s on e349): obstacles now carry a lift and only block their own level. `traffic.ts 90 2`: no more waits/recycles on e524.
 - **Category:** collision/physics, ai/nav
 - **Severity:** medium-high (interparroquial@40 stuck at (-60.7, 715.9) when exiting to 12 de Octubre (e277);
   impulses 9.7–14.4k at (-57.1, 713.3) for interparroquial on both exits; popular/buseta hit at (-62, 717) /
@@ -251,6 +252,7 @@ all agree within 0.1 m: no steps at OSM joints.
   boundary) instead of the cell staircase; same patch rework as UP-003/UP-004.
 
 ### UP-013: R reset near ramp tops can snap onto a parallel street at another level
+- **Status: fixed (AI/Nav).** `snapToRoad` scores distance off the asphalt plus 4× the height mismatch under the bus, takes the bus's height from its wheel contacts (`BusPhysics.roadHeight`), slides along whole roads, and with `vehicleClearance` (`src/physics/clearance.ts`) only lands where the bus box is clear of the static world (same level only); the reset pitches the bus to the road. `nav.ts` §2: no level changes left on lifted stretches (only at-grade overlaps, dy ≤ 0.3 m).
 - **Category:** ai/nav (reset)
 - **Severity:** low-medium
 - **Where:** e564 (10 de Agosto N-bound ramp, s 27–51) → Paso elevado approach #351, up to 1.06 m higher and 2–3.4 m
@@ -270,6 +272,7 @@ all agree within 0.1 m: no steps at OSM joints.
   `tools/underpass-recon/sweep.ts`, which finds them).
 
 ### UP-015: `Navigator.locate` without y picks the street over/under the cut (route stop lookup, path target)
+- **Status: fixed (AI/Nav).** Every runtime caller passes a height (stops and start poses at street level, the bus its wheel-contact height); `locate` weighs dy 4× (`nav.ts` §1: 0 wrong picks with y). The in-game arrow also follows the path on the bus's level (`NavPath.lifts`, `guidePoint(..., lift)`).
 - **Category:** ai/nav
 - **Severity:** low today (stops are kept off ramps; the bus's own `locate` passes y)
 - **Where:** e165/e167 on the bridge → 10 de Agosto below; e276/e564/e516 in the cuts → the parallel street at
@@ -281,6 +284,7 @@ all agree within 0.1 m: no steps at OSM joints.
   enough that a 1 m step beats a 2–3 m lateral offset.
 
 ### UP-016: Traffic: cars ride 0.25 m into the floor at the west-edge tunnel joint
+- **Status: fixed (AI/Nav).** `laneSurface` follows the road's own `surfaceY` (cross slope) and, near grade separations, the solid surface under the car (short STATIC raycast), so cars ride what the bus drives on, before and after geometry fixes. Also fixes the harness's e564 (floating 0.4 m: graph centerline vs cross slope) and e589 (sunk 0.4 m: patch ground over lane 1, UP-004) height failures.
 - **Category:** ai/nav (traffic bodies), rendering
 - **Severity:** low
 - **Where:** e195 near (-835, 790) (end of #115, joint with #116).
@@ -293,6 +297,7 @@ all agree within 0.1 m: no steps at OSM joints.
   asphalt the point is on.
 
 ### UP-017: Traffic bodies spawn at y ≈ 0 and rise for a frame at session start
+- **Status: fixed (AI/Nav).** The `TrafficBodies` constructor places (and pitches) every driving car on its lane.
 - **Category:** ai/nav (traffic bodies), rendering
 - **Severity:** low (not underpass-specific; one or two frames)
 - **Where:** everywhere; seen as 38 of 40 cars 8–10 m under their lanes at t = 0 (`out/trafficY.txt`).
@@ -332,7 +337,7 @@ all agree within 0.1 m: no steps at OSM joints.
 - Map-edge cuts (#53/#181/#182/#393/#395 outside the play area): covered by `tests/edgeUnderpass.test.ts`; not re-tested.
 
 ## Not covered (time)
-- Pedestrian strips by cuts and sidewalks near walls (no probe written).
+- ~~Pedestrian strips by cuts~~: done (AI/Nav): sidewalks, corners and crossings within 1.4 m of a cut's asphalt are dropped unless on street-level asphalt (`tests/pedestrians.test.ts`).
 - Sunset lighting, LOD popping, z-fighting checks by diffing frames (`QBUS_PERF` fixed views), cockpit-view gaps
   in the AE86 (`setCockpitView`) inside cuts.
 - Exact cause of what `coverTest` treats as covering at UP-003 (Av. América vs. the junction hull).
