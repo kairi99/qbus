@@ -108,7 +108,7 @@ function loweredRoads(city: CityData): Lowered[] {
  * Extra shoulder along a cut's road for the bends in it (BEND_SWEEP), including the bend where
  * it joins the next dug-in way at an angle (OSM splits a curving tunnel anywhere).
  */
-function bendAlong(city: CityData, index: number, dugIn: boolean[]): (s: number) => number {
+export function bendAlong(city: CityData, index: number, dugIn: boolean[]): (s: number) => number {
   const r = city.roads[index];
   const pts = r.points;
   const first = pts[0];
