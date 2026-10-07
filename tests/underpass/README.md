@@ -112,6 +112,6 @@ First run (2026-10-06, `DEFAULT_HILLS`), 51 known failures:
   Queseras link e349 at (-25.8, 710.4). (All fixed: traffic rides the solid road, and obstacles
   on another level no longer hold cars up.)
 - **Rendering (3 views)**: a slit to the sky in the side of the main 12 de Octubre cut at about
-  (-28, 730), seen S→N ahead/right and N→S looking left.
+  (-28, 730), seen S→N ahead/right and N→S looking left. Fixed (Rendering agent): `KNOWN_HOLES` is empty.
 
 Each entry in the suites carries the exact numbers observed.

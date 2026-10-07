@@ -138,6 +138,7 @@ all agree within 0.1 m: no steps at OSM joints.
 - **Fix direction:** dip every vertex whose cell touches the wall's footprint (dig by cell, not vertex; or extend
   the reach by one grid diagonal, ~1.42 m), or clip the patch triangles against the wall's outer face; keep
   patch ground off the asphalt entirely below a small tolerance.
+- **Status: visual part fixed (Rendering); lips partly.** The patch is dug a cell's diagonal (`UNDER_WALL` ≈ 1.46 m) past every wall's inner face, also beside a street alongside (never under its asphalt), so no triangle climbs in front of a wall; a solid, fully drawn walkway (`APRON`) covers the pit behind each wall not under a roof. The harness's lane-0 swept-volume hits on e276/e241 and drive-throughs on e564 (buseta), e197 (interparroquial @35) and e516 (interparroquial) now pass. Left: e276 lane 2 (4 hits ≤ 0.15 m), the slope between it and the N-bound ramp's shared cut (Collision/Physics).
 
 ### UP-005: West-edge (El Ejido) tunnel bend: buses scrape and jam on the retaining wall (known open item)
 - **Category:** collision/physics
@@ -204,6 +205,7 @@ all agree within 0.1 m: no steps at OSM joints.
   height, so the railing on the slit side is skipped although the other deck isn't joined to it.
 - **Fix direction:** skip railings only where another road's asphalt is actually contiguous (no gap between the
   ribbons); otherwise keep the railing or pave the slit between parallel decks.
+- **Status: fixed (Rendering), railings.** A road alongside only cancels a railing where its asphalt touches the deck (tested 0.15 m past the edge instead of 1 m), so both decks are railed along the slit, down to node 171. The slit itself (0.5–0.7 m wide, decks 0.6–0.8 m apart in height) is fenced, not paved. Right side at s 52: a railing hull is there (`whatis.ts -659.2 31.6 276.95`); the old section probe sampled the joint.
 
 ### UP-009: Puente del Guambra westbound: every bus brushes the right railing at (-659, 278)
 - **Category:** collision/physics
@@ -236,6 +238,7 @@ all agree within 0.1 m: no steps at OSM joints.
   back of the terrain).
 - **Fix direction:** cast from the bus to the desired camera spot against STATIC and pull the camera in (and
   down) to the hit; or lower the chase offset while the bus is under a roof (`terrainPatch` knows the roof cells).
+- **Status: fixed (Rendering).** `CameraRig.obstacles` (`src/physics/cameraObstacles.ts`, fixed colliders only, small cylinders/cones/boxes and the map-edge box ignored): a ray up from over the bus caps the camera 1.2 m under any roof or deck, and a 0.9 m ball swept from there to the camera pulls it in before any wall, ground or roof. Both pull in at once and ease out (1.5/s); two casts per frame, nothing allocated. `tests/cameraRig.test.ts` covers roof, wall, ease-out and a real Rapier tunnel with a pole.
 
 ### UP-012: Ragged roof edges and slivers hanging into tunnel mouths
 - **Category:** rendering
@@ -250,6 +253,7 @@ all agree within 0.1 m: no steps at OSM joints.
   cell sides, so a diagonal mouth gets a jagged lintel.
 - **Fix direction:** build the roof edge as a clean line across the cut (perpendicular to the road at the cover
   boundary) instead of the cell staircase; same patch rework as UP-003/UP-004.
+- **Status: partly fixed (Rendering).** Roof vs open is now decided per patch cell: roof cells are flat at the ground, every other cell in the cut is floor, and each roof edge gets a vertical face down to the lower side (a lintel ≤ 0.6 m, never below `HEADROOM` over the floor), with railings only over the cut. No more slivers, spikes or stepped dark slabs; the ceiling follows the roof. Left: on a diagonal mouth the lintel still follows the 1 m cell staircase. Also fixed: the harness's slit to the sky at (-28, 730) (the cut's wall was left out where the S→N link, 6 m above its floor, was taken for a carriageway sharing the cut: `otherFloor` now needs floors within 2.5 m, and a ramp that far above the floor roofs the cut).
 
 ### UP-013: R reset near ramp tops can snap onto a parallel street at another level
 - **Status: fixed (AI/Nav).** `snapToRoad` scores distance off the asphalt plus 4× the height mismatch under the bus, takes the bus's height from its wheel contacts (`BusPhysics.roadHeight`), slides along whole roads, and with `vehicleClearance` (`src/physics/clearance.ts`) only lands where the bus box is clear of the static world (same level only); the reset pitches the bus to the road. `nav.ts` §2: no level changes left on lifted stretches (only at-grade overlaps, dy ≤ 0.3 m).
@@ -338,6 +342,5 @@ all agree within 0.1 m: no steps at OSM joints.
 
 ## Not covered (time)
 - ~~Pedestrian strips by cuts~~: done (AI/Nav): sidewalks, corners and crossings within 1.4 m of a cut's asphalt are dropped unless on street-level asphalt (`tests/pedestrians.test.ts`).
-- Sunset lighting, LOD popping, z-fighting checks by diffing frames (`QBUS_PERF` fixed views), cockpit-view gaps
-  in the AE86 (`setCockpitView`) inside cuts.
+- ~~Sunset/night lighting inside cuts, AE86 driver's view in cuts~~: checked (Rendering) on e155/e242/e195/e198/e197/e564, chase and seat: lighting reads fine (headlights on the walls at night), no cockpit gaps. LOD popping and z-fighting by frame diffs: still not done.
 - Exact cause of what `coverTest` treats as covering at UP-003 (Av. América vs. the junction hull).
