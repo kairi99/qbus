@@ -6,7 +6,7 @@ import { terrainAt } from './cityData';
 import { type RoadProfile, profileAt, projectOnRoad, roadProfiles, surfaceY } from './elevation';
 import { pointInPolygon } from './geom';
 import type { ChunkedMeshBuilder } from './meshBuilder';
-import { type RoadGraph, convexHull } from './roadGraph';
+import { type RoadGraph, convexHull, pointAt } from './roadGraph';
 
 /** Deck slab thickness under a bridge's road surface. */
 const SLAB = 0.8;
@@ -192,30 +192,36 @@ function dirOnRoad(r: Road, s: number): Vec2 {
 
 const PARALLEL = 0.7;
 /**
- * The ground is dug this far past the shoulder: under the retaining wall and one patch cell's
- * diagonal past it, so the slope up from the floor starts behind the wall wherever the grid
- * lies (a vertex just past a shorter reach tilts its triangles up across the shoulder, onto
- * the asphalt: lips and saw-teeth along the wall's foot).
+ * The ground is dug this far past the shoulder, so its slope up to the street is hidden behind
+ * the retaining wall. A patch triangle spans up to a cell's diagonal: any vertex within that of
+ * the wall's inner face must be down at the floor, or the triangle climbs in front of the wall
+ * (concrete "teeth" along its foot).
  */
-const UNDER_WALL = WALL + FINE * Math.SQRT2;
-/** Concrete walkway along the top of a retaining wall, over the dug ground behind it. */
-const APRON = 1.4;
+const UNDER_WALL = FINE * Math.SQRT2 + 0.05;
+/** Concrete walkway along the top of a retaining wall, over the dug ground behind it (and its slope back up). */
+const APRON = UNDER_WALL + FINE * Math.SQRT2 - WALL + 0.1;
 /**
  * Ground over a cut only stays on as a roof where there's headroom under it: the tallest bus is
- * ~3.45 m over the road, plus room for its suspension and pitch on a ramp. The lintel hung along
- * the roof's open edges (at most LINTEL deep) never hangs below it either.
+ * ~3.45 m over the road, plus room for its suspension and pitch on a ramp. The face hung along
+ * the roof's open edges (a lintel, at most LINTEL deep) never hangs below it either.
  */
 const HEADROOM = 4.2;
 const LINTEL = 0.6;
+/** Two cuts side by side share one (no wall between) if their floors are this close. */
+const SHARED = 2.5;
 /** How far the ground over an underpass reaches beyond the edge of a street crossing over it. */
 const ROOF_MARGIN = 3;
 
-/** Another lowered road's asphalt (plus a little) covers `p`: its floor, not ours, goes there. */
-function otherFloor(lowered: Lowered[], self: Lowered, p: Vec2): boolean {
+/**
+ * Another lowered road's asphalt (plus a little) covers `p` at about our floor `y`: its floor, not
+ * ours, goes there. (One well above ours is a ramp alongside near its top: our wall stands under it.)
+ */
+function otherFloor(lowered: Lowered[], self: Lowered, p: Vec2, y: number): boolean {
   return lowered.some((o) => {
     if (o === self || !inBox(o.box, p)) return false;
     const { s, d } = projectOnRoad(o.road, p);
-    return d < o.road.width / 2 + 0.3 && profileAt(o.profile, s).lift < DUG;
+    const h = profileAt(o.profile, s);
+    return d < o.road.width / 2 + 0.3 && h.lift < DUG && Math.abs(h.y - y) < SHARED;
   });
 }
 
@@ -246,18 +252,6 @@ function sunkJunctions(city: CityData, graph: RoadGraph): SunkJunction[] {
     .map((n) => ({ poly: n.hull!, y: n.y!, box: boxOf(n.hull!, 0) }));
 }
 
-/**
- * Over a lowered road's floor (asphalt and shoulders, which are solid), where it's dug in. (A
- * bus's overhang sweeps the shoulder on a bend: ground sloping up there is a wall to it.)
- */
-function overRoadFloor(lowered: Lowered[], p: Vec2): boolean {
-  return lowered.some((l) => {
-    if (!inBox(l.box, p)) return false;
-    const { s, d } = projectOnRoad(l.road, p);
-    return d <= floorHalf(l, s) && profileAt(l.profile, s).lift < DUG;
-  });
-}
-
 /** Whether `p` (`d` meters off the centerline of `l`, `s` along it) is nearer a street alongside at ground level. */
 function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
   // Never on the lowered road's own asphalt where it's down in its cut. (At the shallow top
@@ -280,6 +274,22 @@ function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
     const od = dirOnRoad(r.road, o.s);
     return Math.abs(od.x * dir.x + od.z * dir.z) > PARALLEL;
   });
+}
+
+/**
+ * Whether a street alongside keeps the ground at `p` (`d` off `l`'s centerline, `s` along it).
+ * Digging past the cut (`reach` > 0, under the retaining wall), what counts is where the wall
+ * stands: the wall stops where a rival's ground begins, so `p` is dug if the spot `reach - WALL`
+ * nearer the road (the wall's inner face, for the deepest point dug) isn't claimed.
+ */
+function dugAway(l: Lowered, p: Vec2, s: number, d: number, reach: number): boolean {
+  if (reach <= WALL || d <= 1e-6) return claimedByRival(l, p, s, d);
+  // Never under the street's own asphalt (its ground is all that holds it up).
+  if (d > l.half && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2 + 0.3)) return true;
+  const pull = Math.min(d, reach - WALL);
+  const c = pointAt({ pts: l.road.points, cum: l.profile.cum, len: l.profile.cum[l.profile.cum.length - 1] }, s);
+  const q = { x: p.x + ((c.x - p.x) * pull) / d, z: p.z + ((c.z - p.z) * pull) / d };
+  return claimedByRival(l, q, s, d - pull);
 }
 
 /**
@@ -311,9 +321,7 @@ function cutsAt(lowered: Lowered[], p: Vec2, sunk: SunkJunction[], reach: number
     const { s, d } = projectOnRoad(l.road, p);
     if (d > floorHalf(l, s) + reach) continue;
     const h = profileAt(l.profile, s);
-    if (h.lift >= DUG || claimedByRival(l, p, s, d)) continue;
-    // Past the wall's own footing, never under a street at ground level (a pit in its lanes).
-    if (d > floorHalf(l, s) + WALL && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2 + 0.3)) continue;
+    if (h.lift >= DUG || dugAway(l, p, s, d, reach)) continue;
     const y = surfaceY(l.city, h, p);
     out.push({ y, road: l.index, dir: dirOnRoad(l.road, s), rank: d <= l.road.width / 2 ? y - 1000 : d });
   }
@@ -371,7 +379,12 @@ function coverTest(city: CityData, graph: RoadGraph, lowered: Lowered[]): (p: Ve
         if (Math.abs(od.x * dir.x + od.z * dir.z) > PARALLEL && !stacked && d > r.width / 2) return false;
       }
       const prof = profiles[i];
-      return !prof || profileAt(prof, s).lift > DUG;
+      if (!prof) return true;
+      const h = profileAt(prof, s);
+      if (h.lift > DUG) return true;
+      // A ramp near the top of its climb, crossing well above the cut's floor, roofs it like any street.
+      const cut = cutRoad !== undefined && cutRoad >= 0 ? profiles[cutRoad] : undefined;
+      return !!cut && h.y - profileAt(cut, projectOnRoad(city.roads[cutRoad!], p).s).y > HEADROOM;
     });
 }
 
@@ -536,7 +549,9 @@ export function buildGrades(
         const y = (a.y + b.y) / 2;
         const heading = Math.atan2(-(pb.z - pa.z), pb.x - pa.x);
         const len = Math.hypot(pb.x - pa.x, pb.z - pa.z);
-        const out = { x: mid.x + (side * -a.d.z) * 1, z: mid.z + side * a.d.x * 1 };
+        // Just past the edge: a road there continues our asphalt with no gap. (A point further
+        // out lands across the slit between two parallel decks, which still needs its railings.)
+        const out = { x: mid.x + side * -a.d.z * 0.15, z: mid.z + side * a.d.x * 0.15 };
         // Railing along the edge, unless a street joins here at the same height.
         if (Math.min(a.lift, b.lift) > 0.4 && !joins(ri, out, y) && !onTraffic(ri, mid, y)) {
           wallStrip(mb, pa, pb, a.y, b.y, PARAPET, 0.3, CONCRETE);
@@ -628,7 +643,7 @@ export function buildGrades(
         const o0 = side * w2;
         const o1 = side * l.half;
         const shoulderMid = { x: (edge(a, (o0 + o1) / 2).x + edge(b, (o0 + o1) / 2).x) / 2, z: (edge(a, (o0 + o1) / 2).z + edge(b, (o0 + o1) / 2).z) / 2 };
-        if (otherFloor(lowered, l, shoulderMid)) continue;
+        if (otherFloor(lowered, l, shoulderMid, (a.y + b.y) / 2)) continue;
         // (Wider on bends: BEND_SWEEP.)
         const [sa, sb] = [side * floorHalf(l, a.s), side * floorHalf(l, b.s)];
         deck.quad(fv(a, o0), fv(b, o0), fv(b, sb), fv(a, sa));
@@ -652,7 +667,7 @@ export function buildGrades(
         const floor = (a.y + b.y) / 2;
         // Its floor a little higher than ours, though: a step up to it, faced by a low wall
         // flush with its floor (no face there is an invisible ledge).
-        const step = shared && Math.abs(shared.y - floor) < 2.5 ? shared.y : null;
+        const step = shared && Math.abs(shared.y - floor) < SHARED ? shared.y : null;
         if (step !== null && step - floor < 0.3) continue;
         // Another ramp's asphalt right where the wall would stand, at about our floor's height: a
         // carriageway alongside that starts down a little later (so not `shared` here). A wall
@@ -674,7 +689,6 @@ export function buildGrades(
         if (other !== null && other < Math.min(ga, gb) - 0.6) continue;
         // (Just under the street's ground: its top is driven on, a step down to it is a lip.)
         if (other !== null) top = -0.01;
-        const flush = roof || other !== null || step !== null;
         const reachOut = (q: Vec2, sec: Sec, along: number) => ({ x: q.x + sec.d.x * along, z: q.z + sec.d.z * along });
         const inner = { a: reachOut(edge(a, side * (ra - WALL)), a, back), b: reachOut(edge(b, side * (rb - WALL)), b, fore) };
         // Under a street the wall is a cell's diagonal thicker (its top is the street's surface
@@ -689,13 +703,23 @@ export function buildGrades(
         mb.quad(v3(outer.a, a.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.b, gb + top), v3(outer.a, ga + top), CONCRETE);
         mb.quad(v3(inner.a, a.y - 0.3), v3(outer.a, a.y - 0.3), v3(outer.a, ga + top), v3(inner.a, ga + top), CONCRETE);
         mb.quad(v3(inner.b, b.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.b, gb + top), v3(inner.b, gb + top), CONCRETE);
-        if (!flush) {
-          // Walkway along the top, over the ground dug under the wall (unless a street is there).
-          const apron = { a: edge(a, side * (ra + APRON)), b: edge(b, side * (rb + APRON)) };
-          const apronMid = { x: (apron.a.x + apron.b.x) / 2, z: (apron.a.z + apron.b.z) / 2 };
-          if (!onTraffic(l.index, apronMid, ground(apronMid))) {
-            mb.quad(v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04), CONCRETE);
-          }
+        if (!roof && step === null) {
+          // Walkway along the top, over the ground dug behind the wall (also where a street at
+          // ground level runs alongside: there it stops at the street's asphalt).
+          const width = (sec: Sec, o: number) => {
+            let w = APRON;
+            while (w > 0.25 && onTraffic(l.index, edge(sec, side * (o + w)), ground(edge(sec, side * (o + w))))) w -= 0.25;
+            return w;
+          };
+          const wa = width(a, ra);
+          const wb = width(b, rb);
+          const apron = { a: reachOut(edge(a, side * (ra + wa)), a, back), b: reachOut(edge(b, side * (rb + wb)), b, fore) };
+          const walk = [v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04)];
+          const base = walk.map((q) => ({ x: q.x, y: q.y - 0.25, z: q.z }));
+          mb.quad(walk[0], walk[1], walk[2], walk[3], CONCRETE);
+          // Its edges drawn too (the pit is open beyond it), and solid: it's all there is over the pit.
+          for (const [i, j] of [[1, 2], [2, 3], [3, 0], [0, 1]]) mb.quad(base[i], base[j], walk[j], walk[i], CONCRETE);
+          solidHull([...walk, ...base]);
         }
         // Solid exactly where the wall is drawn: from its inner face out to its outer face. Two
         // hulls split along the drawn top's diagonal: where the wall's two ends stand at different
@@ -787,7 +811,7 @@ function terrainPatch(
   };
   // Vertices: the ground, dipped down to the road floor inside the open part of the cut (so the
   // ground meets the floor with no edge a car could catch on). Under a roof it stays up.
-  const vert = new Map<string, { y: number; roof: boolean; dipped: boolean }>();
+  const vert = new Map<string, { g: number; cutY: number | null; roof: boolean; dipped: boolean }>();
   const vertex = (x: number, z: number) => {
     const key = `${x},${z}`;
     let v = vert.get(key);
@@ -795,12 +819,47 @@ function terrainPatch(
       const g = terrainAt(city, { x, z });
       const cut = trenchAt(lowered, { x, z }, sunk, UNDER_WALL);
       const roof = !!cut && roofAt(city, lowered, { x, z }, sunk, UNDER_WALL, covered);
-      const dipped = !!cut && !roof && cut.y - 0.03 < g;
-      vert.set(key, (v = { y: dipped ? cut!.y - 0.03 : g, roof, dipped }));
+      const cutY = cut && cut.y - 0.03 < g ? cut.y - 0.03 : null;
+      vert.set(key, (v = { g, cutY, roof, dipped: cutY !== null && !roof }));
     }
     return v;
   };
-  const h = (x: number, z: number) => vertex(x, z).y;
+  // Cells: a roof cell (under a street over the cut, with headroom) is ground all over, flat at
+  // the roof; any other cell never climbs to the roof. Inside the cut itself its roof corners go
+  // down to the floor too (a tunnel mouth: no slivers or spikes hanging from the roof edge, just
+  // a straight lintel); behind the walls they stay up, so the street over keeps its ground.
+  const cells = new Map<string, { roof: boolean; under: ReturnType<typeof trenchAt> }>();
+  const cell = (x: number, z: number) => {
+    const key = `${x},${z}`;
+    let q = cells.get(key);
+    if (!q) {
+      const mid = { x: x + FINE / 2, z: z + FINE / 2 };
+      const under = trenchAt(lowered, mid, sunk);
+      const cut = under ?? trenchAt(lowered, mid, sunk, UNDER_WALL);
+      const roof = !!cut && roofAt(city, lowered, mid, sunk, under ? 0 : UNDER_WALL, covered);
+      cells.set(key, (q = { roof, under }));
+    }
+    return q;
+  };
+  /** Height of corner (vx, vz) as drawn by the cell at (x, z). */
+  const cornerY = (x: number, z: number, vx: number, vz: number) => {
+    const v = vertex(vx, vz);
+    const q = cell(x, z);
+    if (q.roof) return v.g;
+    // A cell in the cut itself is all floor, whatever its corners (one claimed by a street
+    // alongside would stand up in front of the wall as a sliver).
+    // A corner on another cut well above this one's floor (a ramp alongside, near its top: more
+    // than SHARED over it, so a wall stands between) is past this cut's wall: the cell is behind
+    // it and under that ramp's own deck. Nearer floors share the cut and meet in a slope.
+    if (q.under) return Math.min(v.g, v.cutY !== null && v.cutY < q.under.y + SHARED ? v.cutY : q.under.y - 0.03);
+    return v.dipped ? v.cutY! : v.g;
+  };
+  const sides = [
+    [-1, 0, 0, 0, 0, 1],
+    [1, 0, 1, 0, 1, 1],
+    [0, -1, 0, 0, 1, 0],
+    [0, 1, 0, 1, 1, 1],
+  ] as const;
   for (const k of plan.cells) {
     const r = Math.floor(k / cols);
     const cc = k % cols;
@@ -810,18 +869,11 @@ function terrainPatch(
       for (let j = 0; j < n; j++) {
         const x = x0 + i * FINE;
         const z = z0 + j * FINE;
-        // A tunnel mouth: roof on one side, cut floor on the other. Left open (the road floor
-        // is under it); anywhere else the dipped ground is the floor.
-        const corners = [vertex(x, z), vertex(x, z + FINE), vertex(x + FINE, z), vertex(x + FINE, z + FINE)];
-        // (Only where the road passes well below the roof; a shallow mouth is just a slope.)
-        const roofY = Math.max(...corners.filter((q) => q.roof).map((q) => q.y));
-        const floorY = Math.min(...corners.filter((q) => q.dipped).map((q) => q.y));
-        if (roofY - floorY > 2 && overRoadFloor(lowered, { x: x + FINE / 2, z: z + FINE / 2 })) continue;
         const v = [
-          { x, y: h(x, z), z },
-          { x, y: h(x, z + FINE), z: z + FINE },
-          { x: x + FINE, y: h(x + FINE, z), z },
-          { x: x + FINE, y: h(x + FINE, z + FINE), z: z + FINE },
+          { x, y: cornerY(x, z, x, z), z },
+          { x, y: cornerY(x, z, x, z + FINE), z: z + FINE },
+          { x: x + FINE, y: cornerY(x, z, x + FINE, z), z },
+          { x: x + FINE, y: cornerY(x, z, x + FINE, z + FINE), z: z + FINE },
         ];
         for (const [a, b, d] of [
           [0, 1, 2],
@@ -836,37 +888,46 @@ function terrainPatch(
           }
           tris.tri(v[a], v[b], v[d]);
         }
-        // Over the cut: a ceiling under the roof, and railings where the roof meets the open cut.
+        const here = cell(x, z);
+        if (!here.roof) continue;
         const mid = { x: x + FINE / 2, z: z + FINE / 2 };
-        const under = trenchAt(lowered, mid, sunk);
-        if (!under || !roofAt(city, lowered, mid, sunk, 0, covered)) continue;
         const mb = solid.at(mid.x, mid.z);
-        const y = h(mid.x, mid.z);
-        // The ceiling (and lintels) hang below the ground, but never into the headroom.
-        const lintel = Math.max(0.05, Math.min(LINTEL, y - under.y - HEADROOM));
-        mb.quad({ x, y: y - lintel, z }, { x: x + FINE, y: y - lintel, z }, { x: x + FINE, y: y - lintel, z: z + FINE }, { x, y: y - lintel, z: z + FINE }, CONCRETE_DARK);
-        // And a dark bottom under it, just below the tunnel floor, so nothing looks through into the void.
-        const fy = under.y - 0.15;
-        mb.quad({ x, y: fy, z: z + FINE }, { x: x + FINE, y: fy, z: z + FINE }, { x: x + FINE, y: fy, z }, { x, y: fy, z }, CONCRETE_DARK);
-        for (const [dx, dz, ax, az, bx, bz] of [
-          [-1, 0, x, z, x, z + FINE],
-          [1, 0, x + FINE, z, x + FINE, z + FINE],
-          [0, -1, x, z, x + FINE, z],
-          [0, 1, x, z + FINE, x + FINE, z + FINE],
-        ]) {
-          if (!isOpen(x + dx * FINE, z + dz * FINE)) continue;
-          // A railing only where there's a real drop into the cut.
-          if (y - h(x + dx * FINE + FINE / 2, z + dz * FINE + FINE / 2) < 1.5) continue;
-          const pa = { x: ax, z: az };
-          const pb = { x: bx, z: bz };
-          // Never across a street's lanes (the roof there is the street itself).
-          if (onStreet(city, { x: (ax + bx) / 2, z: (az + bz) / 2 })) continue;
-          // Lintel under the roof edge, and a railing on top.
-          mb.quad(v3(pa, y - lintel), v3(pb, y - lintel), v3(pb, y), v3(pa, y), CONCRETE);
-          wallStrip(mb, pa, pb, y, y, PARAPET, 0.12, RAIL);
-          const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(stripCorners(pa, pb, y - lintel, y - lintel, PARAPET + lintel, 0.12).flatMap((q) => [q.x, q.y, q.z])));
+        // The roof's edge: a face straight down from it to the lower ground beside it (at most a
+        // lintel's depth: below that is the tunnel mouth), solid like the rest of the ground; a
+        // railing on top where it drops into the open cut.
+        for (const [dx, dz, ax, az, bx, bz] of sides) {
+          const nx = x + dx * FINE;
+          const nz = z + dz * FINE;
+          if (cell(nx, nz).roof) continue;
+          const pa = { x: x + ax * FINE, z: z + az * FINE };
+          const pb = { x: x + bx * FINE, z: z + bz * FINE };
+          const ya = v[ax * 2 + az].y;
+          const yb = v[bx * 2 + bz].y;
+          // (Never lower than HEADROOM over the floor: where the roof is only just high enough,
+          // the lintel is thinner.)
+          const lintel = (q: Vec2, y: number) => Math.max(cornerY(nx, nz, q.x, q.z), y - LINTEL, (vertex(q.x, q.z).cutY ?? -Infinity) + HEADROOM);
+          const la = Math.min(ya, lintel(pa, ya));
+          const lb = Math.min(yb, lintel(pb, yb));
+          if (ya - la < 0.01 && yb - lb < 0.01) continue;
+          const face = [v3(pa, la), v3(pb, lb), v3(pb, yb), v3(pa, ya)];
+          mb.quad(face[0], face[1], face[2], face[3], CONCRETE);
+          tris.quad(face[0], face[1], face[2], face[3]);
+          // A railing only over the cut, where there's a real drop into it, and never across a
+          // street's lanes (the roof there is the street itself).
+          const below = vertex(nx + FINE / 2, nz + FINE / 2);
+          if (!here.under || !isOpen(nx, nz) || Math.min(ya, yb) - (below.dipped ? below.cutY! : below.g) < 1.5) continue;
+          if (onStreet(city, { x: (pa.x + pb.x) / 2, z: (pa.z + pb.z) / 2 })) continue;
+          wallStrip(mb, pa, pb, ya, yb, PARAPET, 0.12, RAIL);
+          const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(stripCorners(pa, pb, la, lb, PARAPET + Math.max(ya - la, yb - lb), 0.12).flatMap((q) => [q.x, q.y, q.z])));
           if (desc) world.createCollider(desc, fixed);
         }
+        // Over the cut itself: a ceiling under the roof (following it, no steps between cells) and
+        // a dark bottom just below the tunnel floor, so nothing looks through into the void.
+        if (!here.under) continue;
+        const [c00, c01, c10, c11] = v;
+        mb.quad({ ...c00, y: c00.y - 0.6 }, { ...c10, y: c10.y - 0.6 }, { ...c11, y: c11.y - 0.6 }, { ...c01, y: c01.y - 0.6 }, CONCRETE_DARK);
+        const fy = here.under.y - 0.15;
+        mb.quad({ x, y: fy, z: z + FINE }, { x: x + FINE, y: fy, z: z + FINE }, { x: x + FINE, y: fy, z }, { x, y: fy, z }, CONCRETE_DARK);
       }
   }
   // A dark floor under the whole patch at pit depth: any opening shows shadow, never the sky.
