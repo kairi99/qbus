@@ -460,9 +460,22 @@ export function buildGrades(
   for (const n of graph.nodes) {
     if (n.y === null || Math.abs(n.lift) < RAISED) continue;
     const h = n.hull ?? nodeArea(graph, n.id);
-    // A little under the roads' own surfaces (they slope across it): it only fills gaps.
-    const y = n.y - 0.35;
-    const at = (_q: Vec2) => y;
+    // Each corner at the surface of the road whose end it is (just under it): the wedge between
+    // two decks meeting at an angle is driven over when a car cuts the bend, and a slab sunk
+    // below them leaves the next deck's edge standing as a lip. Where a road is still near
+    // the ground (cross slope, `surfaceY`) it stays a little under, as it only fills gaps there.
+    const meeting = [...new Set([...n.in, ...n.out].map((id) => graph.edges[id].roadIndex))];
+    const at = (q: Vec2) => {
+      let best: { d: number; y: number } | null = null;
+      for (const ri of meeting) {
+        const prof = profiles[ri];
+        if (!prof) continue;
+        const { s, d } = projectOnRoad(city.roads[ri], q);
+        const h = profileAt(prof, s);
+        if (!best || d < best.d) best = { d, y: Math.abs(h.lift) >= 1.2 ? h.y - 0.02 : n.y! - 0.35 };
+      }
+      return best?.y ?? n.y! - 0.35;
+    };
     for (let i = 1; i < h.length - 1; i++) deck.tri(v3(h[0], at(h[0])), v3(h[i], at(h[i])), v3(h[i + 1], at(h[i + 1])));
     // Drawn too (as concrete under the road), so no part of it is ever an invisible ledge.
     if (n.lift > 0) {
