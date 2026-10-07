@@ -389,6 +389,16 @@ export function buildGrades(
     });
     return low;
   };
+  /** Another raised road's asphalt at `p` a little lower than `y` (overlapping carriageways, not one passing under). */
+  const overLower = (self: number, p: Vec2, y: number) =>
+    city.roads.some((r, i) => {
+      const prof = profiles[i];
+      if (i === self || !prof || !inBox(boxes[i], p)) return false;
+      const { s, d } = projectOnRoad(r, p);
+      if (d > r.width / 2) return false;
+      const h = profileAt(prof, s);
+      return h.lift > RAISED && h.y < y - 0.1 && h.y > y - 2;
+    });
   /** Another road (or junction) joining at this height: no railing across it. */
   const joins = (self: number, p: Vec2, y: number) =>
     city.roads.some((r, i) => {
@@ -415,7 +425,15 @@ export function buildGrades(
       const edge = (s: Sec, o: number) => ({ x: s.p.x - s.d.z * o, z: s.p.z + s.d.x * o });
       const slab = (s: Sec) => Math.min(SLAB, Math.max(0.05, s.lift));
       // Road surface (the asphalt ribbon is drawn separately) is solid; the slab under it is not.
-      const [la, ra, lb, rb] = [edge(a, -half), edge(a, half), edge(b, -half), edge(b, half)];
+      // Where OSM draws two carriageways overlapping at slightly different heights (ramps up to
+      // a bridge side by side), the higher deck stops at the lower one's asphalt: its edge on
+      // the other's lanes is a lip a car runs into.
+      const reach = (s: Sec, side: number) => {
+        let o = half;
+        while (o > half - 2 && overLower(ri, edge(s, side * o), s.y)) o -= 0.25;
+        return o;
+      };
+      const [la, ra, lb, rb] = [edge(a, -reach(a, -1)), edge(a, reach(a, 1)), edge(b, -reach(b, -1)), edge(b, reach(b, 1))];
       deck.quad(v3(la, surfaceY(city, a, la)), v3(lb, surfaceY(city, b, lb)), v3(rb, surfaceY(city, b, rb)), v3(ra, surfaceY(city, a, ra)));
       mb.quad(v3(la, a.y - slab(a)), v3(ra, a.y - slab(a)), v3(rb, b.y - slab(b)), v3(lb, b.y - slab(b)), CONCRETE_DARK);
       for (const [side, pa, pb] of [
