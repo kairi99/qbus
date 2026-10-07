@@ -114,4 +114,15 @@ First run (2026-10-06, `DEFAULT_HILLS`), 51 known failures:
 - **Rendering (3 views)**: a slit to the sky in the side of the main 12 de Octubre cut at about
   (-28, 730), seen S→N ahead/right and N→S looking left. Fixed (Rendering agent): `KNOWN_HOLES` is empty.
 
+After the Collision/Physics, Rendering and AI/Nav fixes (2026-10-07): 27 known failures left
+(10 drive-throughs: Queseras link at node 257, the S→N link's top bend, the El Ejido tunnel kink,
+the AE86 on the Guambra deck overlap and in the 10 de Agosto cut; 16 geometry: mostly small lips
+and graph/surface mismatches, two swept-volume hits on the Patria bridge ramps, drawn-vs-solid by
+the Guambra; 1 navigation: the e524/e277 step). Rebuilding the city can move a structure's
+center by a meter, which renames its tests (`@(-42,734)` became `@(-43,733)`): rename the entries.
+
+The harness measures a car's height against a junction at street level as the ground under it
+(`surfaceAlong`), and a route joint where both edges are on the ground at a street-level node
+isn't a step (a big junction's paving slopes with the ground).
+
 Each entry in the suites carries the exact numbers observed.
