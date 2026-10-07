@@ -26,6 +26,8 @@ known({
     "1 found: e575 Av. Patria lane 1 s 82–86: 0.16 m deep at (-587.5, 339.1, y 24.12) shape 9",
   "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895]":
     "11 found: surface off the graph height by -0.30 m on e700 Av. Patria lane 2 at (-490.1, 394.0, y 24.14); surface off the graph height by -0.47 m on e700 Av. Patria lane 3 at (-492.7, 396.6, y 24.14)",
+  "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
+    "4 found (12 on the first run; the wall-foot teeth on lane 0 are gone): e276 lane 2 s 61–86, up to 0.15 m deep at (-188.2, -829.0, y 16.67) shape 6: the patch slope between this cut and the N-bound ramp's shared cut (floors < 2.5 m apart, no wall between) reaches over the curb lane",
   "road surface has no lips, holes or height mismatches cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
     "1 found: surface off the graph height by 0.29 m on e276 Av. 10 de Agosto lane 2 at (-202.9, -792.2, y 20.40)",
   "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564]":
