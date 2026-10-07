@@ -525,27 +525,31 @@ export function buildGrades(
         // (Sharing means a floor at about ours: a ramp passing over the cut near the top of its
         // own climb is a street above it, and the wall stands under it.)
         const shared = trenchAt(lowered.filter((o) => o !== l), beyond, sunk);
-        if (shared && Math.abs(shared.y - (a.y + b.y) / 2) < 2.5) continue;
+        const floor = (a.y + b.y) / 2;
+        // Its floor a little higher than ours, though: a step up to it, faced by a low wall
+        // flush with its floor (no face there is an invisible ledge).
+        const step = shared && Math.abs(shared.y - floor) < 2.5 ? shared.y : null;
+        if (step !== null && step - floor < 0.3) continue;
         // Another ramp's asphalt right where the wall would stand, at about our floor's height: a
         // carriageway alongside that starts down a little later (so not `shared` here). A wall
         // there stands across its lanes.
-        if (rampAlongside(lowered, l, mid, (a.y + b.y) / 2)) continue;
-        const ga = ground(pa);
-        const gb = ground(pb);
+        if (step === null && rampAlongside(lowered, l, mid, floor)) continue;
+        const ga = step ?? ground(pa);
+        const gb = step ?? ground(pb);
         if (Math.max(ga - a.y, gb - b.y) < 0.2) continue;
         // Under a street passing over, the wall stops at the roof; in the open it has a parapet.
         // Roofed if any of it is under the roof: a parapet must never stand up into the street above.
         const deep = Math.min(ga - a.y, gb - b.y) > HEADROOM;
         const roof = deep && (covered(mid, a.d, l.index) || covered(pa, a.d, l.index) || covered(pb, a.d, l.index));
-        let top = roof ? -0.05 : PARAPET;
+        let top = roof || step !== null ? -0.05 : PARAPET;
         // Another road running where the wall would stand (OSM draws some carriageways
         // overlapping): one coming in partway down (a link branching off) leaves an opening;
         // a street at ground level just gets the wall stopping flush under it, as under a roof
         // (no wall at all would leave the cut's side open, see-through).
-        const other = through(l.index, mid, Math.min(a.y, b.y) + 0.5, Math.min(ga, gb) + top - 0.1);
+        const other = step === null ? through(l.index, mid, Math.min(a.y, b.y) + 0.5, Math.min(ga, gb) + top - 0.1) : null;
         if (other !== null && other < Math.min(ga, gb) - 0.6) continue;
         if (other !== null) top = -0.05;
-        const flush = roof || other !== null;
+        const flush = roof || other !== null || step !== null;
         const reachOut = (q: Vec2, sec: Sec, along: number) => ({ x: q.x + sec.d.x * along, z: q.z + sec.d.z * along });
         const inner = { a: reachOut(edge(a, side * (ra - WALL)), a, back), b: reachOut(edge(b, side * (rb - WALL)), b, fore) };
         const outer = { a: reachOut(edge(a, side * ra), a, back), b: reachOut(edge(b, side * rb), b, fore) };
