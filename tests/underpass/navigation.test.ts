@@ -7,10 +7,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { Navigator } from '../../src/gameplay/navigation';
 import { busById } from '../../src/vehicle/buses';
 import { groundHeightAt, inPlayArea } from '../../src/world/cityData';
-import { type LaneEdge, dirAt, edgeY } from '../../src/world/roadGraph';
+import { type LaneEdge, dirAt, edgeLift, edgeY } from '../../src/world/roadGraph';
 import { snapToRoad } from '../../src/world/roadSnap';
 import { vehicleClearance } from '../../src/physics/clearance';
-import { LIFT_STRUCTURE, crossingEdges, samples } from './catalog';
+import { LIFT_EDGE, LIFT_STRUCTURE, crossingEdges, samples } from './catalog';
 import { check, known } from './known';
 import { type Built, buildAll, cityAndCatalog } from './setup';
 import { NAV } from './thresholds';
@@ -18,8 +18,8 @@ import { fmt, intrusions, yawPitchRoll } from './probe';
 
 // Observed on the harness's first run: see README.md "Known failures".
 known({
-  'route joints are legal and level cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524]':
-    'The Queseras tunnel link (e524) ends 1.15 m below the edge it leads into (e277) at node 257: its lift is still -1.0 at its end while the node is at street level',
+  'route joints are legal and level cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524]':
+    'The Queseras tunnel link (e524) ends 1.15 m below the edge it leads into (e277) at node 257: its lift is still -1.0 at its end while the node is at street level (the graph merges two junctions there and trims the link 15 m back; leveling it by then folds the ramp into a V, see the import feedback in import.ts)',
 });
 
 const base = cityAndCatalog();
@@ -62,6 +62,10 @@ for (const s of structures.filter((x) => x.passages.length))
           const a = graph.edges[p.route[i]];
           const b = graph.edges[p.route[i + 1]];
           if (a.to !== b.from) bad.push(`e${a.id} doesn't lead into e${b.id}`);
+          // Both on the ground at a junction at street level: it's paved over the ground between
+          // them (which may slope a meter or more across a big junction), no step.
+          const ground = (e: LaneEdge, s: number) => Math.abs(edgeLift(e, s)) < LIFT_EDGE;
+          if (graph.nodes[a.to].y === null && ground(a, a.len) && ground(b, 0)) continue;
           const dy = Math.abs(yAt(a, a.len) - yAt(b, 0));
           if (dy > NAV.JOINT_TOL) bad.push(`e${a.id}→e${b.id} step ${dy.toFixed(2)} m at node ${a.to}`);
         }

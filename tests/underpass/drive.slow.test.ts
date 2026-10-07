@@ -9,35 +9,23 @@ import { check, known } from './known';
 import { type Built, buildAll, cityAndCatalog } from './setup';
 import { DRIVE } from './thresholds';
 
-// Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS). Delete an entry
-// once its bug is fixed (the it.fails turns red to tell you).
-const G1 = 'Puente del Guambra, northbound up-ramp: chassis drops 0.66–0.82 m into the road at about (-705, 220), where the deck ramp leaves the junction; the AE86 at 86 km/h stops dead there and stays stuck';
-const G2 = 'Puente del Guambra, southbound: buseta shoved sideways (Δv 1.1 m/s) at (-692.6, 213.1) on the down-ramp; AE86 at 88 km/h gets stuck at (-620.5, 313.6) on the deck ramp';
+// Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS), updated after
+// the collision fixes of 2026-10-07 (what's left). Delete an entry once its bug is fixed (the
+// it.fails turns red to tell you).
+const G2 = 'Puente del Guambra, southbound: the AE86 at 88 km/h stops dead at (-620.3, 313.0) where Av. Patria eastbound\'s down-ramp deck (#358) overlaps the westbound up-ramp (#401) 0.2–0.35 m higher, just before their joint with the bridge (deck edge hit from below, then railing contacts)';
 const A1 = 'Av. 10 de Agosto cut (south edge), e276: AE86 at 87 km/h hits a wall at (-195.4, -791.3) (Δv 20 m/s, normal (-0.39, 0.10, 0.91)) and stays stuck';
-const A2 = 'Av. 10 de Agosto cut (south edge), e564 up-ramp out of the cut: the bus starts wedged at (-195.5, -832.7) (a wall/ground stands on lane 0 here: ground at 20.8 m 1 m left of the lane, road at 17.6 m) and never moves; buseta escapes after 3.7 s of grinding';
-const Q1 = '12 de Octubre N→S turn through its tunnel onto Queseras (e585→e524): wall at (-57.2, 713.5) (normal (0.97, 0, 0.25)) stops the interparroquial; a ~1 m bump at (-68.3, 724.7) lifts every vehicle (AE86 +1.14 m); buseta hits a wall at (-126.0, 775.3)';
-const Q2 = '12 de Octubre S→N link to Av. Patria (e588→e160): interparroquial (12.5 m) jams against a wall at (-21.9, 750.8) (normal (-0.98, 0, -0.22)); shorter vehicles pass';
-const Q3 = '12 de Octubre main cut S→N (e589→e241): AE86 at 90 km/h gets stuck at (0.2, 713.0) near the north mouth after a 0.12 s hop at (-69.0, 753.3)';
-const S1 = 'Cut under Av. Patria by the Guambra (sin nombre e197→e199): interparroquial high-centers/stops at (-660, 323.7) in the cut (chassis on the floor, normal down); at 70 km/h also a wall shove Δv 14.7 m/s at (-617.9, 325.0)';
-const S2 = 'Cut at (-820, 774) (sin nombre e681→e195): interparroquial hits a wall at (-818.4, 768.0) (Δv 8 m/s, normal (0.85, 0, 0.53)) and stalls';
+const Q1 = '12 de Octubre N→S turn through its tunnel onto Queseras (e585→e524): the link is still ~1 m down in its cut where it reaches node 257\'s paved area (UP-007; leveling it there needs a 16% climb right out of the crossing, a V the bus high-centers on), so the interparroquial high-centers turning out at (-68.5, 723.5); buseta and AE86 hit a wall at (-103.0, 761.4) / (-127.6, 776.2) on 12 de Octubre (e277) running along the ramp\'s cut';
+const Q2 = '12 de Octubre S→N link to Av. Patria (e588→e160): interparroquial (12.5 m) jams on the bend near the top against the low retaining wall at (-16.6, 747.6) between the ramp and Ladrón de Guevara alongside (1.1 m of ground between the two asphalts: no room to widen the cut); shorter vehicles pass';
+const S2 = 'Cut at (-820, 774) (sin nombre e681→e195): on the sharp OSM kink at (-829.2, 773.8) the interparroquial\'s front corner hits the outer tunnel wall at (-835.7, 774.4) (Δv 8.6 m/s) and stalls; the cut is already widened there (BEND_SWEEP)';
 known({
-  'drive bridge Av. Patria @(-658,290): Av. Patria [e167→e517] | interparroquial @ 35 km/h': G1,
-  'drive bridge Av. Patria @(-658,290): Av. Patria [e167→e517] | interparroquial @ 70 km/h': G1,
-  'drive bridge Av. Patria @(-658,290): Av. Patria [e167→e517] | buseta @ 60 km/h': G1,
-  'drive bridge Av. Patria @(-658,290): Av. Patria [e167→e517] | ae86 @ 90 km/h': G1,
-  'drive bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895] | buseta @ 60 km/h': G2,
   'drive bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895] | ae86 @ 90 km/h': G2,
   'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276] | ae86 @ 90 km/h': A1,
-  'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564] | interparroquial @ 35 km/h': A2,
-  'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564] | interparroquial @ 70 km/h': A2,
-  'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524] | interparroquial @ 35 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524] | interparroquial @ 70 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524] | buseta @ 60 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524] | ae86 @ 90 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e588→e160] | interparroquial @ 35 km/h': Q2,
-  'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e588→e160] | interparroquial @ 70 km/h': Q2,
-  'drive cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241] | ae86 @ 90 km/h': Q3,
-  'drive cut sin nombre @(-652,321): sin nombre [e197→e199] | interparroquial @ 70 km/h': S1,
+  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524] | interparroquial @ 35 km/h': Q1,
+  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524] | interparroquial @ 70 km/h': Q1,
+  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524] | buseta @ 60 km/h': Q1,
+  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524] | ae86 @ 90 km/h': Q1,
+  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e588→e160] | interparroquial @ 35 km/h': Q2,
+  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e588→e160] | interparroquial @ 70 km/h': Q2,
   'drive cut sin nombre @(-820,774): sin nombre [e681→e195] | interparroquial @ 35 km/h': S2,
   'drive cut sin nombre @(-820,774): sin nombre [e681→e195] | interparroquial @ 70 km/h': S2,
 });

@@ -1,7 +1,7 @@
 # Underpass / bridge bug catalog: La Mariscal
 
 Recon of every grade-separated road in `data/cities/mariscal.json` at default hills (scale 1).
-Nothing here is fixed; it's evidence for the Collision/Physics, Rendering and AI/Nav fixers.
+Evidence for the Collision/Physics, Rendering and AI/Nav fixers; each item's **Status** says what has been fixed since.
 All probes live in `tools/underpass-recon/` (run with `npx tsx …` from the repo root, Node from nvm);
 their outputs from this run are committed in `tools/underpass-recon/out/`. Screenshots (gitignored) are in
 `e2e/screenshots/recon/{day,night}/` from `QBUS_PORT=5182 npx playwright test underpassRecon`.
@@ -60,6 +60,7 @@ all agree within 0.1 m: no steps at OSM joints.
 ## Bugs
 
 ### UP-001: Patria-bridge link: interparroquial jams under a roof-edge lintel at 3.37 m
+- **Status: fixed (Collision/Physics).** `HEADROOM` is now the clear height (4.2 m: tallest bus + suspension/pitch), and the lintel/roof-edge face never hangs below it; the roof is decided over every cut at a point (`roofAt`), not the nearest one, so it no longer flips on and off where two cuts meet. Harness e197→e199 drives pass; recon `drive.ts … 197,198,199`: no stalls.
 - **Category:** collision/physics (+ rendering: the lintel is the visible roof edge)
 - **Severity:** high (the interparroquial can't drive the link Patria → 10 de Agosto: stuck 38–42 s, every run)
 - **Where:** complex B, link #117/#118 (e197 → e198), under Av. Patria's westbound ramp (#401) at about
@@ -79,6 +80,7 @@ all agree within 0.1 m: no steps at OSM joints.
   interparroquial's height to `tests/lanesClear.test.ts` (it only ray-casts at 0.6 and 1.5 m, see UP-014).
 
 ### UP-002: 10 de Agosto northbound comes up under a 3.2 m roof ("10 de Agosto start jams")
+- **Status: fixed (Collision/Physics).** With the 4.2 m headroom the 3.2–3.5 m roof is gone, and the shoulders down in a cut (lift < -0.5) are never left to a street alongside (`claimedByRival`), so no ground stands over lane 0; e564 drives and swept volume pass. The approach road's own asphalt keeps its roof (`coverTest`: a parallel street covers its own asphalt), so it has no hole.
 - **Category:** collision/physics, rendering
 - **Severity:** high (popular stalls 8.8 s at 40 km/h; interparroquial stuck the whole run (41 s) and airborne-flagged; visible dark slab right over the windscreen)
 - **Where:** complex D, start of #396 (e564) at (-191…-197, -837…-829), under the Paso elevado's ground-level
@@ -99,6 +101,7 @@ all agree within 0.1 m: no steps at OSM joints.
   Same rule as UP-001.
 
 ### UP-003: Av. América west-edge link: sawtooth roof/floor at the HEADROOM threshold traps buses
+- **Status: fixed (Collision/Physics).** Same rule as UP-001/002: the roof needs 4.2 m everywhere under it and is decided over all cuts at once; e516 drives and swept volume pass (left on e516: a 0.10 m lip and a 0.27 m graph/surface mismatch on lane 2).
 - **Category:** collision/physics, rendering
 - **Severity:** high where reached, but medium overall: inside the play area (x ≈ -861, 15 m from the edge),
   reached by traffic entering from the map edge or a bus driving the one-way link wrong-way from Av. América.
@@ -138,9 +141,10 @@ all agree within 0.1 m: no steps at OSM joints.
 - **Fix direction:** dip every vertex whose cell touches the wall's footprint (dig by cell, not vertex; or extend
   the reach by one grid diagonal, ~1.42 m), or clip the patch triangles against the wall's outer face; keep
   patch ground off the asphalt entirely below a small tolerance.
-- **Status: visual part fixed (Rendering); lips partly.** The patch is dug a cell's diagonal (`UNDER_WALL` ≈ 1.46 m) past every wall's inner face, also beside a street alongside (never under its asphalt), so no triangle climbs in front of a wall; a solid, fully drawn walkway (`APRON`) covers the pit behind each wall not under a roof. The harness's lane-0 swept-volume hits on e276/e241 and drive-throughs on e564 (buseta), e197 (interparroquial @35) and e516 (interparroquial) now pass. Left: e276 lane 2 (4 hits ≤ 0.15 m), the slope between it and the N-bound ramp's shared cut (Collision/Physics).
+- **Status: visual part fixed (Rendering); lips partly.** The patch is dug a cell's diagonal (`UNDER_WALL` ≈ 1.46 m) past every wall's inner face, also beside a street alongside (never under its asphalt), so no triangle climbs in front of a wall; a solid, fully drawn walkway (`APRON`) covers the pit behind each wall not under a roof. The harness's lane-0 swept-volume hits on e276/e241 and drive-throughs on e564 (buseta), e197 (interparroquial @35) and e516 (interparroquial) now pass. Left: e276 lane 2 (4 hits ≤ 0.15 m), the slope between it and the N-bound ramp's shared cut. Collision/Physics also: shoulders in a deep cut are never ceded to a street alongside, and a wall under a street is a cell's diagonal thicker with its top flush with the street, so the ground climbing to the street stays inside it (no lips on e277 along the 12 de Octubre ramp).
 
 ### UP-005: West-edge (El Ejido) tunnel bend: buses scrape and jam on the retaining wall (known open item)
+- **Status: partly fixed (Collision/Physics).** Cuts widen on bends for a long bus's swept path (`bendAlong`: about L²/8R from the heading change over 12 m along the chain of dug-in ways, up to 2 m, both sides; floor, walls and dig follow). Recon: the interparroquial now gets through (stall 5–8 s, was stuck 22 s) and the R reset there is clear of the wall; the harness autopilot still jams on the sharp OSM kink at (-829.2, 773.8) against the outer tunnel wall. Needs a smoothed centerline (or a bigger kink allowance) for that way.
 - **Category:** collision/physics
 - **Severity:** high (interparroquial@40 stuck 22 s / never arrives; popular stalls 1.2–1.8 s with impulses
   of 1.7–8.6k; buseta scrapes; AE86 is fine)
@@ -158,6 +162,7 @@ all agree within 0.1 m: no steps at OSM joints.
   ≈ L²/(8R)), or bevel the wall corner at the joint instead of overlapping straight pieces.
 
 ### UP-006: S→N link (e160) climbing to Av. Patria: long buses hit the cut walls on the bend at the top
+- **Status: open (Collision/Physics).** Bend widening applies, but at the top the ramp runs 1.1 m of ground away from Ladrón de Guevara: the wall between them at (-16.6, 747.6) (0.8 m of retained ground plus parapet) is all the room there is, and the interparroquial's overhang sweeps it. Needs the ramp at street level sooner (it already climbs at 16%) or a lower barrier there.
 - **Category:** collision/physics
 - **Severity:** high (interparroquial stuck all 45 s at (-21, 749) whatever the exit; popular stalls
   4.3 s turning onto 12 de Octubre (e460); buseta and AE86 stall 3–4.5 s at (-16, 729))
@@ -174,7 +179,7 @@ all agree within 0.1 m: no steps at OSM joints.
   ramp is within a bus length of an at-grade junction it turns into.
 
 ### UP-007: N→S link top (e524 → Queseras / 12 de Octubre): wall at the junction corner; traffic jams there
-- **Status: traffic part fixed (AI/Nav); wall and the e524/e277 1.15 m step open (Collision/Physics).** The sim's obstacle test was 2D, so cars on the street over the link's tunnel held up cars in it (also the harness's car stuck > 20 s on e349): obstacles now carry a lift and only block their own level. `traffic.ts 90 2`: no more waits/recycles on e524.
+- **Status: traffic part fixed (AI/Nav); wall and the e524/e277 1.15 m step open (Collision/Physics):** the graph merges two junctions at node 257 and trims the link ~15 m before the real one; keeping it level from there (the import's junction-level feedback) would need a 16% climb straight out of the crossing, a V the bus high-centers on, so that one is refused. The sim's obstacle test was 2D, so cars on the street over the link's tunnel held up cars in it (also the harness's car stuck > 20 s on e349): obstacles now carry a lift and only block their own level. `traffic.ts 90 2`: no more waits/recycles on e524.
 - **Category:** collision/physics, ai/nav
 - **Severity:** medium-high (interparroquial@40 stuck at (-60.7, 715.9) when exiting to 12 de Octubre (e277);
   impulses 9.7–14.4k at (-57.1, 713.3) for interparroquial on both exits; popular/buseta hit at (-62, 717) /
@@ -208,6 +213,7 @@ all agree within 0.1 m: no steps at OSM joints.
 - **Status: fixed (Rendering), railings.** A road alongside only cancels a railing where its asphalt touches the deck (tested 0.15 m past the edge instead of 1 m), so both decks are railed along the slit, down to node 171. The slit itself (0.5–0.7 m wide, decks 0.6–0.8 m apart in height) is fenced, not paved. Right side at s 52: a railing hull is there (`whatis.ts -659.2 31.6 276.95`); the old section probe sampled the joint.
 
 ### UP-009: Puente del Guambra westbound: every bus brushes the right railing at (-659, 278)
+- **Status: fixed.** Harness Guambra passages and recon `drive.ts … 165`: no railing shoves. Also: deck node slabs follow their roads' surfaces (no lip at angled deck joints), and the higher of two overlapping carriageways' decks stops at the lower one's asphalt (the buseta shove at (-692.6, 213.1)).
 - **Category:** collision/physics
 - **Severity:** low-medium (speed loss and scraping on the bridge's best-known stretch: popular@75 impulse
   1.2k, interparroquial@75 1.8k, AE86@75 1.9k; at 40 km/h too)
@@ -221,6 +227,7 @@ all agree within 0.1 m: no steps at OSM joints.
   deck/curb-lane geometry near the railing gap of UP-008 (the deck bends there).
 
 ### UP-010: Eastbound Patria bridge: interparroquial hits the inner railing at speed near (-645…-658, 305…319)
+- **Status: fixed.** Recon `drive.ts interparroquial 40,75 167,517`: reaches, no stall. The harness's Guambra northbound "sink" was the up-ramp starting 1.25 m up inside node 171's paved area: ramps are now kept level across the junction areas the graph paves (`rampsIntoJunctions` feedback in `import.ts`).
 - **Category:** collision/physics
 - **Severity:** low-medium (interparroquial@75 impulse 28.6k at (-648.5, 313.7) on e167 → e517; scraping on e167 at 40 and 75)
 - **Where:** complex B, #95 → #358 (e167 → e517); railing hulls at (-644.9, 318.9), y 30.0–31.5.
@@ -269,6 +276,7 @@ all agree within 0.1 m: no steps at OSM joints.
   or weigh dy more heavily; reject spots whose bus footprint overlaps a wall (cut edge).
 
 ### UP-014: `tests/lanesClear.test.ts` runs at hills 1.3 and only ray-casts the curb lane at 0.6/1.5 m
+- **Status: fixed (Collision/Physics).** `tests/lanesClear.test.ts` runs at `DEFAULT_HILLS` and at 1.3, on every lane, at 0.6/1.5/3.3 m (wheel, waist, roof). It found a roof-edge railing standing on Av. Patria's lanes over a hole in the street (now a parallel street always roofs its own asphalt, and no roof-edge railing stands on a street).
 - **Category:** test gap (collision)
 - **Severity:** medium (it can't catch UP-001/002/003: roofs at 3.0–3.5 m, other lanes, the real default scale)
 - **Where:** `tests/lanesClear.test.ts:13` (`scale = 1.3`; the default is 1, `DEFAULT_HILLS`), `:17–23`.
@@ -311,6 +319,7 @@ all agree within 0.1 m: no steps at OSM joints.
 - **Fix direction:** call `drive(i)` (or use `groundAt`) for driving cars in the constructor.
 
 ### UP-018: Hump next to the Av. América link ramp top catches the AE86 at speed
+- **Status: fixed (Collision/Physics).** Humps keep 25 m from any point of a road that's off the ground (along the road too, not just across it: `nearRampPoint` in `import.ts`); one hump beside the 12 de Octubre ramp went. The e516 AE86 drive passes.
 - **Category:** collision/physics
 - **Severity:** low
 - **Where:** (-831.7, -339.7), 10 m past the top of #357 (e516 end), a speed hump (18-vertex hull, y 28.3–28.8).

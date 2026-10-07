@@ -1,0 +1,115 @@
+14 lifted drivable edges
+edge 160 sin nombre -> Av. 12 de Octubre(460) popular@40: reached=true t=21.0 wall=0 floor=65 air=0.08 stall=0.1 dev=1.9 end=(19.7,705) firstFloor@(-57.1,757.2) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) popular@75: reached=true t=14.0 wall=0 floor=18 air=0.08 stall=0.1 dev=1.9 end=(19.7,705.1) firstFloor@(-57,757.4) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) interparroquial@40: reached=false t=45.0 wall=1833 floor=49 air=0.08 stall=30.6 dev=0.7 end=(-22.2,751.2) firstWall@(-52.1,757.6) TriMesh firstFloor@(-58,757) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) interparroquial@75: reached=false t=45.0 wall=2200 floor=27 air=0.08 stall=36.3 dev=1.3 end=(-22.4,750.8) firstWall@(-22.2,750.9) ConvexPolyhedron firstFloor@(-58,757.2) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) buseta@40: reached=true t=20.8 wall=1 floor=1226 air=0.15 stall=0.1 dev=1.8 end=(19.8,705) firstWall@(-106.6,779.4) TriMesh firstFloor@(-119.9,787.8) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) buseta@75: reached=true t=13.7 wall=0 floor=103 air=0.15 stall=0.1 dev=1.8 end=(20,705) firstFloor@(-119.1,787.3) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) ae86@40: reached=true t=20.9 wall=0 floor=143 air=0.22 stall=0.2 dev=1.8 end=(19.7,705.1) firstFloor@(-127.7,792.9) TriMesh
+edge 160 sin nombre -> Av. 12 de Octubre(460) ae86@75: reached=true t=15.7 wall=9 floor=329 air=0.22 stall=0.3 dev=1.8 end=(19.9,705) firstWall@(-55.3,758.5) TriMesh firstFloor@(-127.5,792.8) TriMesh
+edge 160 sin nombre -> Av. Patria(970) popular@40: reached=true t=17.8 wall=0 floor=22 air=0.08 stall=0.1 dev=0.6 end=(-23.8,713.7) firstFloor@(-57.1,757.2) TriMesh
+edge 160 sin nombre -> Av. Patria(970) popular@75: reached=true t=10.7 wall=0 floor=14 air=0.08 stall=0.1 dev=1.2 end=(-23.7,713.4) firstFloor@(-57,757.4) TriMesh
+edge 160 sin nombre -> Av. Patria(970) interparroquial@40: reached=false t=45.0 wall=1833 floor=49 air=0.08 stall=30.6 dev=0.7 end=(-22.2,751.2) firstWall@(-52.1,757.6) TriMesh firstFloor@(-58,757) TriMesh
+edge 160 sin nombre -> Av. Patria(970) interparroquial@75: reached=false t=45.0 wall=2145 floor=27 air=0.08 stall=36.4 dev=1.3 end=(-22.4,750.8) firstWall@(-22.3,751) ConvexPolyhedron firstFloor@(-58,757.2) TriMesh
+edge 160 sin nombre -> Av. Patria(970) buseta@40: reached=true t=17.7 wall=1 floor=1226 air=0.15 stall=0.1 dev=0.5 end=(-23.8,713.7) firstWall@(-106.6,779.4) TriMesh firstFloor@(-119.9,787.8) TriMesh
+edge 160 sin nombre -> Av. Patria(970) buseta@75: reached=true t=10.6 wall=0 floor=103 air=0.15 stall=0.1 dev=1.2 end=(-23.8,713.4) firstFloor@(-119.1,787.3) TriMesh
+edge 160 sin nombre -> Av. Patria(970) ae86@40: reached=true t=17.8 wall=0 floor=148 air=0.22 stall=0.2 dev=0.9 end=(-24.1,713.8) firstFloor@(-127.7,792.9) TriMesh
+edge 160 sin nombre -> Av. Patria(970) ae86@75: reached=true t=13.0 wall=9 floor=356 air=0.22 stall=0.3 dev=1.7 end=(-24.4,714.1) firstWall@(-55.3,758.5) TriMesh firstFloor@(-127.5,792.8) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) popular@40: reached=true t=21.3 wall=60 floor=4 air=0.12 stall=0.1 dev=0.2 end=(-696.3,205.9) firstWall@(-659.7,278.8) ConvexPolyhedron firstFloor@(-693.6,212) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) popular@75: reached=true t=15.3 wall=47 floor=0 air=0.12 stall=0.1 dev=0.4 end=(-696.3,205.9) firstWall@(-658.3,280.4) ConvexPolyhedron
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) interparroquial@40: reached=true t=21.8 wall=52 floor=26 air=0.13 stall=0.1 dev=0.2 end=(-696.3,206) firstWall@(-660.4,277.9) ConvexPolyhedron firstFloor@(-586.4,334.1) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) interparroquial@75: reached=true t=15.6 wall=39 floor=17 air=0.13 stall=0.1 dev=0.4 end=(-696.3,206) firstWall@(-659.5,279) ConvexPolyhedron firstFloor@(-586.5,334) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) buseta@40: reached=true t=21.0 wall=0 floor=17 air=0.17 stall=0.1 dev=0.3 end=(-696.3,206) firstFloor@(-586.2,334.2) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) buseta@75: reached=true t=15.2 wall=1 floor=10 air=0.17 stall=0.1 dev=0.3 end=(-696.3,205.9) firstWall@(-693.1,213.1) TriMesh firstFloor@(-583.8,335.6) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) ae86@40: reached=true t=21.2 wall=0 floor=63 air=0.22 stall=0.2 dev=0.4 end=(-696.3,206) firstFloor@(-583.4,335.8) TriMesh
+edge 165 Av. Patria -> Alfredo Perez Guerrero(895) ae86@75: reached=true t=16.0 wall=7 floor=82 air=0.22 stall=0.1 dev=1.4 end=(-696.4,205.8) firstWall@(-583.6,335.6) TriMesh firstFloor@(-583.6,335.7) TriMesh
+edge 167 Av. Patria -> Av. Patria(517) popular@40: reached=true t=23.8 wall=0 floor=41 air=0.15 stall=0.2 dev=0.5 end=(-606.2,341.5) firstFloor@(-697,232.8) TriMesh
+edge 167 Av. Patria -> Av. Patria(517) popular@75: reached=true t=13.1 wall=14 floor=35 air=0.15 stall=0.1 dev=0.9 end=(-606.2,341.6) firstWall@(-646.6,315.5) ConvexPolyhedron firstFloor@(-697,232.6) TriMesh
+edge 167 Av. Patria -> Av. Patria(517) interparroquial@40: reached=true t=24.3 wall=72 floor=78 air=0.15 stall=0.3 dev=0.6 end=(-606.2,341.5) firstWall@(-664.3,296.8) ConvexPolyhedron firstFloor@(-697.4,232) TriMesh
+edge 167 Av. Patria -> Av. Patria(517) interparroquial@75: reached=true t=13.3 wall=61 floor=46 air=0.15 stall=0.1 dev=0.9 end=(-606.3,341.7) firstWall@(-657.1,305.5) ConvexPolyhedron firstFloor@(-697.4,231.6) TriMesh
+edge 167 Av. Patria -> Av. Patria(517) buseta@40: reached=true t=23.7 wall=0 floor=56 air=0.18 stall=0.2 dev=0.5 end=(-606.2,341.5) firstFloor@(-696.4,234.1) TriMesh
+edge 167 Av. Patria -> Av. Patria(517) buseta@75: reached=true t=13.0 wall=0 floor=42 air=0.18 stall=0.1 dev=0.8 end=(-606.3,341.6) firstFloor@(-697.2,232.1) HeightField
+edge 167 Av. Patria -> Av. Patria(517) ae86@40: reached=true t=23.7 wall=0 floor=113 air=0.23 stall=0.2 dev=0.5 end=(-606.1,341.6) firstFloor@(-711.4,199.7) HeightField
+edge 167 Av. Patria -> Av. Patria(517) ae86@75: reached=true t=13.9 wall=0 floor=184 air=0.28 stall=0.1 dev=0.9 end=(-606,341.6) firstFloor@(-726.1,175) HeightField
+edge 195 sin nombre -> -(undefined) popular@40: reached=true t=14.0 wall=188 floor=0 air=0.17 stall=0.4 dev=0.8 end=(-833.4,778.4) firstWall@(-829.9,773.1) ConvexPolyhedron
+edge 195 sin nombre -> -(undefined) popular@75: reached=true t=7.0 wall=15 floor=0 air=0.17 stall=0.1 dev=1.2 end=(-833.4,778.4) firstWall@(-830.4,774.1) ConvexPolyhedron
+edge 195 sin nombre -> -(undefined) interparroquial@40: reached=true t=21.3 wall=861 floor=0 air=0.17 stall=5.1 dev=1.0 end=(-833.2,778.4) firstWall@(-827.7,770.9) ConvexPolyhedron
+edge 195 sin nombre -> -(undefined) interparroquial@75: reached=true t=20.3 wall=1250 floor=0 air=0.17 stall=7.8 dev=1.3 end=(-833.1,778.5) firstWall@(-827.9,771.6) ConvexPolyhedron
+edge 195 sin nombre -> -(undefined) buseta@40: reached=true t=11.7 wall=0 floor=0 air=0.20 stall=0.1 dev=0.8 end=(-833.7,778.2)
+edge 195 sin nombre -> -(undefined) buseta@75: reached=true t=6.8 wall=0 floor=0 air=0.20 stall=0.1 dev=1.1 end=(-833.8,778.3)
+edge 195 sin nombre -> -(undefined) ae86@40: reached=true t=11.7 wall=0 floor=24 air=0.23 stall=0.2 dev=1.3 end=(-833,778.6) firstFloor@(-813.4,768.2) TriMesh
+edge 195 sin nombre -> -(undefined) ae86@75: reached=true t=6.8 wall=0 floor=24 air=0.23 stall=0.1 dev=2.1 end=(-832.7,779) firstFloor@(-813.8,768.8) TriMesh
+edge 197 sin nombre -> sin nombre(198) popular@40: reached=true t=13.2 wall=0 floor=11 air=0.13 stall=0.1 dev=0.5 end=(-656,319.8) firstFloor@(-647.8,316.6) TriMesh
+edge 197 sin nombre -> sin nombre(198) popular@75: reached=true t=9.4 wall=0 floor=10 air=0.13 stall=0.1 dev=0.7 end=(-655.9,319.8) firstFloor@(-643.4,316.1) TriMesh
+edge 197 sin nombre -> sin nombre(198) interparroquial@40: reached=true t=13.4 wall=0 floor=13 air=0.13 stall=0.1 dev=0.5 end=(-656.2,319.6) firstFloor@(-647.6,316.3) TriMesh
+edge 197 sin nombre -> sin nombre(198) interparroquial@75: reached=true t=9.6 wall=1 floor=13 air=0.13 stall=0.1 dev=0.5 end=(-656.2,319.5) firstWall@(-647.6,316.4) TriMesh firstFloor@(-647.3,316.3) TriMesh
+edge 197 sin nombre -> sin nombre(198) buseta@40: reached=true t=13.1 wall=0 floor=15 air=0.17 stall=0.1 dev=0.5 end=(-656,319.9) firstFloor@(-643.5,315.9) TriMesh
+edge 197 sin nombre -> sin nombre(198) buseta@75: reached=true t=9.3 wall=0 floor=18 air=0.17 stall=0.1 dev=0.7 end=(-656.2,319.9) firstFloor@(-643.4,316) TriMesh
+edge 197 sin nombre -> sin nombre(198) ae86@40: reached=true t=13.2 wall=0 floor=45 air=0.23 stall=0.2 dev=0.9 end=(-655.7,320.3) firstFloor@(-626.6,320.3) TriMesh
+edge 197 sin nombre -> sin nombre(198) ae86@75: reached=true t=9.9 wall=2 floor=88 air=0.23 stall=0.1 dev=1.4 end=(-655.6,320.7) firstWall@(-628.2,319.5) TriMesh firstFloor@(-626.5,320.3) TriMesh
+edge 198 sin nombre -> sin nombre(199) popular@40: reached=true t=18.3 wall=0 floor=9 air=0.13 stall=0.1 dev=0.5 end=(-679.3,370.8) firstFloor@(-648,316.7) TriMesh
+edge 198 sin nombre -> sin nombre(199) popular@75: reached=true t=13.7 wall=2 floor=8 air=0.13 stall=0.1 dev=0.7 end=(-679.4,371) firstWall@(-648,316.8) TriMesh firstFloor@(-647.7,316.7) TriMesh
+edge 198 sin nombre -> sin nombre(199) interparroquial@40: reached=true t=18.7 wall=0 floor=20 air=0.13 stall=0.1 dev=0.6 end=(-679.4,370.9) firstFloor@(-647.4,316.3) TriMesh
+edge 198 sin nombre -> sin nombre(199) interparroquial@75: reached=true t=14.0 wall=0 floor=17 air=0.13 stall=0.1 dev=0.7 end=(-679.3,370.9) firstFloor@(-647.3,316.3) TriMesh
+edge 198 sin nombre -> sin nombre(199) buseta@40: reached=true t=18.0 wall=0 floor=21 air=0.17 stall=0.1 dev=0.5 end=(-679.3,370.8) firstFloor@(-643.5,315.9) TriMesh
+edge 198 sin nombre -> sin nombre(199) buseta@75: reached=true t=13.6 wall=0 floor=23 air=0.17 stall=0.1 dev=0.7 end=(-679.4,371) firstFloor@(-643.4,316.1) TriMesh
+edge 198 sin nombre -> sin nombre(199) ae86@40: reached=true t=19.2 wall=1 floor=134 air=0.23 stall=0.2 dev=1.0 end=(-679.4,370.8) firstWall@(-659.2,322.7) TriMesh firstFloor@(-626.1,320.5) TriMesh
+edge 198 sin nombre -> sin nombre(199) ae86@75: reached=true t=14.6 wall=3 floor=246 air=0.23 stall=0.1 dev=1.4 end=(-679.4,371) firstWall@(-644.1,316.9) TriMesh firstFloor@(-626.6,320.2) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) popular@40: reached=true t=22.6 wall=0 floor=8 air=0.00 stall=0.1 dev=1.2 end=(-718.9,446.5) firstFloor@(-648.1,316.7) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) popular@75: reached=true t=16.0 wall=0 floor=8 air=0.00 stall=0.1 dev=1.7 end=(-718.8,446.6) firstFloor@(-647.9,316.8) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) interparroquial@40: reached=true t=23.1 wall=0 floor=21 air=0.00 stall=0.1 dev=1.2 end=(-719,446.4) firstFloor@(-647.4,316.3) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) interparroquial@75: reached=true t=16.3 wall=0 floor=6 air=0.00 stall=0.1 dev=1.8 end=(-718.9,446.7) firstFloor@(-647.2,316.3) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) buseta@40: reached=true t=22.5 wall=0 floor=23 air=0.10 stall=0.1 dev=1.1 end=(-718.9,446.5) firstFloor@(-643.5,315.9) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) buseta@75: reached=true t=16.0 wall=0 floor=20 air=0.10 stall=0.1 dev=1.6 end=(-719,446.6) firstFloor@(-643.6,316.1) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) ae86@40: reached=true t=23.4 wall=0 floor=178 air=0.20 stall=0.1 dev=1.1 end=(-718.5,446.7) firstFloor@(-626.5,320.3) TriMesh
+edge 199 sin nombre -> Av. 10 de Agosto(200) ae86@75: reached=true t=16.3 wall=3 floor=185 air=0.20 stall=0.1 dev=1.7 end=(-718.3,447) firstWall@(-628.2,319.5) TriMesh firstFloor@(-626.5,320.3) TriMesh
+edge 276 Av. 10 de Agosto -> -(undefined) interparroquial@40: reached=true t=10.8 wall=0 floor=0 air=0.17 stall=0.1 dev=0.2 end=(-176.5,-835)
+edge 276 Av. 10 de Agosto -> -(undefined) interparroquial@75: reached=true t=6.1 wall=0 floor=0 air=0.17 stall=0.1 dev=0.5 end=(-176.5,-834.9)
+edge 276 Av. 10 de Agosto -> -(undefined) buseta@40: reached=true t=10.5 wall=0 floor=0 air=0.18 stall=0.1 dev=0.2 end=(-176.5,-834.9)
+edge 276 Av. 10 de Agosto -> -(undefined) buseta@75: reached=true t=5.9 wall=0 floor=0 air=0.18 stall=0.1 dev=0.5 end=(-176.5,-835)
+edge 276 Av. 10 de Agosto -> -(undefined) ae86@40: reached=true t=10.6 wall=0 floor=0 air=0.23 stall=0.2 dev=0.3 end=(-176.5,-834.9)
+edge 276 Av. 10 de Agosto -> -(undefined) ae86@75: reached=false t=45.0 wall=2479 floor=20012 air=0.23 stall=41.3 dev=0.4 end=(-195.7,-791.4) firstWall@(-195.4,-791.3) TriMesh firstFloor@(-195.4,-791.3) TriMesh
+edge 349 sin nombre -> sin nombre(524) popular@40: reached=true t=16.1 wall=2 floor=56 air=0.12 stall=0.1 dev=0.6 end=(-57.6,713.7) firstWall@(-34.9,710.5) TriMesh firstFloor@(-29.4,710.5) TriMesh
+edge 349 sin nombre -> sin nombre(524) popular@75: reached=true t=14.1 wall=4 floor=90 air=0.12 stall=0.2 dev=0.7 end=(-57.6,713.9) firstWall@(-29.5,710.5) TriMesh firstFloor@(-29.5,710.4) TriMesh
+edge 349 sin nombre -> sin nombre(524) interparroquial@40: reached=true t=17.8 wall=4 floor=198 air=0.12 stall=0.3 dev=0.7 end=(-57.7,713.6) firstWall@(-29.9,710.7) TriMesh firstFloor@(-28.7,710.5) TriMesh
+edge 349 sin nombre -> sin nombre(524) interparroquial@75: reached=true t=13.9 wall=1 floor=121 air=0.12 stall=0.1 dev=0.7 end=(-57.7,713.6) firstWall@(-35.3,710.6) TriMesh firstFloor@(-28.6,710.5) TriMesh
+edge 349 sin nombre -> sin nombre(524) buseta@40: reached=true t=15.8 wall=1 floor=72 air=0.17 stall=0.1 dev=0.5 end=(-57.5,713.7) firstWall@(-34.7,710.5) TriMesh firstFloor@(-30,710.5) TriMesh
+edge 349 sin nombre -> sin nombre(524) buseta@75: reached=true t=13.9 wall=1 floor=95 air=0.17 stall=0.2 dev=0.7 end=(-57.4,713.8) firstWall@(-33.5,710.6) TriMesh firstFloor@(-30,710.5) TriMesh
+edge 349 sin nombre -> sin nombre(524) ae86@40: reached=true t=16.0 wall=0 floor=96 air=0.22 stall=0.2 dev=0.8 end=(-57.3,714) firstFloor@(-19.3,707.6) TriMesh
+edge 349 sin nombre -> sin nombre(524) ae86@75: reached=true t=13.9 wall=5 floor=147 air=0.22 stall=0.1 dev=0.9 end=(-57.3,714) firstWall@(-50.1,711) TriMesh firstFloor@(-19.2,707.5) TriMesh
+edge 516 sin nombre -> -(undefined) interparroquial@75: reached=true t=5.5 wall=0 floor=1 air=0.00 stall=0.1 dev=0.0 end=(-830.7,-340) firstFloor@(-832.2,-335.6) ConvexPolyhedron
+edge 516 sin nombre -> -(undefined) buseta@40: reached=true t=9.9 wall=0 floor=5 air=0.05 stall=0.3 dev=0.2 end=(-830.8,-339.8) firstFloor@(-831.9,-336.6) ConvexPolyhedron
+edge 516 sin nombre -> -(undefined) buseta@75: reached=true t=5.2 wall=0 floor=5 air=0.05 stall=0.1 dev=0.0 end=(-830.8,-339.8) firstFloor@(-831.8,-336.7) ConvexPolyhedron
+edge 516 sin nombre -> -(undefined) ae86@40: reached=true t=9.8 wall=0 floor=29 air=0.20 stall=0.3 dev=0.1 end=(-830.8,-339.7) firstFloor@(-831.5,-337.6) ConvexPolyhedron
+edge 516 sin nombre -> -(undefined) ae86@75: reached=true t=6.0 wall=6 floor=53 air=0.20 stall=0.1 dev=0.6 end=(-830.4,-339.7) firstWall@(-831.5,-337.4) ConvexPolyhedron firstFloor@(-831,-337.4) ConvexPolyhedron
+edge 517 Av. Patria -> Av. Patria(274) popular@75: reached=true t=13.7 wall=12 floor=0 air=0.00 stall=0.1 dev=0.9 end=(-523.4,392.6) firstWall@(-646.5,315.6) ConvexPolyhedron
+edge 517 Av. Patria -> Av. Patria(274) interparroquial@40: reached=true t=25.1 wall=98 floor=0 air=0.00 stall=0.6 dev=0.8 end=(-523.3,392.5) firstWall@(-657.8,304.9) ConvexPolyhedron
+edge 517 Av. Patria -> Av. Patria(274) interparroquial@75: reached=true t=14.0 wall=62 floor=0 air=0.00 stall=0.1 dev=0.8 end=(-523.3,392.7) firstWall@(-656.9,305.7) ConvexPolyhedron
+edge 517 Av. Patria -> Av. Patria(274) ae86@40: reached=true t=22.5 wall=0 floor=25 air=0.18 stall=0.3 dev=1.0 end=(-523.3,392.4) firstFloor@(-588.7,351.8) TriMesh
+edge 517 Av. Patria -> Av. Patria(274) ae86@75: reached=true t=13.6 wall=0 floor=46 air=0.22 stall=0.1 dev=1.0 end=(-523.4,392.4) firstFloor@(-642,318.5) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) popular@40: reached=true t=20.7 wall=7 floor=152 air=0.12 stall=0.2 dev=1.2 end=(-62.9,755.3) firstWall@(-29.5,710.5) TriMesh firstFloor@(-29.5,710.5) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) popular@75: reached=true t=16.2 wall=6 floor=128 air=0.12 stall=0.2 dev=1.6 end=(-62.8,755.2) firstWall@(-29.5,710.5) TriMesh firstFloor@(-29.4,710.4) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) interparroquial@40: reached=true t=22.6 wall=4 floor=427 air=0.13 stall=0.3 dev=1.1 end=(-63.1,755.4) firstWall@(-35.7,710.6) TriMesh firstFloor@(-28.7,710.5) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) interparroquial@75: reached=true t=17.5 wall=5 floor=301 air=0.13 stall=0.1 dev=1.4 end=(-63,755.4) firstWall@(-58.4,714.1) ConvexPolyhedron firstFloor@(-28.8,710.5) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) buseta@40: reached=true t=19.5 wall=0 floor=96 air=0.17 stall=0.1 dev=1.2 end=(-62.9,755.4) firstFloor@(-30,710.5) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) buseta@75: reached=true t=16.0 wall=1 floor=107 air=0.17 stall=0.2 dev=1.5 end=(-62.8,755.5) firstWall@(-34.7,710.5) TriMesh firstFloor@(-30,710.5) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) ae86@40: reached=true t=21.4 wall=5 floor=416 air=0.23 stall=0.3 dev=1.5 end=(-62.4,754.9) firstWall@(-55,712.7) TriMesh firstFloor@(-19.2,707.6) TriMesh
+edge 524 sin nombre -> Queseras del Medio(207) ae86@75: reached=false t=45.0 wall=2105 floor=2149 air=0.23 stall=35.0 dev=0.7 end=(-32.4,711.4) firstWall@(-32.1,710.3) TriMesh firstFloor@(-19.3,707.6) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) popular@40: reached=true t=21.0 wall=19 floor=138 air=0.12 stall=0.2 dev=0.6 end=(-91.9,754.3) firstWall@(-29.5,710.5) TriMesh firstFloor@(-29.5,710.5) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) popular@75: reached=true t=16.4 wall=19 floor=116 air=0.12 stall=0.2 dev=1.0 end=(-92,754.1) firstWall@(-29.5,710.5) TriMesh firstFloor@(-29.4,710.4) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) interparroquial@40: reached=true t=29.8 wall=338 floor=525 air=0.13 stall=4.4 dev=0.7 end=(-91.8,754.6) firstWall@(-35.7,710.6) TriMesh firstFloor@(-28.7,710.5) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) interparroquial@75: reached=true t=17.6 wall=39 floor=202 air=0.13 stall=0.1 dev=0.9 end=(-92,754.4) firstWall@(-58.4,714.1) ConvexPolyhedron firstFloor@(-28.8,710.5) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) buseta@40: reached=true t=19.8 wall=0 floor=94 air=0.17 stall=0.1 dev=0.5 end=(-92,754.3) firstFloor@(-30,710.5) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) buseta@75: reached=true t=16.1 wall=3 floor=99 air=0.17 stall=0.2 dev=0.9 end=(-92.1,754.3) firstWall@(-34.7,710.5) TriMesh firstFloor@(-30,710.5) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) ae86@40: reached=true t=28.4 wall=368 floor=765 air=0.23 stall=6.3 dev=0.8 end=(-92.2,754) firstWall@(-55,712.7) TriMesh firstFloor@(-19.2,707.6) TriMesh
+edge 524 sin nombre -> Av. 12 de Octubre(277) ae86@75: reached=false t=45.0 wall=2105 floor=2149 air=0.23 stall=35.0 dev=0.7 end=(-32.4,711.4) firstWall@(-32.1,710.3) TriMesh firstFloor@(-19.3,707.6) TriMesh
+edge 564 Av. 10 de Agosto -> Av. 10 de Agosto(508) ae86@40: reached=true t=8.7 wall=8 floor=25 air=0.18 stall=0.3 dev=0.3 end=(-227.7,-763.6) firstWall@(-210.5,-803.9) TriMesh firstFloor@(-209.3,-806.5) TriMesh
+edge 564 Av. 10 de Agosto -> Av. 10 de Agosto(508) ae86@75: reached=true t=4.6 wall=0 floor=24 air=0.18 stall=0.1 dev=0.5 end=(-227.7,-763.6) firstFloor@(-209.5,-806) TriMesh
+edge 681 sin nombre -> sin nombre(195) popular@40: reached=true t=12.2 wall=34 floor=0 air=0.17 stall=0.1 dev=0.8 end=(-833.5,778.3) firstWall@(-829.9,773.2) ConvexPolyhedron
+edge 681 sin nombre -> sin nombre(195) popular@75: reached=true t=7.1 wall=18 floor=0 air=0.17 stall=0.1 dev=1.1 end=(-833.4,778.4) firstWall@(-830.4,774) ConvexPolyhedron
+edge 681 sin nombre -> sin nombre(195) interparroquial@40: reached=true t=21.2 wall=874 floor=0 air=0.17 stall=5.3 dev=1.0 end=(-833.2,778.4) firstWall@(-827.7,770.9) ConvexPolyhedron
+edge 681 sin nombre -> sin nombre(195) interparroquial@75: reached=true t=20.7 wall=1290 floor=0 air=0.17 stall=7.7 dev=1.3 end=(-833.1,778.5) firstWall@(-827.9,771.6) ConvexPolyhedron
+edge 681 sin nombre -> sin nombre(195) buseta@40: reached=true t=11.9 wall=0 floor=0 air=0.18 stall=0.1 dev=0.8 end=(-833.7,778.3)
+edge 681 sin nombre -> sin nombre(195) buseta@75: reached=true t=7.0 wall=0 floor=0 air=0.18 stall=0.1 dev=1.1 end=(-833.7,778.2)
+edge 681 sin nombre -> sin nombre(195) ae86@40: reached=true t=11.9 wall=0 floor=25 air=0.23 stall=0.2 dev=1.3 end=(-833,778.5) firstFloor@(-813.4,768.2) TriMesh
+edge 681 sin nombre -> sin nombre(195) ae86@75: reached=true t=6.9 wall=0 floor=31 air=0.23 stall=0.1 dev=2.1 end=(-832.6,778.8) firstFloor@(-813.6,768.8) TriMesh

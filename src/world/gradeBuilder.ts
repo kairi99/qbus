@@ -42,6 +42,8 @@ interface Lowered {
   index: number;
   profile: RoadProfile;
   half: number;
+  /** Extra shoulder `s` meters along the road, on bends (see BEND_SWEEP). */
+  bend: (s: number) => number;
   box: Box;
   /** Streets at ground level nearby: where one runs alongside, the cut stops halfway to it. */
   rivals: { road: Road; index: number; box: Box }[];
@@ -71,16 +73,27 @@ function roadBoxes(city: CityData): Box[] {
   return b;
 }
 
+/**
+ * A long bus on a bend sweeps wider than its lane (the front overhang swings out, the rear
+ * wheels cut in): about L² / 8R for a bus L long on radius R. Cut walls stand that much
+ * further out on bends (both sides), up to BEND_MAX.
+ */
+const BEND_SWEEP = (12.5 * 12.5) / 8;
+const BEND_MAX = 2;
+/** Bends are measured as the change of heading over this far (m), along the cut's chain of ways. */
+const BEND_SPAN = 12;
+
 /** Roads that dip into an underpass somewhere. */
 function loweredRoads(city: CityData): Lowered[] {
   const profiles = roadProfiles(city);
   const boxes = roadBoxes(city);
   const out: Lowered[] = [];
+  const dugIn = city.roads.map((_, i) => !!profiles[i] && profiles[i]!.lift.some((l) => l < DUG));
   city.roads.forEach((road, index) => {
     const profile = profiles[index];
-    if (!profile || !profile.lift.some((l) => l < DUG)) return;
-    const box = boxOf(road.points, road.width / 2 + SHOULDER + UNDER_WALL);
-    out.push({ road, index, profile, half: road.width / 2 + SHOULDER, box, rivals: [], city });
+    if (!profile || !dugIn[index]) return;
+    const box = boxOf(road.points, road.width / 2 + SHOULDER + UNDER_WALL + BEND_MAX);
+    out.push({ road, index, profile, half: road.width / 2 + SHOULDER, bend: bendAlong(city, index, dugIn), box, rivals: [], city });
   });
   const dug = new Set(out.map((l) => l.index));
   for (const l of out)
@@ -90,6 +103,81 @@ function loweredRoads(city: CityData): Lowered[] {
     });
   return out;
 }
+
+/**
+ * Extra shoulder along a cut's road for the bends in it (BEND_SWEEP), including the bend where
+ * it joins the next dug-in way at an angle (OSM splits a curving tunnel anywhere).
+ */
+export function bendAlong(city: CityData, index: number, dugIn: boolean[]): (s: number) => number {
+  const r = city.roads[index];
+  const pts = r.points;
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  const near = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z) < 1.5;
+  /** The dug-in way carrying on from `end` (its points running away from it), most nearly straight on. */
+  const onward = (end: Vec2, out: Vec2): Vec2[] | null => {
+    let best: { pts: Vec2[]; cos: number } | null = null;
+    city.roads.forEach((o, i) => {
+      if (i === index || !dugIn[i]) return;
+      const q = near(o.points[0], end) ? o.points : near(o.points[o.points.length - 1], end) ? [...o.points].reverse() : null;
+      if (!q || q.length < 2) return;
+      const d = unit(q[0], q[1]);
+      const cos = d.x * out.x + d.z * out.z;
+      if (!best || cos > best.cos) best = { pts: q, cos };
+    });
+    return best ? (best as { pts: Vec2[] }).pts : null;
+  };
+  const before = onward(first, unit(pts[1], pts[0]));
+  const after = onward(last, unit(pts[pts.length - 2], last));
+  // One polyline: the way before (reversed, so it runs into ours), ours, the way after.
+  const chain = [...(before ? [...before].reverse().slice(0, -1) : []), ...pts, ...(after ? after.slice(1) : [])];
+  const cum = [0];
+  for (let i = 1; i < chain.length; i++) cum.push(cum[i - 1] + Math.hypot(chain[i].x - chain[i - 1].x, chain[i].z - chain[i - 1].z));
+  let offset = 0;
+  if (before) for (let i = 1; i < before.length; i++) offset += Math.hypot(before[i].x - before[i - 1].x, before[i].z - before[i - 1].z);
+  const heading = (c: number) => {
+    let i = 1;
+    while (i < chain.length - 1 && cum[i] < c) i++;
+    const d = unit(chain[i - 1], chain[i]);
+    return Math.atan2(d.z, d.x);
+  };
+  const len = cum[cum.length - 1];
+  const raw: number[] = [];
+  const total = cumLength(pts);
+  for (let s = 0; s <= total + 1; s += 1) {
+    const c = offset + s;
+    const a = heading(Math.max(0, c - BEND_SPAN / 2));
+    const b = heading(Math.min(len, c + BEND_SPAN / 2));
+    const turn = Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a)));
+    raw.push(turn < 0.05 ? 0 : Math.min(BEND_MAX, (BEND_SWEEP * turn) / BEND_SPAN));
+  }
+  // Widest over a bus length around each point, so the wall flares out before the bend and
+  // back after it.
+  const wide = raw.map((_, k) => Math.max(...raw.slice(Math.max(0, k - 6), k + 7)));
+  return (s) => wide[Math.max(0, Math.min(wide.length - 1, Math.round(s)))];
+}
+
+function cumLength(pts: Vec2[]): number {
+  let c = 0;
+  for (let i = 1; i < pts.length; i++) c += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+  return c;
+}
+
+/** On the asphalt of a road that isn't dug in or raised there (a street at ground level). */
+function onStreet(city: CityData, p: Vec2): boolean {
+  const profiles = roadProfiles(city);
+  const boxes = roadBoxes(city);
+  return city.roads.some((r, i) => {
+    if (!inBox(boxes[i], p)) return false;
+    const { s, d } = projectOnRoad(r, p);
+    if (d > r.width / 2) return false;
+    const prof = profiles[i];
+    return !prof || Math.abs(profileAt(prof, s).lift) < 0.3;
+  });
+}
+
+/** Half width of a cut's floor (asphalt and shoulders, widened on bends) `s` meters along it. */
+const floorHalf = (l: Lowered, s: number) => l.half + l.bend(s);
 
 /** Direction of a road's centerline `s` meters along it. */
 function dirOnRoad(r: Road, s: number): Vec2 {
@@ -112,8 +200,13 @@ const PARALLEL = 0.7;
 const UNDER_WALL = FINE * Math.SQRT2 + 0.05;
 /** Concrete walkway along the top of a retaining wall, over the dug ground behind it (and its slope back up). */
 const APRON = UNDER_WALL + FINE * Math.SQRT2 - WALL + 0.1;
-/** Ground over a cut only stays on as a roof where there's headroom under it (a bus is ~3 m). */
-const HEADROOM = 3.6;
+/**
+ * Ground over a cut only stays on as a roof where there's headroom under it: the tallest bus is
+ * ~3.45 m over the road, plus room for its suspension and pitch on a ramp. The face hung along
+ * the roof's open edges (a lintel, at most LINTEL deep) never hangs below it either.
+ */
+const HEADROOM = 4.2;
+const LINTEL = 0.6;
 /** Two cuts side by side share one (no wall between) if their floors are this close. */
 const SHARED = 2.5;
 /** How far the ground over an underpass reaches beyond the edge of a street crossing over it. */
@@ -164,9 +257,14 @@ function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
   // Never on the lowered road's own asphalt where it's down in its cut. (At the shallow top
   // of a ramp a street-level road drawn overlapping it keeps its ground, but only where that
   // ground isn't above the ramp's asphalt: kept there, it's a lip the bus crashes into.)
-  if (d <= l.road.width / 2) {
+  // Down in the cut the shoulders are ours too: ground kept there slopes up over the curb lane
+  // (a lip a bus scrapes along). The extra room on bends isn't taken from a street's asphalt,
+  // though: dug, that's a pit in the street.
+  if (d <= floorHalf(l, s)) {
     const h = profileAt(l.profile, s);
-    if (h.lift < -0.5 || terrainAt(l.city, p) - surfaceY(l.city, h, p) > 0.1) return false;
+    const onStreet = d > l.half && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2);
+    if (h.lift < -0.5 && !onStreet) return false;
+    if (d <= l.road.width / 2 && terrainAt(l.city, p) - surfaceY(l.city, h, p) > 0.1) return false;
   }
   const dir = dirOnRoad(l.road, s);
   return l.rivals.some((r) => {
@@ -200,21 +298,49 @@ function dugAway(l: Lowered, p: Vec2, s: number, d: number, reach: number): bool
  * ground under the retaining walls so its slope stays hidden behind them.
  */
 function trenchAt(lowered: Lowered[], p: Vec2, sunk: SunkJunction[] = [], reach = 0): { y: number; road: number; dir: Vec2 | null } | null {
-  for (const j of sunk) if (inBox(j.box, p) && pointInPolygon(p, j.poly)) return { y: j.y, road: -1, dir: null };
   // On the asphalt of more than one cut (carriageways drawn overlapping): the deepest floor, so
   // no road is ever buried. Otherwise the nearest cut.
-  let best: { y: number; road: number; dir: Vec2 | null; rank: number } | null = null;
+  let best: Cut | null = null;
+  for (const c of cutsAt(lowered, p, sunk, reach)) if (!best || c.rank < best.rank) best = c;
+  return best && { y: best.y, road: best.road, dir: best.dir };
+}
+
+interface Cut {
+  y: number;
+  road: number;
+  dir: Vec2 | null;
+  rank: number;
+}
+
+/** Every cut `p` is in (see trenchAt): a sunk junction alone, else each lowered road's. */
+function cutsAt(lowered: Lowered[], p: Vec2, sunk: SunkJunction[], reach: number): Cut[] {
+  for (const j of sunk) if (inBox(j.box, p) && pointInPolygon(p, j.poly)) return [{ y: j.y, road: -1, dir: null, rank: -Infinity }];
+  const out: Cut[] = [];
   for (const l of lowered) {
     if (!inBox(l.box, p)) continue;
     const { s, d } = projectOnRoad(l.road, p);
-    if (d > l.half + reach) continue;
+    if (d > floorHalf(l, s) + reach) continue;
     const h = profileAt(l.profile, s);
     if (h.lift >= DUG || dugAway(l, p, s, d, reach)) continue;
     const y = surfaceY(l.city, h, p);
-    const rank = d <= l.road.width / 2 ? y - 1000 : d;
-    if (!best || rank < best.rank) best = { y, road: l.index, dir: dirOnRoad(l.road, s), rank };
+    out.push({ y, road: l.index, dir: dirOnRoad(l.road, s), rank: d <= l.road.width / 2 ? y - 1000 : d });
   }
-  return best && { y: best.y, road: best.road, dir: best.dir };
+  return out;
+}
+
+/**
+ * Whether the ground at `p` stays on as a roof over the cut(s) under it: some street covers one
+ * of them, and there's headroom over every floor there. Decided over all of them, not just the
+ * nearest: where two cuts meet, choosing by the nearest one flips the roof on and off cell by
+ * cell, and every flip is a cliff of ground standing in the tunnel.
+ */
+function roofAt(city: CityData, lowered: Lowered[], p: Vec2, sunk: SunkJunction[], reach: number, covered: (p: Vec2, dir?: Vec2 | null, cutRoad?: number) => boolean): boolean {
+  const cuts = cutsAt(lowered, p, sunk, reach);
+  if (!cuts.length) return false;
+  const g = terrainAt(city, p);
+  // Headroom over every asphalt there (or the nearest cut's floor, off the asphalt).
+  const floors = cuts.some((c) => c.rank < -500) ? cuts.filter((c) => c.rank < -500) : [cuts.reduce((a, b) => (a.rank < b.rank ? a : b))];
+  return floors.every((c) => g - c.y > HEADROOM) && cuts.some((c) => covered(p, c.dir, c.road));
 }
 
 /**
@@ -249,7 +375,8 @@ function coverTest(city: CityData, graph: RoadGraph, lowered: Lowered[]): (p: Ve
         // Running alongside the cut doesn't cover it, unless OSM puts it on a higher level than
         // the cut's road (stacked, like an overpass above an underpass).
         const stacked = cutRoad !== undefined && cutRoad >= 0 && (r.layer ?? 0) > (city.roads[cutRoad].layer ?? 0);
-        if (Math.abs(od.x * dir.x + od.z * dir.z) > PARALLEL && !stacked) return false;
+        // Its own asphalt is covered all the same (else there's a hole in the street).
+        if (Math.abs(od.x * dir.x + od.z * dir.z) > PARALLEL && !stacked && d > r.width / 2) return false;
       }
       const prof = profiles[i];
       if (!prof) return true;
@@ -284,7 +411,7 @@ export function planTrenches(city: CityData, graph: RoadGraph): TrenchPlan | nul
       if (l.profile.lift[i] >= DUG) continue;
       floor = Math.min(floor, l.profile.y[i]);
       const d = i + 1 < pts.length ? unit(pts[i], pts[i + 1]) : unit(pts[i - 1], pts[i]);
-      for (let o = -l.half - 1; o <= l.half + 1; o += 1) addCell({ x: pts[i].x - d.z * o, z: pts[i].z + d.x * o });
+      for (let o = -l.half - BEND_MAX - 1; o <= l.half + BEND_MAX + 1; o += 1) addCell({ x: pts[i].x - d.z * o, z: pts[i].z + d.x * o });
     }
   }
   // One more ring of cells, so the sunk heightfield never shows at the edge of the patch.
@@ -366,6 +493,16 @@ export function buildGrades(
     });
     return low;
   };
+  /** Another raised road's asphalt at `p` a little lower than `y` (overlapping carriageways, not one passing under). */
+  const overLower = (self: number, p: Vec2, y: number) =>
+    city.roads.some((r, i) => {
+      const prof = profiles[i];
+      if (i === self || !prof || !inBox(boxes[i], p)) return false;
+      const { s, d } = projectOnRoad(r, p);
+      if (d > r.width / 2) return false;
+      const h = profileAt(prof, s);
+      return h.lift > RAISED && h.y < y - 0.1 && h.y > y - 2;
+    });
   /** Another road (or junction) joining at this height: no railing across it. */
   const joins = (self: number, p: Vec2, y: number) =>
     city.roads.some((r, i) => {
@@ -392,7 +529,15 @@ export function buildGrades(
       const edge = (s: Sec, o: number) => ({ x: s.p.x - s.d.z * o, z: s.p.z + s.d.x * o });
       const slab = (s: Sec) => Math.min(SLAB, Math.max(0.05, s.lift));
       // Road surface (the asphalt ribbon is drawn separately) is solid; the slab under it is not.
-      const [la, ra, lb, rb] = [edge(a, -half), edge(a, half), edge(b, -half), edge(b, half)];
+      // Where OSM draws two carriageways overlapping at slightly different heights (ramps up to
+      // a bridge side by side), the higher deck stops at the lower one's asphalt: its edge on
+      // the other's lanes is a lip a car runs into.
+      const reach = (s: Sec, side: number) => {
+        let o = half;
+        while (o > half - 2 && overLower(ri, edge(s, side * o), s.y)) o -= 0.25;
+        return o;
+      };
+      const [la, ra, lb, rb] = [edge(a, -reach(a, -1)), edge(a, reach(a, 1)), edge(b, -reach(b, -1)), edge(b, reach(b, 1))];
       deck.quad(v3(la, surfaceY(city, a, la)), v3(lb, surfaceY(city, b, lb)), v3(rb, surfaceY(city, b, rb)), v3(ra, surfaceY(city, a, ra)));
       mb.quad(v3(la, a.y - slab(a)), v3(ra, a.y - slab(a)), v3(rb, b.y - slab(b)), v3(lb, b.y - slab(b)), CONCRETE_DARK);
       for (const [side, pa, pb] of [
@@ -439,9 +584,22 @@ export function buildGrades(
   for (const n of graph.nodes) {
     if (n.y === null || Math.abs(n.lift) < RAISED) continue;
     const h = n.hull ?? nodeArea(graph, n.id);
-    // A little under the roads' own surfaces (they slope across it): it only fills gaps.
-    const y = n.y - 0.35;
-    const at = (_q: Vec2) => y;
+    // Each corner at the surface of the road whose end it is (just under it): the wedge between
+    // two decks meeting at an angle is driven over when a car cuts the bend, and a slab sunk
+    // below them leaves the next deck's edge standing as a lip. Where a road is still near
+    // the ground (cross slope, `surfaceY`) it stays a little under, as it only fills gaps there.
+    const meeting = [...new Set([...n.in, ...n.out].map((id) => graph.edges[id].roadIndex))];
+    const at = (q: Vec2) => {
+      let best: { d: number; y: number } | null = null;
+      for (const ri of meeting) {
+        const prof = profiles[ri];
+        if (!prof) continue;
+        const { s, d } = projectOnRoad(city.roads[ri], q);
+        const h = profileAt(prof, s);
+        if (!best || d < best.d) best = { d, y: Math.abs(h.lift) >= 1.2 ? h.y - 0.02 : n.y! - 0.35 };
+      }
+      return best?.y ?? n.y! - 0.35;
+    };
     for (let i = 1; i < h.length - 1; i++) deck.tri(v3(h[0], at(h[0])), v3(h[i], at(h[i])), v3(h[i + 1], at(h[i + 1])));
     // Drawn too (as concrete under the road), so no part of it is ever an invisible ledge.
     if (n.lift > 0) {
@@ -486,12 +644,14 @@ export function buildGrades(
         const o1 = side * l.half;
         const shoulderMid = { x: (edge(a, (o0 + o1) / 2).x + edge(b, (o0 + o1) / 2).x) / 2, z: (edge(a, (o0 + o1) / 2).z + edge(b, (o0 + o1) / 2).z) / 2 };
         if (otherFloor(lowered, l, shoulderMid, (a.y + b.y) / 2)) continue;
-        deck.quad(fv(a, o0), fv(b, o0), fv(b, o1), fv(a, o1));
-        mb.quad(fv(a, o0, 0.01, back), fv(b, o0, 0.01, fore), fv(b, o1, 0.01, fore), fv(a, o1, 0.01, back), CONCRETE);
+        // (Wider on bends: BEND_SWEEP.)
+        const [sa, sb] = [side * floorHalf(l, a.s), side * floorHalf(l, b.s)];
+        deck.quad(fv(a, o0), fv(b, o0), fv(b, sb), fv(a, sa));
+        mb.quad(fv(a, o0, 0.01, back), fv(b, o0, 0.01, fore), fv(b, sb, 0.01, fore), fv(a, sa, 0.01, back), CONCRETE);
         // Retaining wall just outside the shoulder, or halfway to a street alongside, unless the
         // neighboring carriageway shares the cut.
         const reach = (sec: Sec) => {
-          let o = l.half + WALL;
+          let o = floorHalf(l, sec.s) + WALL;
           while (o > l.road.width / 2 + WALL && claimedByRival(l, edge(sec, side * o), sec.s, o)) o -= 0.25;
           return o;
         };
@@ -500,33 +660,42 @@ export function buildGrades(
         const pa = edge(a, side * (ra - WALL / 2));
         const pb = edge(b, side * (rb - WALL / 2));
         const mid = { x: (pa.x + pb.x) / 2, z: (pa.z + pb.z) / 2 };
-        const beyond = edge(a, side * (l.half + WALL + 0.8));
+        const beyond = edge(a, side * (floorHalf(l, a.s) + WALL + 0.8));
         // (Sharing means a floor at about ours: a ramp passing over the cut near the top of its
         // own climb is a street above it, and the wall stands under it.)
         const shared = trenchAt(lowered.filter((o) => o !== l), beyond, sunk);
-        if (shared && Math.abs(shared.y - (a.y + b.y) / 2) < SHARED) continue;
+        const floor = (a.y + b.y) / 2;
+        // Its floor a little higher than ours, though: a step up to it, faced by a low wall
+        // flush with its floor (no face there is an invisible ledge).
+        const step = shared && Math.abs(shared.y - floor) < SHARED ? shared.y : null;
+        if (step !== null && step - floor < 0.3) continue;
         // Another ramp's asphalt right where the wall would stand, at about our floor's height: a
         // carriageway alongside that starts down a little later (so not `shared` here). A wall
         // there stands across its lanes.
-        if (rampAlongside(lowered, l, mid, (a.y + b.y) / 2)) continue;
-        const ga = ground(pa);
-        const gb = ground(pb);
+        if (step === null && rampAlongside(lowered, l, mid, floor)) continue;
+        const ga = step ?? ground(pa);
+        const gb = step ?? ground(pb);
         if (Math.max(ga - a.y, gb - b.y) < 0.2) continue;
         // Under a street passing over, the wall stops at the roof; in the open it has a parapet.
         // Roofed if any of it is under the roof: a parapet must never stand up into the street above.
         const deep = Math.min(ga - a.y, gb - b.y) > HEADROOM;
         const roof = deep && (covered(mid, a.d, l.index) || covered(pa, a.d, l.index) || covered(pb, a.d, l.index));
-        let top = roof ? -0.05 : PARAPET;
+        let top = roof || step !== null ? -0.05 : PARAPET;
         // Another road running where the wall would stand (OSM draws some carriageways
         // overlapping): one coming in partway down (a link branching off) leaves an opening;
         // a street at ground level just gets the wall stopping flush under it, as under a roof
         // (no wall at all would leave the cut's side open, see-through).
-        const other = through(l.index, mid, Math.min(a.y, b.y) + 0.5, Math.min(ga, gb) + top - 0.1);
+        const other = step === null ? through(l.index, mid, Math.min(a.y, b.y) + 0.5, Math.min(ga, gb) + top - 0.1) : null;
         if (other !== null && other < Math.min(ga, gb) - 0.6) continue;
-        if (other !== null) top = -0.05;
+        // (Just under the street's ground: its top is driven on, a step down to it is a lip.)
+        if (other !== null) top = -0.01;
         const reachOut = (q: Vec2, sec: Sec, along: number) => ({ x: q.x + sec.d.x * along, z: q.z + sec.d.z * along });
         const inner = { a: reachOut(edge(a, side * (ra - WALL)), a, back), b: reachOut(edge(b, side * (rb - WALL)), b, fore) };
-        const outer = { a: reachOut(edge(a, side * ra), a, back), b: reachOut(edge(b, side * rb), b, fore) };
+        // Under a street the wall is a cell's diagonal thicker (its top is the street's surface
+        // there): the ground climbing from the dug floor up to the street, one patch cell wide,
+        // stays inside it instead of sloping out over the cut's lanes.
+        const thick = other !== null ? FINE * Math.SQRT2 : 0;
+        const outer = { a: reachOut(edge(a, side * (ra + thick)), a, back), b: reachOut(edge(b, side * (rb + thick)), b, fore) };
         mb.quad(v3(inner.a, a.y - 0.2), v3(inner.b, b.y - 0.2), v3(inner.b, gb + top), v3(inner.a, ga + top), CONCRETE);
         mb.quad(v3(inner.a, ga + top), v3(inner.b, gb + top), v3(outer.b, gb + top), v3(outer.a, ga + top), CONCRETE_DARK);
         // The back and the ends too, even when buried: next to another cut (a link splitting
@@ -534,7 +703,7 @@ export function buildGrades(
         mb.quad(v3(outer.a, a.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.b, gb + top), v3(outer.a, ga + top), CONCRETE);
         mb.quad(v3(inner.a, a.y - 0.3), v3(outer.a, a.y - 0.3), v3(outer.a, ga + top), v3(inner.a, ga + top), CONCRETE);
         mb.quad(v3(inner.b, b.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.b, gb + top), v3(inner.b, gb + top), CONCRETE);
-        if (!roof) {
+        if (!roof && step === null) {
           // Walkway along the top, over the ground dug behind the wall (also where a street at
           // ground level runs alongside: there it stops at the street's asphalt).
           const width = (sec: Sec, o: number) => {
@@ -552,11 +721,12 @@ export function buildGrades(
           for (const [i, j] of [[1, 2], [2, 3], [3, 0], [0, 1]]) mb.quad(base[i], base[j], walk[j], walk[i], CONCRETE);
           solidHull([...walk, ...base]);
         }
-        // Solid exactly where the wall is drawn: from its inner face out to its outer face.
-        solidHull([
-          v3(inner.a, a.y - 0.3), v3(inner.b, b.y - 0.3), v3(inner.a, ga + top), v3(inner.b, gb + top),
-          v3(outer.a, a.y - 0.3), v3(outer.b, b.y - 0.3), v3(outer.a, ga + top), v3(outer.b, gb + top),
-        ]);
+        // Solid exactly where the wall is drawn: from its inner face out to its outer face. Two
+        // hulls split along the drawn top's diagonal: where the wall's two ends stand at different
+        // offsets its top isn't flat, and one hull would bulge over the drawn triangles.
+        const [ia, ib, oa, ob] = [inner.a, inner.b, outer.a, outer.b];
+        solidHull([v3(ia, a.y - 0.3), v3(ib, b.y - 0.3), v3(ob, b.y - 0.3), v3(ia, ga + top), v3(ib, gb + top), v3(ob, gb + top)]);
+        solidHull([v3(ia, a.y - 0.3), v3(ob, b.y - 0.3), v3(oa, a.y - 0.3), v3(ia, ga + top), v3(ob, gb + top), v3(oa, ga + top)]);
       }
     }
   }
@@ -634,8 +804,7 @@ function terrainPatch(
     let v = open.get(key);
     if (v === undefined) {
       const p = { x: x + FINE / 2, z: z + FINE / 2 };
-      const cut = trenchAt(lowered, p, sunk);
-      v = !!cut && !(covered(p, cut.dir, cut.road) && terrainAt(city, p) - cut.y > HEADROOM);
+      v = !!trenchAt(lowered, p, sunk) && !roofAt(city, lowered, p, sunk, 0, covered);
       open.set(key, v);
     }
     return v;
@@ -649,7 +818,7 @@ function terrainPatch(
     if (!v) {
       const g = terrainAt(city, { x, z });
       const cut = trenchAt(lowered, { x, z }, sunk, UNDER_WALL);
-      const roof = !!cut && covered({ x, z }, cut.dir, cut.road) && g - cut.y > HEADROOM;
+      const roof = !!cut && roofAt(city, lowered, { x, z }, sunk, UNDER_WALL, covered);
       const cutY = cut && cut.y - 0.03 < g ? cut.y - 0.03 : null;
       vert.set(key, (v = { g, cutY, roof, dipped: cutY !== null && !roof }));
     }
@@ -667,7 +836,7 @@ function terrainPatch(
       const mid = { x: x + FINE / 2, z: z + FINE / 2 };
       const under = trenchAt(lowered, mid, sunk);
       const cut = under ?? trenchAt(lowered, mid, sunk, UNDER_WALL);
-      const roof = !!cut && covered(mid, cut.dir, cut.road) && terrainAt(city, mid) - cut.y > HEADROOM;
+      const roof = !!cut && roofAt(city, lowered, mid, sunk, under ? 0 : UNDER_WALL, covered);
       cells.set(key, (q = { roof, under }));
     }
     return q;
@@ -736,16 +905,18 @@ function terrainPatch(
           const yb = v[bx * 2 + bz].y;
           // (Never lower than HEADROOM over the floor: where the roof is only just high enough,
           // the lintel is thinner.)
-          const lintel = (q: Vec2, y: number) => Math.max(cornerY(nx, nz, q.x, q.z), y - 0.6, (vertex(q.x, q.z).cutY ?? -Infinity) + HEADROOM);
+          const lintel = (q: Vec2, y: number) => Math.max(cornerY(nx, nz, q.x, q.z), y - LINTEL, (vertex(q.x, q.z).cutY ?? -Infinity) + HEADROOM);
           const la = Math.min(ya, lintel(pa, ya));
           const lb = Math.min(yb, lintel(pb, yb));
           if (ya - la < 0.01 && yb - lb < 0.01) continue;
           const face = [v3(pa, la), v3(pb, lb), v3(pb, yb), v3(pa, ya)];
           mb.quad(face[0], face[1], face[2], face[3], CONCRETE);
           tris.quad(face[0], face[1], face[2], face[3]);
-          // A railing only over the cut, where there's a real drop into it.
+          // A railing only over the cut, where there's a real drop into it, and never across a
+          // street's lanes (the roof there is the street itself).
           const below = vertex(nx + FINE / 2, nz + FINE / 2);
           if (!here.under || !isOpen(nx, nz) || Math.min(ya, yb) - (below.dipped ? below.cutY! : below.g) < 1.5) continue;
+          if (onStreet(city, { x: (pa.x + pb.x) / 2, z: (pa.z + pb.z) / 2 })) continue;
           wallStrip(mb, pa, pb, ya, yb, PARAPET, 0.12, RAIL);
           const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(stripCorners(pa, pb, la, lb, PARAPET + Math.max(ya - la, yb - lb), 0.12).flatMap((q) => [q.x, q.y, q.z])));
           if (desc) world.createCollider(desc, fixed);

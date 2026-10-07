@@ -7,7 +7,7 @@ import { buildRoadGraph, dirAt, projectOnPath } from '../roadGraph';
 import { importLines } from './lines';
 import { importStations, widenMedians } from './stations';
 import { importCampuses } from './campus';
-import { CLEARANCE, separateGrades } from './grades';
+import { CLEARANCE, type Level, separateGrades } from './grades';
 import { liftAlong, projectOnRoad } from '../elevation';
 
 /** Subset of the Overpass JSON (`out geom;`) we use. */
@@ -136,7 +136,28 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
       ? widenMedians(importRoads(osm, proj.toXZ, bounds), stationsOsm, routesOsm, proj.toXZ, (p) => inside(p))
       : importRoads(osm, proj.toXZ, bounds);
   // Bridges go up and underpasses down, with ramps; roads on different levels don't meet.
-  const { roads, crossings } = separateGrades(flat);
+  // Then again with every junction's paved area (as the road graph clusters and trims them)
+  // kept level on the ramps that run into it, until none still climbs there. One that would
+  // cost a crossing (no room left for a ramp: the roads would meet at grade) isn't kept, and
+  // past the play area's edge (nobody drives there) nothing is reshaped.
+  const playBox = { playArea: { min: { x: bounds.min.x + EDGE_INSET, z: bounds.min.z + EDGE_INSET }, max: { x: bounds.max.x - EDGE_INSET, z: bounds.max.z - EDGE_INSET } } };
+  let { roads, crossings } = separateGrades(flat);
+  const level: Level[] = [];
+  const tried = new Set<string>();
+  const key = (l: Level) => `${l.road}@${l.area.map((p) => `${p.x.toFixed(0)},${p.z.toFixed(0)}`).join(';')}`;
+  for (let pass = 0; pass < 3; pass++) {
+    const more = rampsIntoJunctions(roads).filter((l) => !tried.has(key(l)) && l.area.some((p) => inPlayArea(playBox, p)));
+    if (!more.length) break;
+    for (const l of more) {
+      tried.add(key(l));
+      const next = separateGrades(flat, [...level, l]);
+      if (next.crossings.length < crossings.length) continue;
+      // Nor one that folds a ramp into a sharp V or crest (a long bus high-centers on it).
+      if (next.roads.some((r, i) => r !== roads[i] && sharpestBend(r) > Math.max(sharpestBend(roads[i]), MAX_BEND) + 0.01)) continue;
+      level.push(l);
+      ({ roads, crossings } = next);
+    }
+  }
   for (const c of crossings)
     if (c.gap < CLEARANCE * 0.8) console.warn(`grade crossing squeezed to ${c.gap.toFixed(1)} m: ${roads[c.upper].name} over ${roads[c.lower].name}`);
   // Junction areas are paved (the game draws them as asphalt): nothing may stand on them.
@@ -223,7 +244,9 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   // dropping a way only moves what's on it, not furniture all over the city.
   const props = scatterProps(roads, stops, buildings, opts.seed ?? 1, inside).filter((pr) => !onJunction(pr.pos) && !occupied(pr.pos, 1) && !nearLifted(roads, pr.pos, 4));
   // Humps only where the game happens, and never on a ramp, bridge or underpass.
-  const features = placeFeatures(roads, opts.seed ?? 1).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20));
+  // Humps also keep well clear of a ramp's ends along the road (a car comes off the top of a
+  // ramp pitched up and fast): nearLifted only looks across the lifted stretch.
+  const features = placeFeatures(roads, opts.seed ?? 1).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20) && !nearRampPoint(roads, f.pos, 25));
   const spawn = pickSpawn(roads.filter((r) => !r.lift), bounds);
 
   return {
@@ -251,6 +274,37 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
 }
 
 /** Inside a rectangle centered at `c`, `halfL` along `heading` and `halfW` across. */
+/** Steepest change of grade a ramp may get from keeping it level at a junction (one where a ramp starts at its foot). */
+const MAX_BEND = 0.16;
+
+/** Biggest change of grade of a road's lift over a bus's length (two 6 m stretches). */
+function sharpestBend(r: Road): number {
+  if (!r.lift) return 0;
+  let len = 0;
+  for (let i = 1; i < r.points.length; i++) len += Math.hypot(r.points[i].x - r.points[i - 1].x, r.points[i].z - r.points[i - 1].z);
+  let worst = 0;
+  for (let s = 0; s + 12 <= len; s += 1) {
+    const [a, b, c] = [liftAlong(r, s), liftAlong(r, s + 6), liftAlong(r, s + 12)];
+    worst = Math.max(worst, Math.abs((c - b) / 6 - (b - a) / 6));
+  }
+  return worst;
+}
+
+/** Roads whose ramp is still off street level where it runs into a junction at street level, with that junction's paved area. */
+function rampsIntoJunctions(roads: Road[]): Level[] {
+  const graph = buildRoadGraph({ roads } as CityData);
+  const out: Level[] = [];
+  for (const n of graph.nodes) {
+    if (!n.hull || Math.abs(n.lift) > 0.3) continue;
+    const ends = [...n.in.map((id) => [id, -1] as const), ...n.out.map((id) => [id, 0] as const)];
+    for (const [id, at] of ends) {
+      const e = graph.edges[id];
+      if (e.lift && Math.abs(e.lift.at(at)!) > 0.05 && !out.some((l) => l.road === e.roadIndex && l.area === n.hull)) out.push({ road: e.roadIndex, area: n.hull });
+    }
+  }
+  return out;
+}
+
 function inFootprint(p: Vec2, c: Vec2, heading: number, halfL: number, halfW: number): boolean {
   const f = { x: Math.cos(heading), z: -Math.sin(heading) };
   const dx = p.x - c.x;
@@ -532,6 +586,11 @@ function nearLifted(roads: Road[], p: Vec2, margin: number): boolean {
     const { s, d } = projectOnRoad(r, p);
     return d < r.width / 2 + margin && Math.abs(liftAlong(r, s)) > 0.05;
   });
+}
+
+/** Within `reach` of any point of a road that's off the ground (a ramp, deck or cut). */
+function nearRampPoint(roads: Road[], p: Vec2, reach: number): boolean {
+  return roads.some((r) => r.lift && r.points.some((q, i) => Math.abs(r.lift![i]) > 0.05 && Math.hypot(q.x - p.x, q.z - p.z) < reach));
 }
 
 function placeFeatures(roads: Road[], seed: number): Feature[] {
