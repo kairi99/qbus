@@ -402,7 +402,9 @@ export function buildGrades(
         const y = (a.y + b.y) / 2;
         const heading = Math.atan2(-(pb.z - pa.z), pb.x - pa.x);
         const len = Math.hypot(pb.x - pa.x, pb.z - pa.z);
-        const out = { x: mid.x + (side * -a.d.z) * 1, z: mid.z + side * a.d.x * 1 };
+        // Just past the edge: a road there continues our asphalt with no gap. (A point further
+        // out lands across the slit between two parallel decks, which still needs its railings.)
+        const out = { x: mid.x + side * -a.d.z * 0.15, z: mid.z + side * a.d.x * 0.15 };
         // Railing along the edge, unless a street joins here at the same height.
         if (Math.min(a.lift, b.lift) > 0.4 && !joins(ri, out, y) && !onTraffic(ri, mid, y)) {
           wallStrip(mb, pa, pb, a.y, b.y, PARAPET, 0.3, CONCRETE);
