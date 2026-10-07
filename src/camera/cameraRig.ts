@@ -9,7 +9,7 @@ const SPEED_FOV = 14;
 const NITRO_FOV = 10;
 /** Chase camera: clearance kept under a roof or deck over the bus, and in front of a wall between it and the bus. */
 const ROOF_CLEAR = 1.2;
-const WALL_CLEAR = 0.6;
+const WALL_CLEAR = 0.9;
 /** Closest the chase camera is pulled in to the bus (from the pivot over its roof). */
 const MIN_REACH = 2;
 /** How fast it backs out again once clear (1/s); pulling in is instant. */
@@ -18,10 +18,11 @@ const EASE_OUT = 1.5;
 /**
  * What the chase camera can't go through: the static world (walls, roofs, terrain, buildings).
  * `cast` returns the distance from (ox, oy, oz) along the unit direction (dx, dy, dz) to the
- * first obstacle, or `max` if there's none that close.
+ * first obstacle, or `max` if there's none that close; with `radius`, how far a ball that size
+ * gets before touching anything.
  */
 export interface CameraObstacles {
-  cast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number): number;
+  cast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number, radius?: number): number;
 }
 
 // Camera looks down -Z; the bus faces +X, so rotate -90° about Y to look forward.
@@ -145,8 +146,10 @@ export class CameraRig {
     const dist = d.length();
     if (dist < 1e-3) return;
     d.divideScalar(dist);
-    const hit = obs.cast(p.x, p.y, p.z, d.x, d.y, d.z, dist + WALL_CLEAR);
-    const allowed = hit < dist + WALL_CLEAR ? Math.max(MIN_REACH, hit - WALL_CLEAR) : dist;
+    // A ball, not a ray: the camera must keep clear of a roof or wall it ends up just beside,
+    // not only of one between it and the bus.
+    const hit = obs.cast(p.x, p.y, p.z, d.x, d.y, d.z, dist, WALL_CLEAR);
+    const allowed = hit < dist ? Math.max(MIN_REACH, hit - 0.1) : dist;
     this.reach = this.first || allowed < this.reach ? allowed : this.reach + (allowed - this.reach) * ease;
     if (this.reach < dist) cam.copy(p).addScaledVector(d, this.reach);
   }
