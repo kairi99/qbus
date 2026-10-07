@@ -28,8 +28,6 @@ known({
     "1 found: e575 Av. Patria lane 1 s 82–86: 0.16 m deep at (-587.5, 339.1, y 24.12) shape 9",
   "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895]":
     "11 found: surface off the graph height by -0.30 m on e700 Av. Patria lane 2 at (-490.1, 394.0, y 24.14); surface off the graph height by -0.47 m on e700 Av. Patria lane 3 at (-492.7, 396.6, y 24.14)",
-  "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
-    "12 found: e276 Av. 10 de Agosto lane 0 s 50–50: 0.10 m deep at (-187.7, -806.0, y 19.17) shape 6; e276 Av. 10 de Agosto lane 0 s 57–58: 0.20 m deep at (-184.8, -813.0, y 18.35) shape 6",
   "road surface has no lips, holes or height mismatches cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
     "1 found: surface off the graph height by 0.29 m on e276 Av. 10 de Agosto lane 2 at (-202.9, -792.2, y 20.40)",
   "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564]":
@@ -44,8 +42,6 @@ known({
     "1 found: e970 Av. Patria lane 1 s 2–3: 0.46 m deep at (-30.9, 711.0, y 20.66) shape 9",
   "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,734): sin nombre [e588→e160]":
     "13 found: surface off the graph height by -0.35 m on e160 sin nombre lane 0 at (-56.8, 756.9, y 13.49); surface off the graph height by 0.92 m on e970 Av. Patria lane 1 at (-30.0, 710.6, y 20.00)",
-  "swept bus volume is clear on every lane cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241]":
-    "4 found: e241 Av. 12 de Octubre lane 0 s 4–4: 0.08 m deep at (6.0, 711.1, y 16.93) shape 6; e241 Av. 12 de Octubre lane 0 s 10–10: 0.17 m deep at (11.0, 708.1, y 17.70) shape 6",
   "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241]":
     "10 found: surface off the graph height by 0.43 m on e589 Av. 12 de Octubre lane 1 at (-115.3, 776.9, y 20.57); lip 0.06 m at (-128.2, 789.3, y 22.50)",
   "road surface has no lips, holes or height mismatches cut José Riofrío @(-867,851): sin nombre [e297→e297]":

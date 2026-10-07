@@ -542,9 +542,11 @@ export function buildGrades(
           const wb = width(b, rb);
           const apron = { a: reachOut(edge(a, side * (ra + wa)), a, back), b: reachOut(edge(b, side * (rb + wb)), b, fore) };
           const walk = [v3(outer.a, ga + 0.04), v3(outer.b, gb + 0.04), v3(apron.b, ground(apron.b) + 0.04), v3(apron.a, ground(apron.a) + 0.04)];
+          const base = walk.map((q) => ({ x: q.x, y: q.y - 0.25, z: q.z }));
           mb.quad(walk[0], walk[1], walk[2], walk[3], CONCRETE);
-          // Solid too: it's all there is over the pit behind the wall.
-          solidHull([...walk, ...walk.map((q) => ({ x: q.x, y: q.y - 0.25, z: q.z }))]);
+          // Its edges drawn too (the pit is open beyond it), and solid: it's all there is over the pit.
+          for (const [i, j] of [[1, 2], [2, 3], [3, 0], [0, 1]]) mb.quad(base[i], base[j], walk[j], walk[i], CONCRETE);
+          solidHull([...walk, ...base]);
         }
         // Solid exactly where the wall is drawn: from its inner face out to its outer face.
         solidHull([
