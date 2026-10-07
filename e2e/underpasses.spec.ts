@@ -15,12 +15,8 @@ import { RENDER } from '../tests/underpass/thresholds';
  * Known holes are listed in KNOWN_HOLES (view name → what was seen); the test fails on any other.
  */
 const KNOWN_HOLES: Record<string, string> = {
-  // Observed on the harness's first run (2026-10-06): a slit to the sky in the side of the main
-  // 12 de Octubre cut, south-to-north, about (-28, 730) (seen ahead and to the right), and from the
-  // north-to-south cut at (-25, 719) looking left (toward the same spot).
-  'cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241] e242 s 63 (-28, 730) seat ahead': 'sky slit at (-28, 730): 151 px',
-  'cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241] e242 s 63 (-28, 730) seat right': 'sky slit at (-28, 730): 288 px',
-  'cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e586→e156] e155 s 27 (-25, 719) seat left': 'sky slit seen from (-25, 719): 28 px',
+  // (The first run's slit to the sky in the side of the main 12 de Octubre cut at (-28, 730) is
+  // fixed: the cut's wall now stands under the S→N link where that ramp rises alongside it.)
 };
 
 const OUT = 'e2e/screenshots/underpasses';

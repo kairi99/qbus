@@ -20,7 +20,6 @@ const Q2 = '12 de Octubre S→N link to Av. Patria (e588→e160): interparroquia
 const Q3 = '12 de Octubre main cut S→N (e589→e241): AE86 at 90 km/h gets stuck at (0.2, 713.0) near the north mouth after a 0.12 s hop at (-69.0, 753.3)';
 const S1 = 'Cut under Av. Patria by the Guambra (sin nombre e197→e199): interparroquial high-centers/stops at (-660, 323.7) in the cut (chassis on the floor, normal down); at 70 km/h also a wall shove Δv 14.7 m/s at (-617.9, 325.0)';
 const S2 = 'Cut at (-820, 774) (sin nombre e681→e195): interparroquial hits a wall at (-818.4, 768.0) (Δv 8 m/s, normal (0.85, 0, 0.53)) and stalls';
-const S3 = 'Cut at the west edge (-876, -220), e516 starting down in the cut: interparroquial spawns rubbing a sloped wall at (-854.2, -272.7) (normal (-0.77, 0.61, -0.21)) and takes 4.8 s to pull away';
 known({
   'drive bridge Av. Patria @(-658,290): Av. Patria [e167→e517] | interparroquial @ 35 km/h': G1,
   'drive bridge Av. Patria @(-658,290): Av. Patria [e167→e517] | interparroquial @ 70 km/h': G1,
@@ -31,7 +30,6 @@ known({
   'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276] | ae86 @ 90 km/h': A1,
   'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564] | interparroquial @ 35 km/h': A2,
   'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564] | interparroquial @ 70 km/h': A2,
-  'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564] | buseta @ 60 km/h': A2,
   'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524] | interparroquial @ 35 km/h': Q1,
   'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524] | interparroquial @ 70 km/h': Q1,
   'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524] | buseta @ 60 km/h': Q1,
@@ -39,12 +37,9 @@ known({
   'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e588→e160] | interparroquial @ 35 km/h': Q2,
   'drive cut Av. 12 de Octubre @(-42,734): sin nombre [e588→e160] | interparroquial @ 70 km/h': Q2,
   'drive cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241] | ae86 @ 90 km/h': Q3,
-  'drive cut sin nombre @(-652,321): sin nombre [e197→e199] | interparroquial @ 35 km/h': S1,
   'drive cut sin nombre @(-652,321): sin nombre [e197→e199] | interparroquial @ 70 km/h': S1,
   'drive cut sin nombre @(-820,774): sin nombre [e681→e195] | interparroquial @ 35 km/h': S2,
   'drive cut sin nombre @(-820,774): sin nombre [e681→e195] | interparroquial @ 70 km/h': S2,
-  'drive cut sin nombre @(-876,-220): sin nombre [e516→e516] | interparroquial @ 35 km/h': S3,
-  'drive cut sin nombre @(-876,-220): sin nombre [e516→e516] | interparroquial @ 70 km/h': S3,
 });
 
 const base = cityAndCatalog();
