@@ -22,8 +22,6 @@ known({
     "1 found: e517 Av. Patria lane 1 s 49–50: 0.27 m deep at (-588.5, 346.4, y 24.04) shape 9",
   "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria [e167→e517]":
     "7 found: surface off the graph height by -0.31 m on e517 Av. Patria lane 0 at (-633.8, 325.3, y 28.71); lip 0.11 m at (-704.7, 221.1, y 25.39)",
-  "drawn walls and solid walls agree beside the lanes bridge Av. Patria @(-658,290): Av. Patria [e167→e517]":
-    "44 found: drawn but not solid: e167 lane 0 s 0 0.6 m up looking left from (-696.6, 233.7, y 26.11): drawn at 6.20 m, solid none; drawn but not solid: e167 lane 0 s 2 0.6 m up looking left from (-695.8, 235.6, y 26.29): drawn at 6.23 m, solid none",
   "swept bus volume is clear on every lane bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895]":
     "1 found: e575 Av. Patria lane 1 s 82–86: 0.16 m deep at (-587.5, 339.1, y 24.12) shape 9",
   "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895]":
