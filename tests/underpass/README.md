@@ -99,7 +99,8 @@ First run (2026-10-06, `DEFAULT_HILLS`), 51 known failures:
   lanes there.)
 - **Navigation (3)**: Queseras link e524 ends 1.15 m below e277 at node 257; R reset in the
   10 de Agosto cut at (-176.7, -834.5) puts the bus 0.25 m into the ground; R reset at
-  (-820.6, 767.7) puts it 1.6 m into a wall.
+  (-820.6, 767.7) puts it 1.6 m into a wall. (Both resets fixed: the R reset test now calls
+  `snapToRoad` as the game does, with `vehicleClearance`.)
 - **Geometry (22)**: walls or ground in the swept bus volume on 9 passages (worst: e564 lane 0,
   0.99 m deep at (-195.9, -836.0); Patria e970 lane 1, 0.46 m at (-30.9, 711.0)); lips up to
   0.49 m on the Guambra deck joint at (-634, 325) and 0.35 m at (-57.2, 756.9), surface/graph
@@ -108,7 +109,8 @@ First run (2026-10-06, `DEFAULT_HILLS`), 51 known failures:
   Guambra at (-592, 340).
 - **Traffic (3)**: cars float 0.4 m on e564 at (-211.3, -785.2) and sink 0.4 m on e589 at
   (-115, 777) (the same surface mismatches the geometry suite finds); a car stuck > 20 s on the
-  Queseras link e349 at (-25.8, 710.4).
+  Queseras link e349 at (-25.8, 710.4). (All fixed: traffic rides the solid road, and obstacles
+  on another level no longer hold cars up.)
 - **Rendering (3 views)**: a slit to the sky in the side of the main 12 de Octubre cut at about
   (-28, 730), seen S→N ahead/right and N→S looking left.
 

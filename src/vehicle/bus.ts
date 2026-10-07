@@ -8,6 +8,8 @@ export interface Spawn {
   z: number;
   /** Rotation about +Y in radians. 0 = facing +X. */
   heading: number;
+  /** Nose-up pitch (radians) to match the road's grade there; 0 if left out. */
+  pitch?: number;
 }
 
 const FRONT = [0, 1];
@@ -88,6 +90,26 @@ export class BusPhysics {
     return n;
   }
 
+  /**
+   * Height of the road under the bus: the mean of its wheels' contact points, or (all wheels in
+   * the air, or on its side) the chassis center minus its usual ride height. Used to find which
+   * level the bus is on where roads pass over each other.
+   */
+  roadHeight(): number {
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < 4; i++) {
+      if (!this.vehicle.wheelIsInContact(i)) continue;
+      const c = this.vehicle.wheelContactPoint(i, this.contact);
+      if (c) (sum += c.y), n++;
+    }
+    if (n) return sum / n;
+    const w = this.preset.wheels;
+    return this.body.translation().y - (-w.mountHeight + this.preset.suspension.restLength + w.radius);
+  }
+
+  private contact = { x: 0, y: 0, z: 0 };
+
   update(input: DriveInput, dt: number): void {
     const p = this.preset;
     const speed = this.speed;
@@ -166,7 +188,11 @@ export class BusPhysics {
     const t = this.body.translation();
     const target = spawn ?? { x: t.x, y: t.y - clearance + 2, z: t.z, heading: this.heading };
     this.body.setTranslation({ x: target.x, y: target.y + clearance, z: target.z }, true);
-    this.body.setRotation({ x: 0, y: Math.sin(target.heading / 2), z: 0, w: Math.cos(target.heading / 2) }, true);
+    // Yaw about +Y, then pitch about the bus's own +Z (right) axis: nose up on an up-ramp.
+    const [cy, sy] = [Math.cos(target.heading / 2), Math.sin(target.heading / 2)];
+    const pitch = target.pitch ?? 0;
+    const [cp, sp] = [Math.cos(pitch / 2), Math.sin(pitch / 2)];
+    this.body.setRotation({ x: sy * sp, y: sy * cp, z: cy * sp, w: cy * cp }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.steerAngle = 0;

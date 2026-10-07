@@ -9,6 +9,7 @@ import { busById } from '../../src/vehicle/buses';
 import { groundHeightAt, inPlayArea } from '../../src/world/cityData';
 import { type LaneEdge, dirAt, edgeY } from '../../src/world/roadGraph';
 import { snapToRoad } from '../../src/world/roadSnap';
+import { vehicleClearance } from '../../src/physics/clearance';
 import { LIFT_STRUCTURE, crossingEdges, samples } from './catalog';
 import { check, known } from './known';
 import { type Built, buildAll, cityAndCatalog } from './setup';
@@ -19,8 +20,6 @@ import { fmt, intrusions, yawPitchRoll } from './probe';
 known({
   'route joints are legal and level cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524]':
     'The Queseras tunnel link (e524) ends 1.15 m below the edge it leads into (e277) at node 257: its lift is still -1.0 at its end while the node is at street level',
-  'snapToRoad keeps the level and clears walls cut sin nombre @(-820,774): sin nombre [e681→e195]':
-    'R reset at (-820.6, 767.7) in the cut at (-820, 774) puts the bus 1.6 m into a wall (convex hull at (-826.2, 767.8, y 21.9)): the same wall the drive-through hits',
 });
 
 const base = cityAndCatalog();
@@ -126,8 +125,10 @@ describe('R reset (snapToRoad) in and over every structure', () => {
             const ce = graph.edges[c.edge];
             cases.push({ what: `on e${c.edge} ${ce.road}`, pos: posOn(ce, c.s), h: heading(dirAt(ce.center, c.s)), y: c.y });
           }
+          // As the game's R reset calls it: the bus's road height, and its clearance test.
+          const fits = vehicleClearance(built.world, bus.body);
           for (const k of cases) {
-            const r = snapToRoad(city, k.pos, k.h, k.y);
+            const r = snapToRoad(city, k.pos, k.h, k.y, { clear: fits, length: L });
             const where = `${k.what} at (${k.pos.x.toFixed(1)}, ${k.pos.z.toFixed(1)}) y ${k.y.toFixed(1)}`;
             if (Math.abs(r.y - k.y) > NAV.SNAP_TOL) {
               bad.push(`${where}: snapped to y ${r.y.toFixed(1)} at (${r.pos.x.toFixed(1)}, ${r.pos.z.toFixed(1)})`);
