@@ -152,6 +152,8 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
       tried.add(key(l));
       const next = separateGrades(flat, [...level, l]);
       if (next.crossings.length < crossings.length) continue;
+      // Nor one that folds a ramp into a sharp V or crest (a long bus high-centers on it).
+      if (next.roads.some((r, i) => r !== roads[i] && sharpestBend(r) > Math.max(sharpestBend(roads[i]), MAX_BEND) + 0.01)) continue;
       level.push(l);
       ({ roads, crossings } = next);
     }
@@ -270,6 +272,22 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
 }
 
 /** Inside a rectangle centered at `c`, `halfL` along `heading` and `halfW` across. */
+/** Steepest change of grade a ramp may get from keeping it level at a junction (one where a ramp starts at its foot). */
+const MAX_BEND = 0.16;
+
+/** Biggest change of grade of a road's lift over a bus's length (two 6 m stretches). */
+function sharpestBend(r: Road): number {
+  if (!r.lift) return 0;
+  let len = 0;
+  for (let i = 1; i < r.points.length; i++) len += Math.hypot(r.points[i].x - r.points[i - 1].x, r.points[i].z - r.points[i - 1].z);
+  let worst = 0;
+  for (let s = 0; s + 12 <= len; s += 1) {
+    const [a, b, c] = [liftAlong(r, s), liftAlong(r, s + 6), liftAlong(r, s + 12)];
+    worst = Math.max(worst, Math.abs((c - b) / 6 - (b - a) / 6));
+  }
+  return worst;
+}
+
 /** Roads whose ramp is still off street level where it runs into a junction at street level, with that junction's paved area. */
 function rampsIntoJunctions(roads: Road[]): Level[] {
   const graph = buildRoadGraph({ roads } as CityData);
