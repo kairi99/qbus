@@ -114,6 +114,8 @@ const UNDER_WALL = FINE * Math.SQRT2 + 0.05;
 const APRON = UNDER_WALL + FINE * Math.SQRT2 - WALL + 0.1;
 /** Ground over a cut only stays on as a roof where there's headroom under it (a bus is ~3 m). */
 const HEADROOM = 3.6;
+/** Two cuts side by side share one (no wall between) if their floors are this close. */
+const SHARED = 2.5;
 /** How far the ground over an underpass reaches beyond the edge of a street crossing over it. */
 const ROOF_MARGIN = 3;
 
@@ -126,7 +128,7 @@ function otherFloor(lowered: Lowered[], self: Lowered, p: Vec2, y: number): bool
     if (o === self || !inBox(o.box, p)) return false;
     const { s, d } = projectOnRoad(o.road, p);
     const h = profileAt(o.profile, s);
-    return d < o.road.width / 2 + 0.3 && h.lift < DUG && Math.abs(h.y - y) < 2.5;
+    return d < o.road.width / 2 + 0.3 && h.lift < DUG && Math.abs(h.y - y) < SHARED;
   });
 }
 
@@ -502,7 +504,7 @@ export function buildGrades(
         // (Sharing means a floor at about ours: a ramp passing over the cut near the top of its
         // own climb is a street above it, and the wall stands under it.)
         const shared = trenchAt(lowered.filter((o) => o !== l), beyond, sunk);
-        if (shared && Math.abs(shared.y - (a.y + b.y) / 2) < 2.5) continue;
+        if (shared && Math.abs(shared.y - (a.y + b.y) / 2) < SHARED) continue;
         // Another ramp's asphalt right where the wall would stand, at about our floor's height: a
         // carriageway alongside that starts down a little later (so not `shared` here). A wall
         // there stands across its lanes.
@@ -677,9 +679,10 @@ function terrainPatch(
     if (q.roof) return v.g;
     // A cell in the cut itself is all floor, whatever its corners (one claimed by a street
     // alongside would stand up in front of the wall as a sliver).
-    // A corner on another cut well above this one's floor (a ramp alongside, near its top) is
-    // past this cut's wall: the cell is behind it and under that ramp's own deck.
-    if (q.under) return Math.min(v.g, v.cutY !== null && v.cutY < q.under.y + 1 ? v.cutY : q.under.y - 0.03);
+    // A corner on another cut well above this one's floor (a ramp alongside, near its top: more
+    // than SHARED over it, so a wall stands between) is past this cut's wall: the cell is behind
+    // it and under that ramp's own deck. Nearer floors share the cut and meet in a slope.
+    if (q.under) return Math.min(v.g, v.cutY !== null && v.cutY < q.under.y + SHARED ? v.cutY : q.under.y - 0.03);
     return v.dipped ? v.cutY! : v.g;
   };
   const sides = [
