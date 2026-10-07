@@ -42,6 +42,8 @@ interface Lowered {
   index: number;
   profile: RoadProfile;
   half: number;
+  /** Extra shoulder `s` meters along the road, on bends (see BEND_SWEEP). */
+  bend: (s: number) => number;
   box: Box;
   /** Streets at ground level nearby: where one runs alongside, the cut stops halfway to it. */
   rivals: { road: Road; index: number; box: Box }[];
@@ -71,16 +73,27 @@ function roadBoxes(city: CityData): Box[] {
   return b;
 }
 
+/**
+ * A long bus on a bend sweeps wider than its lane (the front overhang swings out, the rear
+ * wheels cut in): about L² / 8R for a bus L long on radius R. Cut walls stand that much
+ * further out on bends (both sides), up to BEND_MAX.
+ */
+const BEND_SWEEP = (12.5 * 12.5) / 8;
+const BEND_MAX = 2;
+/** Bends are measured as the change of heading over this far (m), along the cut's chain of ways. */
+const BEND_SPAN = 12;
+
 /** Roads that dip into an underpass somewhere. */
 function loweredRoads(city: CityData): Lowered[] {
   const profiles = roadProfiles(city);
   const boxes = roadBoxes(city);
   const out: Lowered[] = [];
+  const dugIn = city.roads.map((_, i) => !!profiles[i] && profiles[i]!.lift.some((l) => l < DUG));
   city.roads.forEach((road, index) => {
     const profile = profiles[index];
-    if (!profile || !profile.lift.some((l) => l < DUG)) return;
-    const box = boxOf(road.points, road.width / 2 + SHOULDER + UNDER_WALL);
-    out.push({ road, index, profile, half: road.width / 2 + SHOULDER, box, rivals: [], city });
+    if (!profile || !dugIn[index]) return;
+    const box = boxOf(road.points, road.width / 2 + SHOULDER + UNDER_WALL + BEND_MAX);
+    out.push({ road, index, profile, half: road.width / 2 + SHOULDER, bend: bendAlong(city, index, dugIn), box, rivals: [], city });
   });
   const dug = new Set(out.map((l) => l.index));
   for (const l of out)
@@ -90,6 +103,68 @@ function loweredRoads(city: CityData): Lowered[] {
     });
   return out;
 }
+
+/**
+ * Extra shoulder along a cut's road for the bends in it (BEND_SWEEP), including the bend where
+ * it joins the next dug-in way at an angle (OSM splits a curving tunnel anywhere).
+ */
+function bendAlong(city: CityData, index: number, dugIn: boolean[]): (s: number) => number {
+  const r = city.roads[index];
+  const pts = r.points;
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  const near = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z) < 1.5;
+  /** The dug-in way carrying on from `end` (its points running away from it), most nearly straight on. */
+  const onward = (end: Vec2, out: Vec2): Vec2[] | null => {
+    let best: { pts: Vec2[]; cos: number } | null = null;
+    city.roads.forEach((o, i) => {
+      if (i === index || !dugIn[i]) return;
+      const q = near(o.points[0], end) ? o.points : near(o.points[o.points.length - 1], end) ? [...o.points].reverse() : null;
+      if (!q || q.length < 2) return;
+      const d = unit(q[0], q[1]);
+      const cos = d.x * out.x + d.z * out.z;
+      if (!best || cos > best.cos) best = { pts: q, cos };
+    });
+    return best ? (best as { pts: Vec2[] }).pts : null;
+  };
+  const before = onward(first, unit(pts[1], pts[0]));
+  const after = onward(last, unit(pts[pts.length - 2], last));
+  // One polyline: the way before (reversed, so it runs into ours), ours, the way after.
+  const chain = [...(before ? [...before].reverse().slice(0, -1) : []), ...pts, ...(after ? after.slice(1) : [])];
+  const cum = [0];
+  for (let i = 1; i < chain.length; i++) cum.push(cum[i - 1] + Math.hypot(chain[i].x - chain[i - 1].x, chain[i].z - chain[i - 1].z));
+  let offset = 0;
+  if (before) for (let i = 1; i < before.length; i++) offset += Math.hypot(before[i].x - before[i - 1].x, before[i].z - before[i - 1].z);
+  const heading = (c: number) => {
+    let i = 1;
+    while (i < chain.length - 1 && cum[i] < c) i++;
+    const d = unit(chain[i - 1], chain[i]);
+    return Math.atan2(d.z, d.x);
+  };
+  const len = cum[cum.length - 1];
+  const raw: number[] = [];
+  const total = cumLength(pts);
+  for (let s = 0; s <= total + 1; s += 1) {
+    const c = offset + s;
+    const a = heading(Math.max(0, c - BEND_SPAN / 2));
+    const b = heading(Math.min(len, c + BEND_SPAN / 2));
+    const turn = Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a)));
+    raw.push(turn < 0.05 ? 0 : Math.min(BEND_MAX, (BEND_SWEEP * turn) / BEND_SPAN));
+  }
+  // Widest over a bus length around each point, so the wall flares out before the bend and
+  // back after it.
+  const wide = raw.map((_, k) => Math.max(...raw.slice(Math.max(0, k - 6), k + 7)));
+  return (s) => wide[Math.max(0, Math.min(wide.length - 1, Math.round(s)))];
+}
+
+function cumLength(pts: Vec2[]): number {
+  let c = 0;
+  for (let i = 1; i < pts.length; i++) c += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+  return c;
+}
+
+/** Half width of a cut's floor (asphalt and shoulders, widened on bends) `s` meters along it. */
+const floorHalf = (l: Lowered, s: number) => l.half + l.bend(s);
 
 /** Direction of a road's centerline `s` meters along it. */
 function dirOnRoad(r: Road, s: number): Vec2 {
@@ -166,7 +241,7 @@ function overRoadFloor(lowered: Lowered[], p: Vec2): boolean {
   return lowered.some((l) => {
     if (!inBox(l.box, p)) return false;
     const { s, d } = projectOnRoad(l.road, p);
-    return d <= l.half && profileAt(l.profile, s).lift < DUG;
+    return d <= floorHalf(l, s) && profileAt(l.profile, s).lift < DUG;
   });
 }
 
@@ -177,7 +252,7 @@ function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
   // ground isn't above the ramp's asphalt: kept there, it's a lip the bus crashes into.)
   // Down in the cut the shoulders are ours too: ground kept there slopes
   // up over the curb lane (a lip a bus scrapes along).
-  if (d <= l.half) {
+  if (d <= floorHalf(l, s)) {
     const h = profileAt(l.profile, s);
     if (h.lift < -0.5) return false;
     if (d <= l.road.width / 2 && terrainAt(l.city, p) - surfaceY(l.city, h, p) > 0.1) return false;
@@ -219,11 +294,11 @@ function cutsAt(lowered: Lowered[], p: Vec2, sunk: SunkJunction[], reach: number
   for (const l of lowered) {
     if (!inBox(l.box, p)) continue;
     const { s, d } = projectOnRoad(l.road, p);
-    if (d > l.half + reach) continue;
+    if (d > floorHalf(l, s) + reach) continue;
     const h = profileAt(l.profile, s);
     if (h.lift >= DUG || claimedByRival(l, p, s, d)) continue;
     // Past the wall's own footing, never under a street at ground level (a pit in its lanes).
-    if (d > l.half + WALL && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2 + 0.3)) continue;
+    if (d > floorHalf(l, s) + WALL && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2 + 0.3)) continue;
     const y = surfaceY(l.city, h, p);
     out.push({ y, road: l.index, dir: dirOnRoad(l.road, s), rank: d <= l.road.width / 2 ? y - 1000 : d });
   }
@@ -307,7 +382,7 @@ export function planTrenches(city: CityData, graph: RoadGraph): TrenchPlan | nul
       if (l.profile.lift[i] >= DUG) continue;
       floor = Math.min(floor, l.profile.y[i]);
       const d = i + 1 < pts.length ? unit(pts[i], pts[i + 1]) : unit(pts[i - 1], pts[i]);
-      for (let o = -l.half - 1; o <= l.half + 1; o += 1) addCell({ x: pts[i].x - d.z * o, z: pts[i].z + d.x * o });
+      for (let o = -l.half - BEND_MAX - 1; o <= l.half + BEND_MAX + 1; o += 1) addCell({ x: pts[i].x - d.z * o, z: pts[i].z + d.x * o });
     }
   }
   // One more ring of cells, so the sunk heightfield never shows at the edge of the patch.
@@ -538,12 +613,14 @@ export function buildGrades(
         const o1 = side * l.half;
         const shoulderMid = { x: (edge(a, (o0 + o1) / 2).x + edge(b, (o0 + o1) / 2).x) / 2, z: (edge(a, (o0 + o1) / 2).z + edge(b, (o0 + o1) / 2).z) / 2 };
         if (otherFloor(lowered, l, shoulderMid)) continue;
-        deck.quad(fv(a, o0), fv(b, o0), fv(b, o1), fv(a, o1));
-        mb.quad(fv(a, o0, 0.01, back), fv(b, o0, 0.01, fore), fv(b, o1, 0.01, fore), fv(a, o1, 0.01, back), CONCRETE);
+        // (Wider on bends: BEND_SWEEP.)
+        const [sa, sb] = [side * floorHalf(l, a.s), side * floorHalf(l, b.s)];
+        deck.quad(fv(a, o0), fv(b, o0), fv(b, sb), fv(a, sa));
+        mb.quad(fv(a, o0, 0.01, back), fv(b, o0, 0.01, fore), fv(b, sb, 0.01, fore), fv(a, sa, 0.01, back), CONCRETE);
         // Retaining wall just outside the shoulder, or halfway to a street alongside, unless the
         // neighboring carriageway shares the cut.
         const reach = (sec: Sec) => {
-          let o = l.half + WALL;
+          let o = floorHalf(l, sec.s) + WALL;
           while (o > l.road.width / 2 + WALL && claimedByRival(l, edge(sec, side * o), sec.s, o)) o -= 0.25;
           return o;
         };
@@ -552,7 +629,7 @@ export function buildGrades(
         const pa = edge(a, side * (ra - WALL / 2));
         const pb = edge(b, side * (rb - WALL / 2));
         const mid = { x: (pa.x + pb.x) / 2, z: (pa.z + pb.z) / 2 };
-        const beyond = edge(a, side * (l.half + WALL + 0.8));
+        const beyond = edge(a, side * (floorHalf(l, a.s) + WALL + 0.8));
         // (Sharing means a floor at about ours: a ramp passing over the cut near the top of its
         // own climb is a street above it, and the wall stands under it.)
         const shared = trenchAt(lowered.filter((o) => o !== l), beyond, sunk);

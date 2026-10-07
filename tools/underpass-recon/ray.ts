@@ -33,7 +33,7 @@ async function main() {
         const v = c.vertices();
         const ix = c.indices()!;
         // (Back faces come back as id + triangle count.)
-        const f = hit.featureId % (ix.length / 3);
+        const f = (hit.featureId ?? 0) % (ix.length / 3);
         tri = [0, 1, 2]
           .map((j) => {
             const q = ix[f * 3 + j] * 3;

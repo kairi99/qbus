@@ -32,7 +32,7 @@ async function main() {
     if (c.shapeType() === RAPIER.ShapeType.TriMesh && hit.featureType === RAPIER.FeatureType.Face) {
       const v = c.vertices();
       const ix = c.indices()!;
-      const f = hit.featureId % (ix.length / 3);
+      const f = (hit.featureId ?? 0) % (ix.length / 3);
       tri = [0, 1, 2].map((j) => `(${v[ix[f * 3 + j] * 3].toFixed(1)},${v[ix[f * 3 + j] * 3 + 1].toFixed(2)},${v[ix[f * 3 + j] * 3 + 2].toFixed(1)})`).join(' ');
     }
     console.log(`  t ${t.toFixed(2)} at (${(x + d.x * t).toFixed(1)}, ${(y + d.y * t).toFixed(2)}, ${(z + d.z * t).toFixed(1)}) ${RAPIER.ShapeType[c.shapeType()]} n(${hit.normal.x.toFixed(2)},${hit.normal.y.toFixed(2)},${hit.normal.z.toFixed(2)}) ${tri}`);
