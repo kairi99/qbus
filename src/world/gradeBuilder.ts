@@ -250,11 +250,13 @@ function claimedByRival(l: Lowered, p: Vec2, s: number, d: number): boolean {
   // Never on the lowered road's own asphalt where it's down in its cut. (At the shallow top
   // of a ramp a street-level road drawn overlapping it keeps its ground, but only where that
   // ground isn't above the ramp's asphalt: kept there, it's a lip the bus crashes into.)
-  // Down in the cut the shoulders are ours too: ground kept there slopes
-  // up over the curb lane (a lip a bus scrapes along).
+  // Down in the cut the shoulders are ours too: ground kept there slopes up over the curb lane
+  // (a lip a bus scrapes along). The extra room on bends isn't taken from a street's asphalt,
+  // though: dug, that's a pit in the street.
   if (d <= floorHalf(l, s)) {
     const h = profileAt(l.profile, s);
-    if (h.lift < -0.5) return false;
+    const onStreet = d > l.half && l.rivals.some((r) => inBox(r.box, p) && projectOnRoad(r.road, p).d < r.road.width / 2);
+    if (h.lift < -0.5 && !onStreet) return false;
     if (d <= l.road.width / 2 && terrainAt(l.city, p) - surfaceY(l.city, h, p) > 0.1) return false;
   }
   const dir = dirOnRoad(l.road, s);
@@ -656,11 +658,16 @@ export function buildGrades(
         // (no wall at all would leave the cut's side open, see-through).
         const other = step === null ? through(l.index, mid, Math.min(a.y, b.y) + 0.5, Math.min(ga, gb) + top - 0.1) : null;
         if (other !== null && other < Math.min(ga, gb) - 0.6) continue;
-        if (other !== null) top = -0.05;
+        // (Just under the street's ground: its top is driven on, a step down to it is a lip.)
+        if (other !== null) top = -0.01;
         const flush = roof || other !== null || step !== null;
         const reachOut = (q: Vec2, sec: Sec, along: number) => ({ x: q.x + sec.d.x * along, z: q.z + sec.d.z * along });
         const inner = { a: reachOut(edge(a, side * (ra - WALL)), a, back), b: reachOut(edge(b, side * (rb - WALL)), b, fore) };
-        const outer = { a: reachOut(edge(a, side * ra), a, back), b: reachOut(edge(b, side * rb), b, fore) };
+        // Under a street the wall is a cell's diagonal thicker (its top is the street's surface
+        // there): the ground climbing from the dug floor up to the street, one patch cell wide,
+        // stays inside it instead of sloping out over the cut's lanes.
+        const thick = other !== null ? FINE * Math.SQRT2 : 0;
+        const outer = { a: reachOut(edge(a, side * (ra + thick)), a, back), b: reachOut(edge(b, side * (rb + thick)), b, fore) };
         mb.quad(v3(inner.a, a.y - 0.2), v3(inner.b, b.y - 0.2), v3(inner.b, gb + top), v3(inner.a, ga + top), CONCRETE);
         mb.quad(v3(inner.a, ga + top), v3(inner.b, gb + top), v3(outer.b, gb + top), v3(outer.a, ga + top), CONCRETE_DARK);
         // The back and the ends too, even when buried: next to another cut (a link splitting
