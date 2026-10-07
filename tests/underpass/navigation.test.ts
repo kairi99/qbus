@@ -18,8 +18,8 @@ import { fmt, intrusions, yawPitchRoll } from './probe';
 
 // Observed on the harness's first run: see README.md "Known failures".
 known({
-  'route joints are legal and level cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524]':
-    'The Queseras tunnel link (e524) ends 1.15 m below the edge it leads into (e277) at node 257: its lift is still -1.0 at its end while the node is at street level',
+  'route joints are legal and level cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524]':
+    'The Queseras tunnel link (e524) ends 1.15 m below the edge it leads into (e277) at node 257: its lift is still -1.0 at its end while the node is at street level (the graph merges two junctions there and trims the link 15 m back; leveling it by then folds the ramp into a V, see the import feedback in import.ts)',
 });
 
 const base = cityAndCatalog();

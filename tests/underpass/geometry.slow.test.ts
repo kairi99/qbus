@@ -15,51 +15,40 @@ import { fmt, intrusions, rayDistance, surfaceBelow, yawPitchRoll } from './prob
 import { type Built, buildAll, cityAndCatalog } from './setup';
 import { GEOMETRY } from './thresholds';
 
-// Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS): the test's own
-// first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
+// Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS), updated after
+// the collision fixes of 2026-10-07 (what's left): the test's own findings. Delete an entry once
+// its bug is fixed (the it.fails turns red to tell you).
 known({
   "swept bus volume is clear on every lane bridge Av. Patria @(-658,290): Av. Patria [e167→e517]":
     "1 found: e517 Av. Patria lane 1 s 49–50: 0.27 m deep at (-588.5, 346.4, y 24.04) shape 9",
   "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria [e167→e517]":
-    "7 found: surface off the graph height by -0.31 m on e517 Av. Patria lane 0 at (-633.8, 325.3, y 28.71); lip 0.11 m at (-704.7, 221.1, y 25.39)",
+    "3 found: lip 0.09 m at (-634.6, 324.7, y 28.89); lip 0.15 m at (-634.0, 325.1, y 28.74)",
   "drawn walls and solid walls agree beside the lanes bridge Av. Patria @(-658,290): Av. Patria [e167→e517]":
-    "44 found: drawn but not solid: e167 lane 0 s 0 0.6 m up looking left from (-696.6, 233.7, y 26.11): drawn at 6.20 m, solid none; drawn but not solid: e167 lane 0 s 2 0.6 m up looking left from (-695.8, 235.6, y 26.29): drawn at 6.23 m, solid none",
+    "31 found: drawn but not solid: e167 lane 0 s 0 2 m up looking left from (-696.6, 233.7, y 24.81): drawn at 6.20 m, solid none; drawn but not solid: e167 lane 0 s 2 2 m up looking left from (-695.8, 235.6, y 24.84): drawn at 6.23 m, solid none",
   "swept bus volume is clear on every lane bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895]":
     "1 found: e575 Av. Patria lane 1 s 82–86: 0.16 m deep at (-587.5, 339.1, y 24.12) shape 9",
   "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895]":
     "11 found: surface off the graph height by -0.30 m on e700 Av. Patria lane 2 at (-490.1, 394.0, y 24.14); surface off the graph height by -0.47 m on e700 Av. Patria lane 3 at (-492.7, 396.6, y 24.14)",
   "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
-    "12 found: e276 Av. 10 de Agosto lane 0 s 50–50: 0.10 m deep at (-187.7, -806.0, y 19.17) shape 6; e276 Av. 10 de Agosto lane 0 s 57–58: 0.20 m deep at (-184.8, -813.0, y 18.35) shape 6",
+    "4 found: e276 Av. 10 de Agosto lane 2 s 61–61: 0.06 m deep at (-192.2, -820.0, y 17.85) shape 6; e276 Av. 10 de Agosto lane 2 s 71–71: 0.15 m deep at (-188.2, -829.0, y 16.67) shape 6",
   "road surface has no lips, holes or height mismatches cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
     "1 found: surface off the graph height by 0.29 m on e276 Av. 10 de Agosto lane 2 at (-202.9, -792.2, y 20.40)",
-  "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564]":
-    "5 found: e564 Av. 10 de Agosto lane 0 s 3–7: 0.99 m deep at (-195.9, -836.0, y 20.19) shape 9; e564 Av. 10 de Agosto lane 0 s 9–9: 0.16 m deep at (-199.1, -831.0, y 18.69) shape 6",
   "road surface has no lips, holes or height mismatches cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564]":
-    "3 found: surface off the graph height by 0.35 m on e564 Av. 10 de Agosto lane 0 at (-210.1, -805.0, y 21.32); surface off the graph height by -0.42 m on e564 Av. 10 de Agosto lane 2 at (-211.7, -784.2, y 21.43)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,734): sin nombre [e585→e524]":
-    "8 found: lip 0.15 m at (-4.3, 700.4, y 16.01); lip 0.08 m at (-4.8, 700.6, y 15.86)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e586→e156]":
+    "3 found: surface off the graph height by 0.35 m on e564 Av. 10 de Agosto lane 0 at (-210.1, -805.0, y 21.32); surface off the graph height by -0.87 m on e564 Av. 10 de Agosto lane 2 at (-204.3, -800.1, y 21.40)",
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524]":
+    "6 found: lip 0.15 m at (-4.3, 700.4, y 16.01); lip 0.08 m at (-4.8, 700.6, y 15.86)",
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): Av. 12 de Octubre [e586→e156]":
     "8 found: lip 0.06 m at (-2.1, 705.1, y 16.03); lip 0.15 m at (-2.1, 705.1, y 16.03)",
-  "swept bus volume is clear on every lane cut Av. 12 de Octubre @(-42,734): sin nombre [e588→e160]":
-    "1 found: e970 Av. Patria lane 1 s 2–3: 0.46 m deep at (-30.9, 711.0, y 20.66) shape 9",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,734): sin nombre [e588→e160]":
-    "13 found: surface off the graph height by -0.35 m on e160 sin nombre lane 0 at (-56.8, 756.9, y 13.49); surface off the graph height by 0.92 m on e970 Av. Patria lane 1 at (-30.0, 710.6, y 20.00)",
-  "swept bus volume is clear on every lane cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241]":
-    "4 found: e241 Av. 12 de Octubre lane 0 s 4–4: 0.08 m deep at (6.0, 711.1, y 16.93) shape 6; e241 Av. 12 de Octubre lane 0 s 10–10: 0.17 m deep at (11.0, 708.1, y 17.70) shape 6",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,734): Av. 12 de Octubre [e589→e241]":
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): sin nombre [e588→e160]":
+    "8 found: lip 0.06 m at (-127.7, 792.8, y 22.39); lip 0.09 m at (-127.2, 792.6, y 22.43)",
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): Av. 12 de Octubre [e589→e241]":
     "10 found: surface off the graph height by 0.43 m on e589 Av. 12 de Octubre lane 1 at (-115.3, 776.9, y 20.57); lip 0.06 m at (-128.2, 789.3, y 22.50)",
   "road surface has no lips, holes or height mismatches cut José Riofrío @(-867,851): sin nombre [e297→e297]":
     "2 found: lip 0.13 m at (-788.8, 830.0, y 25.88); lip 0.12 m at (-788.4, 829.8, y 25.76)",
   "road surface has no lips, holes or height mismatches cut sin nombre @(-652,321): sin nombre [e197→e199]":
     "6 found: surface off the graph height by -0.30 m on e700 Av. Patria lane 2 at (-490.1, 394.0, y 24.14); surface off the graph height by -0.47 m on e700 Av. Patria lane 3 at (-492.7, 396.6, y 24.14)",
   "drawn walls and solid walls agree beside the lanes cut sin nombre @(-652,321): sin nombre [e197→e199]":
-    "5 found: drawn but not solid: e197 lane 0 s 88 0.6 m up looking right from (-590.2, 341.4, y 22.84): drawn at 2.56 m, solid 8.62 m; drawn but not solid: e197 lane 0 s 88 0.6 m up looking left from (-590.2, 341.4, y 22.84): drawn at 2.48 m, solid none",
-  "swept bus volume is clear on every lane cut sin nombre @(-820,774): sin nombre [e681→e195]":
-    "1 found: e195 sin nombre lane 1 s 17–17: 0.18 m deep at (-825.9, 775.4, y 21.87) shape 9",
-  "road surface has no lips, holes or height mismatches cut sin nombre @(-820,774): sin nombre [e681→e195]":
-    "2 found: lip 0.08 m at (-811.5, 768.1, y 19.35); lip 0.13 m at (-811.9, 768.1, y 19.25)",
-  "swept bus volume is clear on every lane cut sin nombre @(-876,-220): sin nombre [e516→e516]":
-    "16 found: e516 sin nombre lane 0 s 5–5: 0.18 m deep at (-860.9, -253.0, y 27.06) shape 9; e516 sin nombre lane 0 s 7–7: 0.06 m deep at (-858.9, -255.0, y 24.03) shape 6",
+    "8 found: drawn but not solid: e197 lane 0 s 88 0.6 m up looking right from (-590.2, 341.4, y 22.84): drawn at 2.56 m, solid 8.62 m; drawn but not solid: e197 lane 0 s 88 0.6 m up looking left from (-590.2, 341.4, y 22.84): drawn at 2.48 m, solid none",
   "road surface has no lips, holes or height mismatches cut sin nombre @(-876,-220): sin nombre [e516→e516]":
     "6 found: surface off the graph height by 0.27 m on e516 sin nombre lane 2 at (-845.3, -320.0, y 27.72); lip 0.10 m at (-862.0, -249.6, y 23.13)",
 });
