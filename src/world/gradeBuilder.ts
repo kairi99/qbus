@@ -163,6 +163,19 @@ function cumLength(pts: Vec2[]): number {
   return c;
 }
 
+/** On the asphalt of a road that isn't dug in or raised there (a street at ground level). */
+function onStreet(city: CityData, p: Vec2): boolean {
+  const profiles = roadProfiles(city);
+  const boxes = roadBoxes(city);
+  return city.roads.some((r, i) => {
+    if (!inBox(boxes[i], p)) return false;
+    const { s, d } = projectOnRoad(r, p);
+    if (d > r.width / 2) return false;
+    const prof = profiles[i];
+    return !prof || Math.abs(profileAt(prof, s).lift) < 0.3;
+  });
+}
+
 /** Half width of a cut's floor (asphalt and shoulders, widened on bends) `s` meters along it. */
 const floorHalf = (l: Lowered, s: number) => l.half + l.bend(s);
 
@@ -354,7 +367,8 @@ function coverTest(city: CityData, graph: RoadGraph, lowered: Lowered[]): (p: Ve
         // Running alongside the cut doesn't cover it, unless OSM puts it on a higher level than
         // the cut's road (stacked, like an overpass above an underpass).
         const stacked = cutRoad !== undefined && cutRoad >= 0 && (r.layer ?? 0) > (city.roads[cutRoad].layer ?? 0);
-        if (Math.abs(od.x * dir.x + od.z * dir.z) > PARALLEL && !stacked) return false;
+        // Its own asphalt is covered all the same (else there's a hole in the street).
+        if (Math.abs(od.x * dir.x + od.z * dir.z) > PARALLEL && !stacked && d > r.width / 2) return false;
       }
       const prof = profiles[i];
       return !prof || profileAt(prof, s).lift > DUG;
@@ -845,6 +859,8 @@ function terrainPatch(
           if (y - h(x + dx * FINE + FINE / 2, z + dz * FINE + FINE / 2) < 1.5) continue;
           const pa = { x: ax, z: az };
           const pb = { x: bx, z: bz };
+          // Never across a street's lanes (the roof there is the street itself).
+          if (onStreet(city, { x: (ax + bx) / 2, z: (az + bz) / 2 })) continue;
           // Lintel under the roof edge, and a railing on top.
           mb.quad(v3(pa, y - lintel), v3(pb, y - lintel), v3(pb, y), v3(pa, y), CONCRETE);
           wallStrip(mb, pa, pb, y, y, PARAPET, 0.12, RAIL);
