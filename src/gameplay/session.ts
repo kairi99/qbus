@@ -134,7 +134,7 @@ export class GameSession {
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
     this.nearMiss = new NearMissDetector(d.world, d.bus, (c) => this.trafficBodies.isCar(c));
     this.trafficView = new TrafficView(d.scene, this.traffic, this.trafficBodies);
-    this.peds = new PedestrianSim(d.city, graph, { seed: 5, count: PEDESTRIANS });
+    this.peds = new PedestrianSim(d.city, graph, { seed: 5, count: PEDESTRIANS, lights: this.lights });
     const focus = { pos: spawn, heading: this.start0.heading };
     this.traffic.recycle(focus, true);
     this.peds.recycle(focus, true);

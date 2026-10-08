@@ -5,6 +5,7 @@ import { pointInPolygon } from '../world/geom';
 import { RoadIndex } from '../world/roadIndex';
 import { type Path, type RoadGraph, edgeLift, makePath, offsetPath, pointAt } from '../world/roadGraph';
 import { LIFTED } from '../world/elevation';
+import type { TrafficLights } from './trafficLights';
 
 /** An open cut's edge reaches this far past its asphalt (shoulder, retaining wall, a little more). */
 const CUT_EDGE = 1.4;
@@ -16,7 +17,7 @@ export interface BusState {
   speed: number;
 }
 
-type Mode = 'walk' | 'corner' | 'cross' | 'dive' | 'recover' | 'return';
+type Mode = 'walk' | 'wait' | 'corner' | 'cross' | 'dive' | 'recover' | 'return';
 
 export interface Pedestrian {
   id: number;
@@ -41,6 +42,8 @@ export interface Pedestrian {
   then: { strip: number; s: number; dir: 1 | -1; resumeCross: Vec2 | null } | null;
   timer: number;
   diveFrom: Vec2 | null;
+  /** Waiting at a lit crossing: the approach whose red lets us walk. */
+  gate: number;
 }
 
 /** One side of one road piece. */
@@ -59,6 +62,8 @@ interface Endpoint {
   corner: number;
   /** Nearest end across the road, near junctions only (a zebra crossing). -1 if none. */
   cross: number;
+  /** That crossing is over an approach of a junction with lights: walk only while it's red. -1 if none. */
+  gate: number;
 }
 
 const WALK_SPEED: [number, number] = [1.1, 1.6];
@@ -77,7 +82,7 @@ const PED_SPAWN_MIN = 50;
 
 /**
  * Sidewalk life on any road layout: people walk along both sides of every road, turn corners,
- * cross at junctions (where the zebra crossings are), and dive out of the way of a bus coming
+ * cross at junctions (where the zebra crossings are; at lights, on the cars' red), and dive out of the way of a bus coming
  * at them. They have no colliders on purpose.
  */
 export class PedestrianSim {
@@ -86,13 +91,17 @@ export class PedestrianSim {
   private ends: Endpoint[] = [];
   private rng: Rng;
   private roadsIdx!: RoadIndex;
+  private lights: TrafficLights | null;
+  /** Seconds simulated: the traffic lights' clock (kept in step with the traffic's). */
+  time = 0;
 
   constructor(
     private city: CityData,
     graph: RoadGraph,
-    opts: { seed: number; count: number },
+    opts: { seed: number; count: number; lights?: TrafficLights },
   ) {
     this.rng = new Rng(opts.seed);
+    this.lights = opts.lights ?? null;
     // Generated cities have wide sidewalk slabs; real ones put people nearer the curb.
     const walkOffset = city.blocks.length ? 1.8 : 1.1;
     this.roadsIdx = new RoadIndex(city.roads);
@@ -150,6 +159,7 @@ export class PedestrianSim {
       if (nearJunction(e.pos)) {
         e.cross = cands.find((j) => j !== e.corner && dist(this.ends[j].pos, e.pos) < 28 && !idx.lineClear(e.pos, this.ends[j].pos) && !overCut(e.pos, this.ends[j].pos)) ?? -1;
       }
+      if (e.cross >= 0) e.gate = this.gateOf(e.pos, this.ends[e.cross].pos);
     });
 
     for (let i = 0; i < opts.count; i++) {
@@ -172,12 +182,14 @@ export class PedestrianSim {
         then: null,
         timer: 0,
         diveFrom: null,
+        gate: -1,
       });
     }
   }
 
   step(dt: number, bus: BusState): { dives: number } {
     let dives = 0;
+    this.time += dt;
     for (const p of this.peds) {
       if (p.mode !== 'dive' && p.mode !== 'recover' && this.threatened(p, bus)) {
         this.startDive(p, bus);
@@ -186,6 +198,10 @@ export class PedestrianSim {
       switch (p.mode) {
         case 'walk':
           this.walk(p, dt);
+          break;
+        case 'wait':
+          // At the curb until the cars crossing our way get their red.
+          if (this.lights?.state(p.gate, this.time) === 'red') p.mode = 'cross';
           break;
         case 'corner':
         case 'cross':
@@ -220,8 +236,8 @@ export class PedestrianSim {
 
   private addStrip(path: Path): void {
     const id = this.strips.length;
-    const start = this.ends.push({ strip: id, atEnd: false, pos: path.pts[0], corner: -1, cross: -1 }) - 1;
-    const end = this.ends.push({ strip: id, atEnd: true, pos: path.pts[path.pts.length - 1], corner: -1, cross: -1 }) - 1;
+    const start = this.ends.push({ strip: id, atEnd: false, pos: path.pts[0], corner: -1, cross: -1, gate: -1 }) - 1;
+    const end = this.ends.push({ strip: id, atEnd: true, pos: path.pts[path.pts.length - 1], corner: -1, cross: -1, gate: -1 }) - 1;
     this.strips.push({ path, ends: [start, end] });
   }
 
@@ -283,6 +299,8 @@ export class PedestrianSim {
     p.mode = crossing ? 'cross' : 'corner';
     p.target = to.pos;
     p.then = { strip: to.strip, s: to.atEnd ? len : 0, dir: to.atEnd ? -1 : 1, resumeCross: null };
+    // Lights: wait for the walk phase (`timer` holds the edge whose red lets us go).
+    if (crossing && e.gate >= 0 && this.lights?.state(e.gate, this.time) !== 'red') (p.mode = 'wait'), (p.gate = e.gate);
   }
 
   private arrive(p: Pedestrian): void {
@@ -331,12 +349,34 @@ export class PedestrianSim {
     while (d > 0.8 && blocked(land(side, d))) d -= 0.4;
     // Remember where to pick up afterwards.
     if (p.mode === 'walk') p.then = { strip: p.strip, s: p.s, dir: p.dir, resumeCross: null };
-    else if (p.mode === 'cross') p.then = { ...p.then!, resumeCross: p.target };
+    // Waiting at the lights: a fright like that, and we cross whatever the light says.
+    else if (p.mode === 'cross' || p.mode === 'wait') p.then = { ...p.then!, resumeCross: p.target };
     // corner / return: `then` already holds the strip to continue on.
     p.diveFrom = { ...p.pos };
     p.target = land(side, d);
     p.mode = 'dive';
     p.timer = 0;
+  }
+
+  /**
+   * The approach of a lit junction that a crossing from `a` to `b` walks across (by its zebra,
+   * just past the stop line), as an edge id; -1 if none.
+   */
+  private gateOf(a: Vec2, b: Vec2): number {
+    if (!this.lights) return -1;
+    const m = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    for (const j of this.lights.junctions) {
+      if (dist(j.pos, m) > 45) continue;
+      for (const ap of j.approaches) {
+        const rel = { x: m.x - ap.line.x, z: m.z - ap.line.z };
+        const along = rel.x * ap.dir.x + rel.z * ap.dir.z;
+        const across = Math.abs(rel.x * ap.dir.z - rel.z * ap.dir.x);
+        // Walking across the road (not along it), over its zebra.
+        const walk = { x: (b.x - a.x) / (dist(a, b) || 1), z: (b.z - a.z) / (dist(a, b) || 1) };
+        if (along > -2 && along < 6 && across < ap.halfWidth + 3 && Math.abs(walk.x * ap.dir.x + walk.z * ap.dir.z) < 0.5) return ap.edge;
+      }
+    }
+    return -1;
   }
 
   private onAsphalt(q: Vec2): boolean {
