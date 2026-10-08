@@ -18,9 +18,9 @@ const parkAtActive = (page: Page) =>
 
 // The Trolebús route boards at median stations, through the left door.
 const SHIFTS: [string, string][] = [
-  ['grid', '/?city=grid'],
-  ['mariscal', '/?city=mariscal'],
-  ['trolebus', '/?play=1&city=mariscal&route=linea-c4'],
+  ['grid', '/?city=grid&tutorial=0'],
+  ['mariscal', '/?city=mariscal&tutorial=0'],
+  ['trolebus', '/?play=1&city=mariscal&route=linea-c4&tutorial=0'],
 ];
 
 for (const [city, url] of SHIFTS) test(`a shift on ${city}: start, pick up, drop off, results, restart`, async ({ page }) => {

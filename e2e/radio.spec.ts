@@ -16,7 +16,7 @@ test('the radio tunes every station, downloading each song only when needed', as
   });
   // Saved settings: the radio starts on La Buseta (chicha).
   await page.addInitScript(() => localStorage.setItem('qbus', JSON.stringify({ radio: 'chicha', musicVolume: 0.5, v: 2 })));
-  await page.goto('/?city=grid');
+  await page.goto('/?tutorial=0&city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   // Nothing plays (or downloads) before the first gesture starts the audio.
   expect((await radio(page)).playing).toBe(false);

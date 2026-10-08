@@ -24,6 +24,7 @@ import { busById } from './vehicle/buses';
 import { routesFor } from './gameplay/routes';
 import { loadSettings, saveSettings } from './menu/settings';
 import { RadioToast } from './ui/radioToast';
+import { Tutorial } from './ui/tutorial';
 
 const MAX_FRAME = 0.1;
 
@@ -123,11 +124,16 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     }
   };
 
+  // How to play, every time a shift or free roam starts (unless turned off, or ?tutorial=0).
+  const tutorial = new Tutorial(hudRoot, free, session.stars);
+  tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
+  if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
+
   performance.mark('qbus:session');
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   let acc = 0;
   let last = performance.now();
@@ -146,6 +152,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     session.adaptTraffic(fps, dt);
 
     for (const action of input.consumeActions()) {
+      if (tutorial.open) {
+        tutorial.action(action);
+        continue;
+      }
       if (action === 'camera') rig.toggle();
       if (action === 'reset') {
         const t = bus.body.translation();
@@ -166,7 +176,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       if (action === 'horn') session.playerHonk();
     }
 
-    const drive = paused ? { throttle: 0, steer: 0, handbrake: false } : input.drive();
+    // The tutorial holds the bus still: the clock only starts on the first throttle after it.
+    const drive = paused || tutorial.open ? { throttle: 0, steer: 0, handbrake: false } : input.drive();
     if (drive.throttle > 0 || drive.boost) session.start();
     // Paused: the world stands still (but keeps rendering behind the menu).
     acc = paused ? 0 : acc + dt;

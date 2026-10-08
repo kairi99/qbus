@@ -24,6 +24,10 @@ test('menu: choose bus, zone and route, play, pause, back to menu', async ({ pag
 
   await page.getByRole('button', { name: '¡Arranca!' }).click();
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  // The how-to-play card comes first: Esc skips it.
+  await expect(page.locator('.tut')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.tut')).toBeHidden();
   const game = await page.evaluate(() => {
     const q = (window as any).__qbus;
     return { bus: q.bus.preset.id, route: q.route.id, city: q.city.name, stop: q.session.game.activeStop.stop.name };
@@ -66,9 +70,13 @@ test('settings are saved and applied', async ({ page }) => {
   await page.getByText('Conductor').click();
   await page.getByText('Quito extremo').click();
   await page.getByText('Noche').click();
+  await page.getByText('No mostrar').click();
   await page.screenshot({ path: `${shots}/65-settings.png` });
   await page.goto('/?play=1&city=mariscal');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  // Turned off in Ajustes: no how-to-play card.
+  await expect(page.locator('.tut')).toBeHidden();
+  expect(await page.evaluate(() => (window as any).__qbus.tutorial.open)).toBe(false);
   const s = await page.evaluate(() => ({ cam: (window as any).__qbus.rig.mode, hills: (window as any).__qbus.city.terrain.scale, tod: (window as any).__qbus.timeOfDay }));
   expect(s).toEqual({ cam: 'cockpit', hills: 2, tod: 'night' });
 });
@@ -90,6 +98,10 @@ test('free roam: pick the AE86, drive around with no route, clock or fares', asy
 
   await page.getByRole('button', { name: '¡Arranca!' }).click();
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  // The how-to-play card comes first: Esc skips it.
+  await expect(page.locator('.tut')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.tut')).toBeHidden();
   const state = await page.evaluate(() => {
     const q = (window as any).__qbus;
     return { bus: q.bus.preset.id, route: q.route, game: q.session.game };

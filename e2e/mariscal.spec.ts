@@ -12,7 +12,7 @@ test('La Mariscal: loads real streets with hills, bus drives, traffic runs', asy
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const t0 = Date.now();
-  await page.goto('/?city=mariscal');
+  await page.goto('/?tutorial=0&city=mariscal');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   const loadMs = Date.now() - t0;
   console.log(`MARISCAL load ${loadMs} ms`);
@@ -46,7 +46,7 @@ test('La Mariscal: loads real streets with hills, bus drives, traffic runs', asy
 });
 
 test('La Mariscal: a real bus line route plays with GPS guidance', async ({ page }) => {
-  await page.goto('/?play=1&city=mariscal&route=linea-katar-061');
+  await page.goto('/?tutorial=0&play=1&city=mariscal&route=linea-katar-061');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   const r = await page.evaluate(() => {
     const q = (window as any).__qbus;
@@ -62,7 +62,7 @@ test('La Mariscal: a real bus line route plays with GPS guidance', async ({ page
 test('La Mariscal: Trolebús route starts at a median station; Metro entrances have riders', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/?play=1&city=mariscal&route=linea-c4');
+  await page.goto('/?tutorial=0&play=1&city=mariscal&route=linea-c4');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   const r = await page.evaluate(() => {
     const q = (window as any).__qbus;
@@ -108,7 +108,7 @@ test('La Mariscal: Trolebús route starts at a median station; Metro entrances h
 });
 
 test('La Mariscal: the roadworks at the edge stop the bus, even on nitro', async ({ page }) => {
-  await page.goto('/?city=mariscal');
+  await page.goto('/?tutorial=0&city=mariscal');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   // The widest street crossing the south edge; start 45 m inside, driving out.
   const start = await page.evaluate(() => {

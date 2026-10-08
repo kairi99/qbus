@@ -54,7 +54,7 @@ test('perf: La Mariscal draw calls, triangles, frame time, startup', async ({ pa
   test.setTimeout(900_000);
   mkdirSync(dir, { recursive: true });
   const t0 = Date.now();
-  await page.goto('/?play=1&city=mariscal&route=linea-catar-061&hills=1');
+  await page.goto('/?tutorial=0&play=1&city=mariscal&route=linea-catar-061&hills=1');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 120_000 });
   const loadMs = Date.now() - t0;
   await frames(page, 20);

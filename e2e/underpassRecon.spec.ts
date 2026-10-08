@@ -38,7 +38,7 @@ for (const tod of (process.env.RECON_TOD ?? 'day,night').split(',')) {
     test.setTimeout(900_000);
     const dir = `e2e/screenshots/recon/${tod}`;
     mkdirSync(dir, { recursive: true });
-    await page.goto(`/?city=mariscal&play=1&mode=free&hills=1&tod=${tod}`);
+    await page.goto(`/?tutorial=0&city=mariscal&play=1&mode=free&hills=1&tod=${tod}`);
     await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 180_000 });
     const report: string[] = [];
     for (let i = 0; i < views.length; i += 6) {
