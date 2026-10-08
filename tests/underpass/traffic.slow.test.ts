@@ -63,6 +63,7 @@ function run(s: Structure): Run {
     const prevEdge = sim.cars.map((c) => c.edge);
     const prevState = sim.cars.map((c) => c.state);
     const slow = sim.cars.map(() => 0);
+    const exited = new Set<number>();
     let sample = 0;
     try {
       for (let t = 0; t < TRAFFIC.SECONDS; t += PHYSICS_STEP) {
@@ -76,6 +77,14 @@ function run(s: Structure): Run {
           if (c.state === 'free' && prevState[i] === 'driving') r.released.push(`seed ${seed} car ${i} at ${fmt(c.pos)} t ${t.toFixed(1)} s`);
           if (c.state === 'driving' && prevState[i] === 'driving' && c.edge !== prevEdge[i])
             for (const p of s.passages) if (prevEdge[i] === p.extreme.edge) r.through.set(p.id, r.through.get(p.id)! + 1);
+          // A passage that leads off the map ends at the exit line, where cars wait out of the
+          // player's sight (below): getting there is getting through.
+          if (c.state === 'driving' && c.next < 0 && c.s > graph.edges[c.edge].len - 0.5 && !exited.has(i))
+            for (const p of s.passages)
+              if (c.edge === p.extreme.edge) {
+                exited.add(i);
+                r.through.set(p.id, r.through.get(p.id)! + 1);
+              }
           // A car leaving the map waits at the line until the player can't see it, by design: with
           // the "player" parked at the structure that can take a while, so exits don't count.
           const inside = c.state === 'driving' && !c.turn && c.next >= 0 && onStructure.has(c.edge);
