@@ -128,3 +128,29 @@ test('the route picker shows saved records and missions', async ({ page }) => {
   await expect(page.locator('.mn-missions-done')).toHaveText(/Misiones cumplidas: 2 de \d+/);
   await page.locator('.mn-step-route').screenshot({ path: `${shots}/69-setup-records.png` });
 });
+
+test('menu sounds: hover ticks, bus-flavored confirms, slider preview, no errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  const played = () => page.evaluate(() => [...(window as any).__qbusMenu.sounds.played]);
+  await page.getByRole('button', { name: 'Ajustes' }).hover();
+  await page.getByRole('button', { name: 'Créditos' }).hover();
+  await expect.poll(played).toContain('hover');
+  await page.getByRole('button', { name: 'Ajustes' }).click();
+  await page.getByText('Noche').click();
+  await page.locator('input[name="volume"]').fill('40');
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await page.getByRole('button', { name: 'Jugar' }).click();
+  await page.locator('[data-zone="grid"]').click();
+  await page.locator('[data-route="ruta-amazonas"]').click({ timeout: 30_000 });
+  const s = await played();
+  for (const k of ['confirm', 'toggle', 'slider', 'back', 'select', 'route']) expect(s).toContain(k);
+  // The audio context is running after the clicks (headless Chrome has Web Audio too).
+  expect(await page.evaluate(() => (window as any).__qbusMenu.sounds.ctx?.state)).toBe('running');
+  await page.getByRole('button', { name: '¡Arranca!' }).click();
+  await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  expect(errors).toEqual([]);
+});
