@@ -104,7 +104,7 @@ export class Menu {
           <section>
             <h2>Sonidos</h2>
             <p>Grabaciones de dominio público (CC0) de ${link('https://freesound.org', 'Freesound')}: kyles, AndrewAlexander, rabbydaw,
-            DigPro120, am7 y tt_runscript. Detalle en <code>public/sounds/CREDITS.md</code>.</p>
+            DigPro120, am7 y tt_runscript. Detalle en <code>public/sounds/CREDITS.md</code>. Los sonidos del menú son sintetizados por código.</p>
           </section>
           <section>
             <h2>Música</h2>
