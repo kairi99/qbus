@@ -5,7 +5,7 @@ const shots = 'e2e/screenshots';
 test('streets have moving traffic and pedestrians', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/?city=grid');
+  await page.goto('/?tutorial=0&city=grid');
   await page.waitForFunction(() => (window as any).__qbus?.session);
   type Snap = { cars: { id: number; x: number; z: number }[]; peds: { x: number; z: number }[] };
   const snap = (): Promise<Snap> =>

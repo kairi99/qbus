@@ -72,7 +72,7 @@ test('underpasses and bridges: no holes from the seat or the chase camera', asyn
   expect(views.length).toBeGreaterThan(50);
   mkdirSync(OUT, { recursive: true });
 
-  await page.goto('/?city=mariscal&play=1&mode=free&hills=1');
+  await page.goto('/?tutorial=0&city=mariscal&play=1&mode=free&hills=1');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 120_000 });
   const results = await page.evaluate(
     ({ views, holePx }) => {

@@ -26,6 +26,15 @@ test('drives on a phone with the touch controls', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?city=mariscal&play=1&mode=free');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
+  // The how-to-play card explains the touch controls (not the keys), and a tap moves it on.
+  await expect(page.locator('.tut')).toBeVisible();
+  await page.locator('[data-next]').tap();
+  await expect(page.locator('.tut-keys.touch-only')).toBeVisible();
+  await expect(page.locator('.tut-keys.keys-only')).toBeHidden();
+  await expect(page.locator('[data-next]')).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: `${shots}/79-phone-tutorial.png` });
+  await page.locator('[data-next]').tap();
+  await expect(page.locator('.tut')).toBeHidden();
   await expect(page.locator('.tc-gas')).toBeVisible();
   await expect(page.locator('.hud-help')).toBeHidden();
   await page.screenshot({ path: `${shots}/80-phone-start.png` });
@@ -57,7 +66,7 @@ test('drives on a phone with the touch controls', async ({ page }) => {
 
 test('asks to turn the phone sideways when held upright', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/?city=grid&play=1&mode=free');
+  await page.goto('/?tutorial=0&city=grid&play=1&mode=free');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   await expect(page.locator('.tc-rotate')).toBeVisible();
 });
@@ -76,6 +85,13 @@ test('a route shift on a phone', async ({ page }) => {
   test.setTimeout(180_000);
   await page.goto('/?city=mariscal&play=1');
   await page.waitForFunction(() => (window as any).__qbus?.session?.game, null, { timeout: 60_000 });
+  // The shift's how-to-play card fits the phone; three taps through it.
+  for (let i = 0; i < 3; i++) {
+    await expect(page.locator('[data-next]')).toBeInViewport({ ratio: 1 });
+    if (i === 0) await page.screenshot({ path: `${shots}/78-phone-tutorial-route.png` });
+    await page.locator('[data-next]').tap();
+  }
+  await expect(page.locator('.tut')).toBeHidden();
   await expect(page.locator('.tc-gas')).toBeVisible();
   await expect(page.locator('.gh-missions li')).toHaveCount(3);
   await expect(page.locator('.gh-targets')).toBeVisible();

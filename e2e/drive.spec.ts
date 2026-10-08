@@ -10,7 +10,7 @@ const busState = (page: Page) =>
 test('boots, drives, steers and toggles camera', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/?city=grid');
+  await page.goto('/?tutorial=0&city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${shots}/01-start.png` });
@@ -37,7 +37,7 @@ test('boots, drives, steers and toggles camera', async ({ page }) => {
 });
 
 test('city views', async ({ page }) => {
-  await page.goto('/?city=grid');
+  await page.goto('/?tutorial=0&city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   const place = (x: number, z: number, heading: number) =>
     page.evaluate(([x, z, heading]) => (window as any).__qbus.bus.reset({ x, y: 0, z, heading }), [x, z, heading]);
@@ -61,7 +61,7 @@ test('city views', async ({ page }) => {
 });
 
 test('R rescues a bus stuck off-road back onto the street', async ({ page }) => {
-  await page.goto('/?city=grid');
+  await page.goto('/?tutorial=0&city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   // Drop the bus tilted in the middle of a block, among buildings.
   await page.evaluate(() => {
@@ -93,7 +93,7 @@ test('R rescues a bus stuck off-road back onto the street', async ({ page }) => 
 });
 
 test('Q looks back at the bus while held', async ({ page }) => {
-  await page.goto('/?city=grid');
+  await page.goto('/?tutorial=0&city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   const camAhead = () =>
     page.evaluate(() => {
@@ -114,7 +114,7 @@ test('Q looks back at the bus while held', async ({ page }) => {
 
 
 test('Shift fires the nitro: flames, gauge drains, then it stays empty', async ({ page }) => {
-  await page.goto('/?city=grid');
+  await page.goto('/?tutorial=0&city=grid');
   await page.waitForFunction(() => (window as any).__qbus);
   const nitro = () => page.evaluate(() => (window as any).__qbus.session.nitro.level as number);
   expect(await nitro()).toBe(1);

@@ -31,7 +31,7 @@ test('underpasses have no see-through walls or gaps', async ({ page }) => {
   });
   expect(views.length).toBeGreaterThan(100);
 
-  await page.goto('/?city=mariscal&play=1&mode=free&hills=1');
+  await page.goto('/?tutorial=0&city=mariscal&play=1&mode=free&hills=1');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 120_000 });
   const holes = await page.evaluate((views) => {
     const q = (window as any).__qbus;
