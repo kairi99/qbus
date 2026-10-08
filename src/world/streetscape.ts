@@ -37,6 +37,8 @@ export interface StreetscapeContext {
   /** Where lamp bulbs go: the glowing layer when they're on. */
   bulbs: ChunkedMeshBuilder;
   light: Lighting;
+  /** Other street furniture (traffic light poles): nothing stands within 2 m. */
+  keepClear?: Vec2[];
   world: RAPIER.World;
   fixed: RAPIER.RigidBody;
 }
@@ -95,6 +97,7 @@ export function addStreetscape(ctx: StreetscapeContext): THREE.Mesh[] {
     (city.metro ?? []).every((e) => Math.hypot(p.x - e.pos.x, p.z - e.pos.z) > 7) &&
     (city.monuments ?? []).every((e) => Math.hypot(p.x - e.pos.x, p.z - e.pos.z) > 20) &&
     city.props.every((pr) => Math.hypot(p.x - pr.pos.x, p.z - pr.pos.z) > 2) &&
+    (ctx.keepClear ?? []).every((q) => Math.hypot(p.x - q.x, p.z - q.z) > 2) &&
     (city.walls ?? []).every((w) => distToPolyline(p, w.points) > 1) &&
     ctx.buildings.distance(p) > pad;
 

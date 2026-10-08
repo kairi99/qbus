@@ -128,6 +128,16 @@ export interface Feature {
   height: number;
 }
 
+/**
+ * A traffic signal (OSM `highway=traffic_signals`): on a junction or on one of its approaches,
+ * a few meters back. The road graph decides which junction it belongs to (`gameplay/trafficLights.ts`).
+ */
+export interface TrafficSignal {
+  pos: Vec2;
+  /** Height off the ground of the road it stands on (a bridge, an underpass); absent at street level. */
+  lift?: number;
+}
+
 export type PropKind = 'cone' | 'trashcan' | 'fruitStand';
 
 export interface Prop {
@@ -167,6 +177,8 @@ export interface CityData {
   horizon?: Horizon;
   landmarks?: Landmark[];
   monuments?: Monument[];
+  /** Signalized junctions (imported from OSM; generated cities light their avenue crossings). */
+  signals?: TrafficSignal[];
 }
 
 export const SIDEWALK_HEIGHT = 0.15;

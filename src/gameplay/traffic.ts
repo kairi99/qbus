@@ -2,6 +2,7 @@ import { Rng } from '../core/rng';
 import type { CityData, Vec2 } from '../world/cityData';
 import { forward, right } from '../world/cityData';
 import { type LaneEdge, type RoadGraph, edgeDir, edgeLift, laneOffset, lanePoint, projectOnPath } from '../world/roadGraph';
+import type { TrafficLights } from './trafficLights';
 
 export interface CarKind {
   name: 'sedan' | 'taxi' | 'buseta';
@@ -82,6 +83,8 @@ export interface Car {
   hurry: number;
   /** Obstacle id that limited our speed last step (for breaking mutual standoffs). */
   blocker: string | null;
+  /** Waiting for a light: at the stop line, or queued behind a car that is (not stuck). */
+  held: boolean;
   /** Bumped every time the car is placed somewhere new, so the physics body knows to snap. */
   generation: number;
 }
@@ -99,8 +102,13 @@ const UTURN_SPEED = 3.5;
 const HUMP_SPEED = 5;
 const LANE_CHANGE_RATE = 2;
 const PRIORITY_WAIT = 3;
-/** A car stuck this long (a real jam) is recycled out of sight rather than forced through. */
+/**
+ * A car stuck this long (a real jam) is recycled out of sight rather than forced through.
+ * Waiting for a light doesn't count: neither at the line nor queued behind someone who is.
+ */
 const STUCK_WAIT = 25;
+/** Braking a car accepts to stop for an amber light; harder than this and it goes through. */
+const AMBER_DECEL = 3.5;
 const EXIT_CLEAR = 9;
 
 const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.z * b.z;
@@ -109,10 +117,14 @@ const sameDir = (a: Vec2, b: Vec2) => dot(a, b) > 0.7;
 /**
  * Lane-following traffic, engine-agnostic. Cars follow the road graph, keep a safe gap to
  * whatever is ahead (other cars, the bus, pedestrians), and share each intersection one
- * direction at a time. Poses here are targets; the physics layer chases them.
+ * direction at a time. At traffic lights they also wait at the stop line on red (and on amber
+ * when they can stop comfortably). Poses here are targets; the physics layer chases them.
  */
 export class TrafficSim {
   cars: Car[] = [];
+  /** Seconds simulated: the clock the traffic lights run on. */
+  time = 0;
+  private lights: TrafficLights | null;
   private rng: Rng;
   /** Per junction: cars inside it, where each came from and where it's going. */
   private occupants = new Map<number, Map<number, { from: number; lane: number; next: number; nextLane: number }>>();
@@ -124,9 +136,10 @@ export class TrafficSim {
   constructor(
     private graph: RoadGraph,
     city: CityData,
-    opts: { seed: number; count: number; avoid?: { pos: Vec2; radius: number } },
+    opts: { seed: number; count: number; avoid?: { pos: Vec2; radius: number }; lights?: TrafficLights },
   ) {
     this.rng = new Rng(opts.seed);
+    this.lights = opts.lights ?? null;
     this.humps = graph.edges.map((e) =>
       city.features
         .filter((f) => f.kind === 'hump')
@@ -159,6 +172,7 @@ export class TrafficSim {
         honkCooldown: 0,
         hurry: 0,
         blocker: null,
+        held: false,
         generation: 0,
       };
       this.cars.push(car);
@@ -168,6 +182,7 @@ export class TrafficSim {
 
   step(dt: number, obstacles: Obstacle[]): TrafficEvent[] {
     const events: TrafficEvent[] = [];
+    this.time += dt;
     const driving = this.cars.filter((c) => c.state === 'driving');
     const others: Obstacle[] = [
       ...driving.map((c) => ({ id: `car${c.id}`, pos: c.pos, heading: c.heading, length: c.kind.length, width: c.kind.width, lift: this.liftOf(c) })),
@@ -276,6 +291,9 @@ export class TrafficSim {
       }
     }
     car.blocker = blocker;
+    // Queued behind a car waiting for a light: waiting for it too.
+    const ahead = blocker?.startsWith('car') ? this.cars[+blocker.slice(3)] : null;
+    car.held = !!ahead && ahead.held && car.speed < 1;
 
     if (car.turn) {
       vTarget = Math.min(vTarget, car.turn.speed);
@@ -289,7 +307,14 @@ export class TrafficSim {
       const exiting = car.next < 0;
       if (!exiting && this.graph.nodes[node].junction && car.reserved !== node) {
         const decide = Math.max(8, (car.speed * car.speed) / (2 * DECEL) + 4);
-        if (remaining - car.kind.length / 2 < decide) {
+        const line = this.lights?.approach(e.id);
+        const toLine = remaining - car.kind.length / 2 - (line ? e.len - line.s : 0);
+        if (line && this.stopsForLight(car, e, toLine)) {
+          // Red (or an amber we can stop for): front bumper at the stop line, and no waiting
+          // counted (no priority claims, no recycling as stuck).
+          vTarget = Math.min(vTarget, Math.sqrt(2 * DECEL * Math.max(0, toLine - 0.3)));
+          car.held = true;
+        } else if (toLine < decide) {
           if (this.canEnter(car, e, external)) this.reserve(car, node, e.id);
           else {
             // Stop with the front bumper at the line, not the middle of the car.
@@ -316,7 +341,7 @@ export class TrafficSim {
 
     // Honk at the bus if it's in the way.
     if (blocker && car.speed < 1) {
-      car.blockedTime += dt;
+      if (!car.held) car.blockedTime += dt;
       if (blocker === 'bus' && car.blockedTime > 1.5 && car.honkCooldown <= 0) {
         car.honkCooldown = 5;
         events.push({ type: 'honk', carId: car.id, pos: { ...car.pos } });
@@ -350,7 +375,12 @@ export class TrafficSim {
             car.wait += dt;
           }
         }
-        else if (this.graph.nodes[e.to].junction && car.reserved !== e.to && !this.canEnter(car, e, external)) {
+        else if (this.graph.nodes[e.to].junction && car.reserved !== e.to && this.stopsForLight(car, e, 0)) {
+          // Red, and we came in too fast to stop at the stop line: stop here instead.
+          car.s = e.len - 0.01;
+          car.speed = 0;
+          car.held = true;
+        } else if (this.graph.nodes[e.to].junction && car.reserved !== e.to && !this.canEnter(car, e, external)) {
           // Couldn't stop in time and the junction is busy: hold at the line.
           car.s = e.len - 0.01;
           car.speed = 0;
@@ -379,12 +409,23 @@ export class TrafficSim {
     return sameDir(a.endDir, b.dir) ? STRAIGHT_SPEED : TURN_SPEED;
   }
 
+  /**
+   * The light ahead says stop, `toLine` meters before the stop line (front bumper): on red, and on
+   * amber when we can still stop gently. Without a light, never.
+   */
+  private stopsForLight(car: Car, e: LaneEdge, toLine: number): boolean {
+    const light = this.lights?.state(e.id, this.time);
+    if (light === 'red') return true;
+    return light === 'amber' && toLine > 0 && (car.speed * car.speed) / (2 * AMBER_DECEL) < toLine;
+  }
+
   private canEnter(car: Car, e: LaneEdge, external: Obstacle[]): boolean {
     if (car.hurry > 0 && car.wait > 1) return true; // honked at: push in, Quito style
     const pri = this.priority.get(e.to);
     // One stream at a time: only cars from the same incoming edge share a junction, and never
-    // two from different lanes merging into the same exit lane.
-    if (pri && pri.car !== car.id && pri.edge !== e.id) return false;
+    // two from different lanes merging into the same exit lane. A car that claimed its turn
+    // and then got a red light gives it up until its green.
+    if (pri && pri.car !== car.id && pri.edge !== e.id && (this.lights?.state(pri.edge, this.time) ?? 'green') === 'green') return false;
     for (const o of this.occupants.get(e.to)?.values() ?? []) {
       if (o.from !== e.id) return false;
       if (o.lane !== car.lane && o.next === car.next && o.nextLane === car.nextLane) return false;
@@ -564,7 +605,7 @@ export class TrafficSim {
       );
       if (!free) continue;
       const dir = edgeDir(e, s);
-      Object.assign(car, { state: 'driving', edge: e.id, s, lane, offset: laneOffset(e, lane), pos: p, heading: Math.atan2(-dir.z, dir.x), speed: car.kind.vmax * 0.6, wait: 0, blockedTime: 0, turn: null });
+      Object.assign(car, { state: 'driving', edge: e.id, s, lane, offset: laneOffset(e, lane), pos: p, heading: Math.atan2(-dir.z, dir.x), speed: car.kind.vmax * 0.6, wait: 0, blockedTime: 0, held: false, turn: null });
       car.generation++;
       this.chooseNext(car);
       return;

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { generateCity } from '../src/world/procCity';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { PedestrianSim, PED_RECYCLE_RADIUS, type BusState } from '../src/gameplay/pedestrians';
+import { TrafficLights } from '../src/gameplay/trafficLights';
 import { distToSegment, pointInPolygon } from '../src/world/geom';
 import { RoadIndex } from '../src/world/roadIndex';
 import { forward, type CityData, type Vec2 } from '../src/world/cityData';
@@ -24,7 +25,28 @@ describe.each([
 ])('PedestrianSim (%s)', (_, city) => {
   const graph = buildRoadGraph(city);
   const junctions = graph.nodes.filter((n) => n.junction);
-  const sim = (seed: number, count: number) => new PedestrianSim(city, graph, { seed, count });
+  const lights = new TrafficLights(graph, city.signals ?? []);
+  const sim = (seed: number, count: number) => new PedestrianSim(city, graph, { seed, count, lights });
+
+  it('cross at traffic lights only while the cars crossing their way have a red', { timeout: 60_000 }, () => {
+    const s = sim(6, 150);
+    let waits = 0;
+    let crossings = 0;
+    const was = s.peds.map((p) => p.mode);
+    for (let t = 0; t < 60; t += DT) {
+      s.step(DT, farBus);
+      for (const p of s.peds) {
+        if (p.mode === 'wait' && was[p.id] !== 'wait') waits++;
+        if (p.mode === 'cross' && was[p.id] === 'wait') {
+          crossings++;
+          expect(lights.state(p.gate, s.time)).toBe('red');
+        }
+        was[p.id] = p.mode;
+      }
+    }
+    expect(waits).toBeGreaterThan(0);
+    expect(crossings).toBeGreaterThan(0);
+  });
 
   it('spawns walkers on sidewalks', () => {
     for (const p of sim(1, 60).peds) expect(onAsphalt(city, p.pos)).toBe(false);

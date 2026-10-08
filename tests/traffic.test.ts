@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from '../src/world/procCity';
 import { buildRoadGraph } from '../src/world/roadGraph';
+import { TrafficLights } from '../src/gameplay/trafficLights';
 import { TrafficSim, CAR_KINDS, RECYCLE_RADIUS, SPAWN_BEHIND_DIST, SPAWN_HIDDEN_DIST, type Obstacle, type TrafficEvent } from '../src/gameplay/traffic';
 import { distToPolyline, pointInPolygon } from '../src/world/geom';
 import { forward, right, type Vec2 } from '../src/world/cityData';
 
 const city = generateCity({ seed: 42 });
 const graph = buildRoadGraph(city);
+const lights = new TrafficLights(graph, city.signals ?? []);
 const DT = 1 / 30;
 
 function simulate(seconds: number, opts: { count?: number; seed?: number; obstacles?: Obstacle[] } = {}, each?: (sim: TrafficSim, ev: TrafficEvent[]) => void) {
-  const sim = new TrafficSim(graph, city, { seed: opts.seed ?? 1, count: opts.count ?? 30 });
+  const sim = new TrafficSim(graph, city, { seed: opts.seed ?? 1, count: opts.count ?? 30, lights });
   for (let t = 0; t < seconds; t += DT) {
     const ev = sim.step(DT, opts.obstacles ?? []);
     each?.(sim, ev);
@@ -151,10 +153,42 @@ describe('TrafficSim', () => {
     for (const [id, gen] of near) expect(sim.cars[id].generation).toBe(gen);
   });
 
+  it.each([1, 2])('waits at red lights, and nobody waiting is recycled as stuck (seed %i)', (seed) => {
+    const { entered, recycled, waited } = lightDiscipline(lights, simulate(0, { count: 36, seed }), 90);
+    expect(entered).toBe(0);
+    expect(recycled).toBe(0);
+    expect(waited).toBeGreaterThan(0);
+  });
+
   it('drives every kind at a sensible city speed', () => {
     for (const k of Object.values(CAR_KINDS)) expect(k.vmax * 3.6).toBeLessThan(65);
   });
 });
+
+/**
+ * Runs `sim` and counts cars that got into a junction against a red light (claimed it while
+ * their approach was red), cars recycled while waiting for a light, and seconds of waiting.
+ */
+function lightDiscipline(l: TrafficLights, sim: TrafficSim, seconds: number) {
+  let entered = 0;
+  let recycled = 0;
+  let waited = 0;
+  const reserved = sim.cars.map((c) => c.reserved);
+  const gen = sim.cars.map((c) => c.generation);
+  const held = sim.cars.map((c) => c.held);
+  for (let t = 0; t < seconds; t += DT) {
+    sim.step(DT, []);
+    sim.cars.forEach((c, i) => {
+      if (reserved[i] === null && c.reserved !== null && l.state(c.edge, sim.time) === 'red') entered++;
+      if (c.generation !== gen[i] && held[i]) recycled++;
+      if (c.held) waited += DT;
+      reserved[i] = c.reserved;
+      gen[i] = c.generation;
+      held[i] = c.held;
+    });
+  }
+  return { entered, recycled, waited };
+}
 
 function pose(sim: TrafficSim, i: number) {
   const c = sim.cars[i];
@@ -164,9 +198,10 @@ function pose(sim: TrafficSim, i: number) {
 describe('TrafficSim on La Mariscal (real map, one-way streets)', () => {
   const real: import('../src/world/cityData').CityData = JSON.parse(require('node:fs').readFileSync('data/cities/mariscal.json', 'utf8'));
   const g = buildRoadGraph(real);
+  const realLights = new TrafficLights(g, real.signals ?? []);
   const hulls = g.nodes.filter((n) => n.hull).map((n) => n.hull!);
   const run = (seed: number, seconds: number, each: (sim: TrafficSim) => void) => {
-    const sim = new TrafficSim(g, real, { seed, count: 50 });
+    const sim = new TrafficSim(g, real, { seed, count: 50, lights: realLights });
     sim.recycle({ pos: real.spawn.pos, heading: real.spawn.heading }, true);
     for (let t = 0; t < seconds; t += DT) {
       sim.step(DT, []);
@@ -200,5 +235,14 @@ describe('TrafficSim on La Mariscal (real map, one-way streets)', () => {
     expect(overlapsSeen).toBeLessThanOrEqual(20);
     const d = [...moved.values()].sort((a, b) => a - b);
     expect(d[Math.floor(d.length * 0.1)]).toBeGreaterThan(150); // 90% of cars keep moving
+  }, 60_000);
+
+  it('waits at red lights, and nobody waiting is recycled as stuck', () => {
+    const sim = new TrafficSim(g, real, { seed: 4, count: 50, lights: realLights });
+    sim.recycle({ pos: real.spawn.pos, heading: real.spawn.heading }, true);
+    const { entered, recycled, waited } = lightDiscipline(realLights, sim, 90);
+    expect(entered).toBe(0);
+    expect(recycled).toBe(0);
+    expect(waited).toBeGreaterThan(0);
   }, 60_000);
 });

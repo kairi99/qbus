@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MISSIONS, Missions, pickMissions, progressText, type MissionEvent } from '../src/gameplay/missions';
 
 const byId = (id: string) => MISSIONS.find((m) => m.id === id)!;
-const trick = (kind: 'drift' | 'air' | 'nearMiss' | 'knock' | 'speed', extra: Partial<{ cents: number; duration: number; chain: number }> = {}): MissionEvent => ({
+const trick = (kind: 'drift' | 'air' | 'nearMiss' | 'knock' | 'speed' | 'redLight', extra: Partial<{ cents: number; duration: number; chain: number }> = {}): MissionEvent => ({
   type: 'trick',
   kind,
   cents: 10,
@@ -65,7 +65,7 @@ describe('missions', () => {
     expect(ms.feed(trick('drift', { duration: 2.1 }))).toHaveLength(1);
   });
 
-  it('tracks combos, close calls, knocks, top speed and trick money', () => {
+  it('tracks combos, close calls, knocks, top speed, red lights and trick money', () => {
     const ms = new Missions([byId('combo'), byId('justas'), byId('piruetas')]);
     for (let i = 1; i <= 5; i++) ms.feed(trick('nearMiss', { chain: i, cents: 15 * i }));
     expect(ms.list.every((m) => m.done)).toBe(true);
@@ -74,6 +74,10 @@ describe('missions', () => {
     fast.feed(trick('speed'));
     fast.feed(trick('drift'));
     expect(fast.list[0].progress).toBe(1);
+    const reds = new Missions([byId('rojos')]);
+    for (let i = 0; i < 2; i++) reds.feed(trick('redLight'));
+    expect(reds.feed(trick('nearMiss'))).toEqual([]);
+    expect(reds.feed(trick('redLight')).map((m) => m.def.id)).toEqual(['rojos']);
     const money = new Missions([byId('piruetas')]);
     money.feed(trick('air', { cents: 40 }));
     expect(progressText(money.list[0])).toBe('$0.40/$1.00');
@@ -88,6 +92,7 @@ describe('missions', () => {
       trick('nearMiss'),
       trick('knock'),
       trick('speed'),
+      trick('redLight'),
     ];
     const ms = new Missions(MISSIONS);
     for (let i = 0; i < 10; i++) for (const e of events) ms.feed(e);

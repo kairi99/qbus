@@ -21,13 +21,15 @@ describe('Nitro', () => {
     expect(n.level).toBe(left);
   });
 
-  it('refills by drifting and close calls, up to full', () => {
+  it('refills by drifting, close calls and red lights, up to full', () => {
     const n = new Nitro();
     while (n.step(true, DT));
     for (let i = 0; i < 60; i++) n.drifting(DT);
     expect(n.level).toBeCloseTo(0.2, 2);
     n.nearMiss();
     expect(n.level).toBeCloseTo(0.4, 2);
+    n.redLight();
+    expect(n.level).toBeCloseTo(0.65, 2);
     n.nearMiss(10);
     expect(n.level).toBe(1);
   });

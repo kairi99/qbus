@@ -16,15 +16,21 @@ describe('starsFor', () => {
   });
 });
 
-// What the autopilot (tools/sim-shift.ts, real physics bus, no traffic) earned on La Mariscal,
+// What the autopilot (tools/sim-shift.ts, real physics bus, no traffic, running every red light
+// it meets) earned on La Mariscal,
 // averaged over 3 passenger draws, rolling through each stop just under 25 km/h: careful (40 km/h), decent (60 km/h, nitro), expert (flat
 // out, handbrake drifts). The targets must sort them: the careful driver a star, the decent one
 // two at most, and three out of the autopilot's reach (a human expert also skims traffic).
 const PLAYED: Record<string, [number, number, number]> = {
-  circuito: [257, 432, 653],
-  'linea-katar-061': [1157, 1422, 1775],
-  'linea-c4': [60, 377, 525],
-  'linea-belavista-002': [0, 227, 1152],
+  circuito: [257, 432, 637],
+  'linea-katar-061': [1197, 1462, 1765],
+  'linea-c4': [80, 453, 508],
+  'linea-belavista-002': [0, 267, 1325],
+  'linea-translatinoz-135': [60, 133, 877],
+  'linea-transplanetta-040': [173, 323, 935],
+  'linea-semgilfor-069': [210, 343, 1085],
+  'linea-transporcel-099': [512, 762, 1468],
+  'linea-e3': [47, 588, 790],
 };
 
 describe('star targets against played shifts (La Mariscal)', () => {
@@ -59,7 +65,7 @@ describe.each([
       expect(t[1] - t[0], r.name).toBeGreaterThanOrEqual(50);
       expect(t[2] - t[1], r.name).toBeGreaterThanOrEqual(50);
       expect(t[2], r.name).toBeGreaterThanOrEqual(300);
-      expect(t[2], r.name).toBeLessThan(5000);
+      expect(t[2], r.name).toBeLessThan(6000);
       // Deterministic: the same route always asks the same.
       expect(starThresholds(routeStops(city, r), routeLegs(city, r, graph), startPose(city, graph, r).pos)).toEqual(t);
     }

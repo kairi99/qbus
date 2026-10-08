@@ -4,12 +4,14 @@ export const NITRO_DURATION = 1.5;
 const DRIFT_FILL_PER_SEC = 0.2;
 /** Tank refilled by each close call with a car (or a pedestrian diving away). */
 const NEAR_MISS_FILL = 0.2;
+/** Tank refilled by each red light run. */
+const RED_LIGHT_FILL = 0.25;
 /** A new burst needs at least half a tank (no tapping it on fumes); a burst in progress runs dry. */
 export const MIN_TO_START = 0.5;
 
 /**
  * Nitro tank: starts full, burns out fast while held, and only refills by driving recklessly
- * (drifting and close calls), never by waiting.
+ * (drifting, close calls and running red lights), never by waiting.
  */
 export class Nitro {
   /** 0..1 */
@@ -35,6 +37,10 @@ export class Nitro {
 
   nearMiss(count = 1): void {
     this.fill(NEAR_MISS_FILL * count);
+  }
+
+  redLight(): void {
+    this.fill(RED_LIGHT_FILL);
   }
 
   reset(): void {

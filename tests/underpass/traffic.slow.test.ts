@@ -6,6 +6,7 @@
 import { beforeAll, describe, expect } from 'vitest';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import { TrafficSim } from '../../src/gameplay/traffic';
+import { TrafficLights } from '../../src/gameplay/trafficLights';
 import { TrafficBodies, laneSurface } from '../../src/gameplay/trafficBodies';
 import { PHYSICS_STEP } from '../../src/physics/world';
 import { BusPhysics } from '../../src/vehicle/bus';
@@ -18,14 +19,11 @@ import { TRAFFIC } from './thresholds';
 
 // Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS): the test's own
 // first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
-// Same bug as G2 in drive.slow.test.ts: Av. Patria eastbound's down-ramp deck (#358) is overlapped
-// 0.2–0.35 m higher by the westbound up-ramp (#401) just before their joint with the Puente del
-// Guambra, so a car on #358 there is under #401's slab. Seen once the traffic's dice changed
-// (Av. América's northbound carriageway became drivable, 2026-10-08).
-known({
-  "traffic rides at the road's height in bridge Av. Patria @(-658,290)":
-    'seed 2 car on e517 (Av. Patria #358) at (-631.8, 322.1) sunk 0.35 m: under the overlapping westbound up-ramp deck (#401) at the joint with the Puente del Guambra',
-});
+// (G2 in drive.slow.test.ts, Av. Patria eastbound's down-ramp deck (#358) overlapped 0.2–0.35 m
+// higher by the westbound up-ramp (#401) at the Puente del Guambra joint, was also seen here as a
+// sunk car on e517, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
+// no car happens to be there. The bug is still open; it's tracked by G2.)
+known({});
 
 const LIST = 8;
 const base = cityAndCatalog();
@@ -55,13 +53,14 @@ function run(s: Structure): Run {
   const onStructure = new Set(s.edges);
   const r: Run = { through: new Map(s.passages.map((p) => [p.id, 0])), stuck: [], heights: [], overlaps: [], released: [] };
   for (const seed of TRAFFIC.SEEDS) {
-    const sim = new TrafficSim(graph, city, { seed, count: TRAFFIC.CARS });
+    const sim = new TrafficSim(graph, city, { seed, count: TRAFFIC.CARS, lights: new TrafficLights(graph, city.signals ?? []) });
     sim.setBudget(TRAFFIC.CARS, s.center);
     sim.recycle({ pos: s.center, heading: 0 }, true);
     const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim, world));
     const prevEdge = sim.cars.map((c) => c.edge);
     const prevState = sim.cars.map((c) => c.state);
     const slow = sim.cars.map(() => 0);
+    const exited = new Set<number>();
     let sample = 0;
     try {
       for (let t = 0; t < TRAFFIC.SECONDS; t += PHYSICS_STEP) {
@@ -75,10 +74,19 @@ function run(s: Structure): Run {
           if (c.state === 'free' && prevState[i] === 'driving') r.released.push(`seed ${seed} car ${i} at ${fmt(c.pos)} t ${t.toFixed(1)} s`);
           if (c.state === 'driving' && prevState[i] === 'driving' && c.edge !== prevEdge[i])
             for (const p of s.passages) if (prevEdge[i] === p.extreme.edge) r.through.set(p.id, r.through.get(p.id)! + 1);
+          // A passage that leads off the map ends at the exit line, where cars wait out of the
+          // player's sight (below): getting there is getting through.
+          if (c.state === 'driving' && c.next < 0 && c.s > graph.edges[c.edge].len - 0.5 && !exited.has(i))
+            for (const p of s.passages)
+              if (c.edge === p.extreme.edge) {
+                exited.add(i);
+                r.through.set(p.id, r.through.get(p.id)! + 1);
+              }
           // A car leaving the map waits at the line until the player can't see it, by design: with
           // the "player" parked at the structure that can take a while, so exits don't count.
           const inside = c.state === 'driving' && !c.turn && c.next >= 0 && onStructure.has(c.edge);
-          slow[i] = inside && c.speed < 0.3 ? slow[i] + PHYSICS_STEP : 0;
+          // Waiting for a light is not being stuck.
+          slow[i] = inside && !c.held && c.speed < 0.3 ? slow[i] + PHYSICS_STEP : 0;
           if (slow[i] > TRAFFIC.STUCK_S && slow[i] - PHYSICS_STEP <= TRAFFIC.STUCK_S) r.stuck.push(`seed ${seed} car ${i} on e${c.edge} at ${fmt(c.pos)} t ${t.toFixed(1)} s`);
           prevEdge[i] = c.edge;
           prevState[i] = c.state;

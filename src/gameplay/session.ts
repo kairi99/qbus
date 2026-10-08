@@ -26,6 +26,8 @@ import type { RoadGraph } from '../world/roadGraph';
 import { groundHeightAt, inPlayArea, nearestRoad, terrainAt } from '../world/cityData';
 import { pointInPolygon } from '../world/geom';
 import { TrafficSim, type Obstacle } from './traffic';
+import { RedLightRunner, TrafficLights } from './trafficLights';
+import type { SignalLamps } from '../world/signalBuilder';
 import { TrafficBodies, laneSurface } from './trafficBodies';
 import type { RoadPose } from '../world/roadSnap';
 import { PedestrianSim } from './pedestrians';
@@ -48,6 +50,8 @@ export interface SessionDeps {
   city: CityData;
   bus: BusPhysics;
   props: PropSystem;
+  /** The traffic light lamps built with the city (`buildCity`). */
+  signals?: SignalLamps;
   audio: BusAudio;
   hudRoot: HTMLElement;
   graph: RoadGraph;
@@ -71,7 +75,7 @@ export class GameSession {
   /** Money for 1, 2 and 3 stars on this route (null in free roam). */
   readonly stars: StarThresholds | null = null;
   private wasBoosting = false;
-  /** Starts full; drifting and close calls refill it. */
+  /** Starts full; drifting, close calls and red lights refill it. */
   readonly nitro = new Nitro();
   private nearMiss: NearMissDetector;
   private passengers: PassengersView;
@@ -91,6 +95,10 @@ export class GameSession {
   private startedFlag = false;
   private start0: RoadPose;
   readonly traffic: TrafficSim;
+  /** Signals at the city's lit junctions, on the traffic's clock. */
+  readonly lights: TrafficLights;
+  private redLights: RedLightRunner;
+  private redsRun = 0;
   readonly trafficBodies: TrafficBodies;
   readonly peds: PedestrianSim;
   private trafficView: TrafficView;
@@ -118,13 +126,15 @@ export class GameSession {
     if (d.route) this.stars = starThresholds(routeStops(d.city, d.route), routeLegs(d.city, d.route, d.graph), this.start0.pos);
     const spawn = this.start0.pos;
     const graph = d.graph;
-    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 } });
+    this.lights = new TrafficLights(graph, d.city.signals ?? []);
+    this.redLights = new RedLightRunner(this.lights);
+    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 }, lights: this.lights });
     this.traffic.setBudget(this.budget, spawn);
     this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic, d.world));
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
     this.nearMiss = new NearMissDetector(d.world, d.bus, (c) => this.trafficBodies.isCar(c));
     this.trafficView = new TrafficView(d.scene, this.traffic, this.trafficBodies);
-    this.peds = new PedestrianSim(d.city, graph, { seed: 5, count: PEDESTRIANS });
+    this.peds = new PedestrianSim(d.city, graph, { seed: 5, count: PEDESTRIANS, lights: this.lights });
     const focus = { pos: spawn, heading: this.start0.heading };
     this.traffic.recycle(focus, true);
     this.peds.recycle(focus, true);
@@ -226,8 +236,14 @@ export class GameSession {
     const t0 = bus.body.translation();
     const hits = this.trafficBodies.afterStep(dt, bus.body.collider(0), { x: t0.x, z: t0.z });
     if (hits.length) this.say('carHit', 0.7);
+    // Front bumper over a stop line on red (free roam too: it refills the nitro).
+    const f = bus.preset.body.length / 2;
+    const front = { x: t0.x + Math.cos(bus.heading) * f, z: t0.z - Math.sin(bus.heading) * f };
+    this.redsRun += this.redLights.update(front, bus.heading, bus.roadHeight() - terrainAt(this.d.city, front), this.traffic.time).length;
     if (!this.startedFlag || this.game?.over) {
       this.dives = 0;
+      // Before the shift starts (or after it ends) a red light still fills the tank.
+      for (; this.redsRun > 0; this.redsRun--) this.nitro.redLight();
       return;
     }
     const tricks = this.scorer.update({
@@ -237,8 +253,10 @@ export class GameSession {
       airborne: bus.wheelsOnGround === 0,
       nearMisses: this.nearMiss.update(dt) + this.dives,
       propsKnocked: this.knocked,
+      redLights: this.redsRun,
     });
     this.knocked = 0;
+    this.redsRun = 0;
     this.dives = 0;
     if (this.scorer.sliding) this.nitro.drifting(dt);
     for (const t of tricks) this.onTrick(t);
@@ -255,6 +273,7 @@ export class GameSession {
     const bus = this.d.bus;
     this.clock += dt;
     this.trafficView.sync();
+    this.d.signals?.update(this.lights, this.traffic.time);
     this.pedView.sync(this.clock);
     // People may only appear or vanish off-screen (or far away).
     this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -303,6 +322,12 @@ export class GameSession {
 
   private onTrick(t: TrickEvent): void {
     if (t.kind === 'nearMiss') this.nitro.nearMiss();
+    if (t.kind === 'redLight') {
+      this.nitro.redLight();
+      // The drivers with the green lean on their horns.
+      this.d.audio.cue('carHorn', 0.8);
+      this.say('driverAngry', 0.5);
+    }
     if (t.kind === 'crash') {
       this.d.audio.cue('crash');
       // Rammed the roadworks at the edge of the map.

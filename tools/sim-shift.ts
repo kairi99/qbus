@@ -1,6 +1,8 @@
 /**
  * Plays route shifts headless with an autopilot: the real physics bus on the real city, under
  * the real RouteGame, TrickScorer, Nitro and Missions rules (no traffic, so no close calls).
+ * The traffic lights run on the shift's clock and the autopilot ignores them: every red it
+ * happens to cross pays like a player's (`reds` counts them).
  * Three driver profiles (casual, decent, expert) give a feel for what shifts earn, to check
  * the star targets against. Usage: npx tsx tools/sim-shift.ts [profiles|casual,decent,expert] [route ids|all] [seeds] [zone]
  */
@@ -10,7 +12,7 @@ import { createWorld, initRapier, PHYSICS_STEP } from '../src/physics/world';
 import { BusPhysics } from '../src/vehicle/bus';
 import type { BusPreset } from '../src/vehicle/busPreset';
 import { buildCity } from '../src/world/cityBuilder';
-import { type CityData, groundHeightAt, type Vec2 } from '../src/world/cityData';
+import { type CityData, groundHeightAt, terrainAt, type Vec2 } from '../src/world/cityData';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { generateCity } from '../src/world/procCity';
 import { Navigator, type NavPath } from '../src/gameplay/navigation';
@@ -20,6 +22,7 @@ import { TrickScorer } from '../src/gameplay/scoring';
 import { Nitro } from '../src/gameplay/nitro';
 import { Missions, pickMissions, type MissionEvent } from '../src/gameplay/missions';
 import { starThresholds } from '../src/gameplay/stars';
+import { RedLightRunner, TrafficLights } from '../src/gameplay/trafficLights';
 
 const popular = JSON.parse(readFileSync('data/buses/popular.json', 'utf8')) as BusPreset;
 const zone = process.argv[5] ?? 'mariscal';
@@ -27,6 +30,7 @@ const city: CityData = zone === 'grid' ? generateCity({ seed: 42 }) : JSON.parse
 if (city.terrain) city.terrain.scale = 1;
 const graph = buildRoadGraph(city);
 const nav = new Navigator(graph);
+const lights = new TrafficLights(graph, city.signals ?? []);
 
 interface Profile {
   /** Top cruising speed, m/s. */
@@ -57,8 +61,9 @@ function run(route: RouteDef, prof: Profile, seed: number) {
   const scorer = new TrickScorer();
   const nitro = new Nitro();
   const missions = new Missions(pickMissions(seed * 31 + 7));
+  const runner = new RedLightRunner(lights);
   const legs = routeLegs(city, route, graph);
-  const r = { trick: 0, mission: 0, fare: 0, fast: 0, ok: 0, slow: 0, secs: 0, stops: 0, meters: 0, lastArrive: 0 };
+  const r = { reds: 0, trick: 0, mission: 0, fare: 0, fast: 0, ok: 0, slow: 0, secs: 0, stops: 0, meters: 0, lastArrive: 0 };
   const feed = (e: MissionEvent) => {
     for (const m of missions.feed(e)) {
       game.addCents(m.def.reward);
@@ -148,7 +153,14 @@ function run(route: RouteDef, prof: Profile, seed: number) {
     world.step();
     if (nitro.active && !wasBoost) feed({ type: 'nitro' });
     wasBoost = nitro.active;
-    const tricks = scorer.update({ dt: PHYSICS_STEP, speed: bus.speed, slipAngle: bus.slipAngle, airborne: bus.wheelsOnGround === 0, nearMisses: 0, propsKnocked: 0 });
+    const b = bus.body.translation();
+    const half = popular.body.length / 2;
+    const front = { x: b.x + Math.cos(bus.heading) * half, z: b.z - Math.sin(bus.heading) * half };
+    // The lights' clock: the shift's (traffic starts with the session, a second before the bus moves).
+    const reds = runner.update(front, bus.heading, bus.roadHeight() - terrainAt(city, front), r.secs + 1).length;
+    r.reds += reds;
+    const tricks = scorer.update({ dt: PHYSICS_STEP, speed: bus.speed, slipAngle: bus.slipAngle, airborne: bus.wheelsOnGround === 0, nearMisses: 0, propsKnocked: 0, redLights: reds });
+    if (reds) nitro.redLight();
     if (scorer.sliding) nitro.drifting(PHYSICS_STEP);
     for (const t of tricks) {
       if (t.kind === 'crash') {
@@ -192,7 +204,7 @@ async function main() {
       const res = seeds.map((s) => run(route, PROFILES[w], s));
       const avg = (k: keyof (typeof res)[number]) => res.reduce((s, x) => s + x[k], 0) / res.length;
       console.log(
-        `${w.padEnd(7)} ${$(avg('cents'))} (fares ${$(avg('fare'))}, tricks ${$(avg('trick'))}, missions ${$(avg('mission'))}) ` +
+        `${w.padEnd(7)} ${$(avg('cents'))} (fares ${$(avg('fare'))}, tricks ${$(avg('trick'))} with ${avg('reds').toFixed(1)} reds, missions ${$(avg('mission'))}) ` +
           `${avg('delivered').toFixed(1)} pax, ${avg('secs').toFixed(0)} s, ${avg('stops').toFixed(1)} stops (fast ${avg('fast').toFixed(1)}, ok ${avg('ok').toFixed(1)}, slow ${avg('slow').toFixed(1)}), pace ${avg('pace').toFixed(1)} m/s; ` +
           `each ${res.map((x) => $(x.cents)).join(' ')}`,
       );
