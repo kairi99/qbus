@@ -84,7 +84,7 @@ for (const [city, url] of SHIFTS) test(`a shift on ${city}: start, pick up, drop
     m.progress = m.def.goal - 1e-6;
     // Whatever the mission, one of these events moves it on.
     const events = [{ type: 'nitro' }, { type: 'fare', rating: 'fast' }, { type: 'arrive', rating: 'fast' }, { type: 'trick', kind: 'drift', cents: 100, duration: 3, chain: 5 }];
-    for (const k of ['nearMiss', 'knock', 'speed']) events.push({ type: 'trick', kind: k, cents: 100, chain: 5 } as any);
+    for (const k of ['nearMiss', 'knock', 'speed', 'redLight']) events.push({ type: 'trick', kind: k, cents: 100, chain: 5 } as any);
     for (const e of events) if (!m.done) session.mission(e);
     return { done: m.done, paid: session.game.cents - before, reward: m.def.reward };
   });
