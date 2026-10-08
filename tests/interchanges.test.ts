@@ -7,6 +7,7 @@ import type { CityData } from '../src/world/cityData';
 import { DEFAULT_HILLS } from '../src/world/loadCity';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { TrafficSim } from '../src/gameplay/traffic';
+import { TrafficLights } from '../src/gameplay/trafficLights';
 import { TrafficBodies, laneSurface } from '../src/gameplay/trafficBodies';
 import { BusPhysics } from '../src/vehicle/bus';
 import type { BusPreset } from '../src/vehicle/busPreset';
@@ -28,7 +29,7 @@ describe('traffic through the bridges and underpasses', () => {
     buildCity(city, world, new THREE.Scene(), graph);
     // The bus is parked far away: nothing but the road itself can knock a car off its lane.
     const bus = new BusPhysics(world, popular as BusPreset, { x: 2000, y: 200, z: 2000, heading: 0 });
-    const sim = new TrafficSim(graph, city, { seed: 3, count: 40 });
+    const sim = new TrafficSim(graph, city, { seed: 3, count: 40, lights: new TrafficLights(graph, city.signals ?? []) });
     sim.setBudget(40, focus);
     sim.recycle({ pos: focus, heading: 0 }, true);
     const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim, world));

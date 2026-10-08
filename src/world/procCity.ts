@@ -204,6 +204,11 @@ export function generateCity(opts: ProcCityOptions): CityData {
     heading: spawnHeading,
   };
 
+  // Traffic lights where an avenue crosses another road (not on the edge of the grid).
+  const signals: Vec2[] = [];
+  for (let i = 1; i < blocksX; i++)
+    for (let j = 1; j < blocksZ; j++) if (i === ax.avenue || j === az.avenue) signals.push({ x: ax.centers[i], z: az.centers[j] });
+
   return {
     name: `Quito procedural #${seed}`,
     roads,
@@ -213,6 +218,7 @@ export function generateCity(opts: ProcCityOptions): CityData {
     features,
     props,
     trees,
+    signals: signals.map((pos) => ({ pos })),
     spawn,
     bounds: { min: { x: xMin, z: zMin }, max: { x: xMax, z: zMax } },
   };

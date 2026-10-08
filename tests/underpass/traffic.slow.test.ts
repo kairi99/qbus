@@ -6,6 +6,7 @@
 import { beforeAll, describe, expect } from 'vitest';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import { TrafficSim } from '../../src/gameplay/traffic';
+import { TrafficLights } from '../../src/gameplay/trafficLights';
 import { TrafficBodies, laneSurface } from '../../src/gameplay/trafficBodies';
 import { PHYSICS_STEP } from '../../src/physics/world';
 import { BusPhysics } from '../../src/vehicle/bus';
@@ -48,7 +49,7 @@ function run(s: Structure): Run {
   const onStructure = new Set(s.edges);
   const r: Run = { through: new Map(s.passages.map((p) => [p.id, 0])), stuck: [], heights: [], overlaps: [], released: [] };
   for (const seed of TRAFFIC.SEEDS) {
-    const sim = new TrafficSim(graph, city, { seed, count: TRAFFIC.CARS });
+    const sim = new TrafficSim(graph, city, { seed, count: TRAFFIC.CARS, lights: new TrafficLights(graph, city.signals ?? []) });
     sim.setBudget(TRAFFIC.CARS, s.center);
     sim.recycle({ pos: s.center, heading: 0 }, true);
     const bodies = new TrafficBodies(world, sim, laneSurface(city, graph, sim, world));
@@ -71,7 +72,8 @@ function run(s: Structure): Run {
           // A car leaving the map waits at the line until the player can't see it, by design: with
           // the "player" parked at the structure that can take a while, so exits don't count.
           const inside = c.state === 'driving' && !c.turn && c.next >= 0 && onStructure.has(c.edge);
-          slow[i] = inside && c.speed < 0.3 ? slow[i] + PHYSICS_STEP : 0;
+          // Waiting for a light is not being stuck.
+          slow[i] = inside && !c.held && c.speed < 0.3 ? slow[i] + PHYSICS_STEP : 0;
           if (slow[i] > TRAFFIC.STUCK_S && slow[i] - PHYSICS_STEP <= TRAFFIC.STUCK_S) r.stuck.push(`seed ${seed} car ${i} on e${c.edge} at ${fmt(c.pos)} t ${t.toFixed(1)} s`);
           prevEdge[i] = c.edge;
           prevState[i] = c.state;

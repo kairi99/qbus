@@ -1,5 +1,5 @@
 import { Rng } from '../../core/rng';
-import type { Building, CityData, Feature, Horizon, Prop, Road, Stop, Vec2 } from '../cityData';
+import type { Building, CityData, Feature, Horizon, Prop, Road, Stop, TrafficSignal, Vec2 } from '../cityData';
 import { forward, inPlayArea, right, stopZone } from '../cityData';
 import { distToPolyline, pointInPolygon, polygonToPolylineDistance } from '../geom';
 import { type Terrain, smoothHeights } from '../terrain';
@@ -269,6 +269,7 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
     walls,
     horizon,
     landmarks,
+    signals: importSignals(osm, proj.toXZ, (p) => inside(p), roads),
     attribution: '© OpenStreetMap contributors (ODbL); elevation: Copernicus GLO-30 DEM',
   };
 }
@@ -531,6 +532,33 @@ function importStops(
     });
   }
   return stops;
+}
+
+/** OSM `traffic_signals` values for lights that only stop traffic for a mid-block crossing. */
+const CROSSING_ONLY = new Set(['crossing', 'crossing_only', 'pedestrian_crossing', 'pedestrian']);
+
+/**
+ * Traffic signals for cars, at the level of the road whose node they're on (a light down in an
+ * underpass is not the street's over it). Which junction each one controls is decided at run
+ * time from the road graph (`gameplay/trafficLights.ts`).
+ */
+function importSignals(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, inside: (p: Vec2) => boolean, roads: Road[]): TrafficSignal[] {
+  const out: TrafficSignal[] = [];
+  for (const e of osm.elements) {
+    if (e.type !== 'node' || e.tags?.highway !== 'traffic_signals' || CROSSING_ONLY.has(e.tags.traffic_signals ?? '')) continue;
+    const p = toXZ(e.lat!, e.lon!);
+    if (!inside(p) || out.some((s) => Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < 1)) continue;
+    // The road the node belongs to: its way runs right through it (simplified by 0.4 m at most).
+    let best = Infinity;
+    let lift = 0;
+    for (const r of roads) {
+      const { s, d } = projectOnRoad(r, p);
+      if (d < best) (best = d), (lift = liftAlong(r, s));
+    }
+    if (best > 2) continue; // on a footway or a road we don't drive
+    out.push({ pos: { x: round(p.x, 2), z: round(p.z, 2) }, ...(Math.abs(lift) > 0.3 ? { lift: round(lift, 1) } : {}) });
+  }
+  return out;
 }
 
 /** Street furniture along the sidewalks: trash cans, fruit stands, the odd cluster of cones. */
