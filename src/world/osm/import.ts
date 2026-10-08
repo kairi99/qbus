@@ -49,6 +49,8 @@ export interface ImportOptions {
   smoothing?: number;
   /** OSM way ids to leave out (known mapping errors). */
   dropWays?: number[];
+  /** One-way OSM way ids drawn backwards (known mapping errors): traffic runs against their node order. */
+  reverseWays?: number[];
 }
 
 const SIDEWALK = 3;
@@ -121,7 +123,8 @@ const EDGE_INSET = 70;
 export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra: ExtraData = {}): CityData {
   const { routes: routesOsm, stations: stationsOsm, areas: areasOsm } = extra;
   const drop = new Set(opts.dropWays ?? []);
-  const osm = drop.size ? { ...source, elements: source.elements.filter((e) => !(e.type === 'way' && drop.has(e.id))) } : source;
+  const reverse = new Set(opts.reverseWays ?? []);
+  const osm = drop.size || reverse.size ? { ...source, elements: source.elements.filter((e) => !(e.type === 'way' && drop.has(e.id))).map((e) => (e.type === 'way' && reverse.has(e.id) ? reversedWay(e) : e)) } : source;
   const rng = new Rng(opts.seed ?? 1);
   const proj = makeProjection(opts.bbox);
   const sw = proj.toXZ(opts.bbox[0], opts.bbox[1]);
@@ -310,6 +313,12 @@ function inFootprint(p: Vec2, c: Vec2, heading: number, halfL: number, halfW: nu
   const dx = p.x - c.x;
   const dz = p.z - c.z;
   return Math.abs(dx * f.x + dz * f.z) <= halfL && Math.abs(dx * f.z - dz * f.x) <= halfW;
+}
+
+/** A way with its nodes in the opposite order (a one-way drawn backwards). */
+function reversedWay(e: OsmElement): OsmElement {
+  if (e.tags?.oneway !== 'yes') throw new Error(`reverseWays: way ${e.id} is not oneway=yes`);
+  return { ...e, ...(e.geometry ? { geometry: [...e.geometry].reverse() } : {}) };
 }
 
 function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bounds: { min: Vec2; max: Vec2 }): Road[] {

@@ -7,6 +7,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fromFile } from 'geotiff';
 import { HORIZON_HALF, importOsm, makeProjection, type Dem } from '../src/world/osm/import';
+import { sameWayStretches } from '../src/world/osm/carriageways';
 import { ZONES } from './zones';
 
 const zone = ZONES[process.argv[2] ?? 'mariscal'];
@@ -46,10 +47,16 @@ const extra = (kind: string) => {
   const file = zone.osm.replace('.osm.json', `.${kind}.json`);
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : undefined;
 };
-const city = importOsm(osm, dem, { name: zone.name, bbox: zone.bbox, seed: 7, dropWays: zone.dropWays }, { routes, stations: extra('stations'), areas: extra('areas'), horizonDem });
+const city = importOsm(osm, dem, { name: zone.name, bbox: zone.bbox, seed: 7, dropWays: zone.dropWays, reverseWays: zone.reverseWays }, { routes, stations: extra('stations'), areas: extra('areas'), horizonDem });
 const { toXZ } = makeProjection(zone.bbox);
 if (zone.monuments) city.monuments = zone.monuments.map((m) => ({ kind: m.kind, name: m.name, pos: toXZ(m.lat, m.lon) }));
 const ms = performance.now() - t0;
+// A divided avenue whose carriageways run the same way side by side is a way drawn backwards
+// in OSM (see `reverseWays`), inside the play area at least (outside it, side lanes too).
+const pa = city.playArea!;
+const inPlay = (p: { x: number; z: number }) => p.x >= pa.min.x && p.x <= pa.max.x && p.z >= pa.min.z && p.z <= pa.max.z;
+for (const w of sameWayStretches(city.roads).filter((w) => inPlay(w.from) || inPlay(w.to)))
+  console.warn(`both carriageways of ${w.name} run the same way for ${w.length} m near (${w.from.x.toFixed(0)}, ${w.from.z.toFixed(0)}): a one-way drawn backwards? (npx tsx tools/carriageways.ts)`);
 
 const out = `data/cities/${zone.id}.json`;
 writeFileSync(out, JSON.stringify(city));
