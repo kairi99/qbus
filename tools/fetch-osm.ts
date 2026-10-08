@@ -1,6 +1,6 @@
 /**
  * Downloads a zone from Overpass into data/raw/:
- * - <zone>.osm.json: roads, buildings, stops, parks and trees
+ * - <zone>.osm.json: roads, buildings, stops, traffic signals, parks and trees
  * - <zone>.routes.json: bus/trolleybus route relations with their geometry clipped to the zone
  * - <zone>.stations.json: stop positions of those routes (with names, for BRT stations) and
  *   Metro de Quito stations/entrances
@@ -25,6 +25,7 @@ const QUERIES: Record<string, { file: string; query: string }> = {
   way["leisure"~"^(park|garden|pitch)$"](${b});
   way["landuse"~"^(grass|recreation_ground)$"](${b});
   node["highway"="bus_stop"](${b});
+  node["highway"="traffic_signals"](${b});
   node["natural"="tree"](${b});
 );
 out geom;`,
