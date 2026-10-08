@@ -15,7 +15,7 @@ import { buildRoadGraph } from '../src/world/roadGraph';
 import { generateCity } from '../src/world/procCity';
 import { Navigator, type NavPath } from '../src/gameplay/navigation';
 import { type RouteDef, routeLegs, routeStops, routesFor, startPose } from '../src/gameplay/routes';
-import { RouteGame } from '../src/gameplay/routeGame';
+import { RouteGame, STOP_SPEED } from '../src/gameplay/routeGame';
 import { TrickScorer } from '../src/gameplay/scoring';
 import { Nitro } from '../src/gameplay/nitro';
 import { Missions, pickMissions, type MissionEvent } from '../src/gameplay/missions';
@@ -120,7 +120,9 @@ function run(route: RouteDef, prof: Profile, seed: number) {
       for (let i = bi; i < pts.length - 1; i++) left += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
       toStop = dStop < 30 ? dStop : left;
     }
-    target = Math.min(target, Math.sqrt(2 * prof.brake * Math.max(0, toStop - 3)));
+    // Rolls through the stop just under the speed passengers can get on at.
+    const vStop = STOP_SPEED * 0.8;
+    target = Math.min(target, Math.sqrt(vStop * vStop + 2 * prof.brake * Math.max(0, toStop - 3)));
     // Pure pursuit along the legal path.
     const look = Math.max(7, Math.abs(speed) * 0.7);
     const aim = dStop < look || !path ? zone : nav.guidePoint(path, here, look);

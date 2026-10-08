@@ -63,6 +63,9 @@ const MAX_SPEED = 30;
 const RECOVER_AFTER = 5;
 const RECOVER_FORCE = 12;
 const RESPAWN_DISTANCE = 90;
+/** Room kept clear around the bus after an R reset (m), and how far above or below a car still counts as on its level. */
+const CLEAR_MARGIN = 1.5;
+const CLEAR_LEVEL = 3;
 
 /**
  * Physics side of traffic. While driving, each car is a dynamic box steered by velocity toward
@@ -156,6 +159,32 @@ export class TrafficBodies {
       }
     });
     return [...hit];
+  }
+
+  /**
+   * Sends every car (in traffic or wrecked) on or next to a spot far away, out of sight: the R
+   * reset drops the bus there, and a car under it would wedge it. Only cars on that spot's level
+   * count (not the street over an underpass). Returns how many were moved.
+   */
+  clearSpot(spot: { x: number; y: number; z: number; heading: number }, length: number, width: number): number {
+    const fx = Math.cos(spot.heading);
+    const fz = -Math.sin(spot.heading);
+    let moved = 0;
+    this.sim.cars.forEach((c, i) => {
+      if (c.state === 'parked') return;
+      const t = this.bodies[i].translation();
+      if (Math.abs(t.y - spot.y) > CLEAR_LEVEL) return;
+      const rx = t.x - spot.x;
+      const rz = t.z - spot.z;
+      // The car's longest half-size covers it at any angle, plus some room to drive off.
+      const r = c.kind.length / 2 + CLEAR_MARGIN;
+      if (Math.abs(rx * fx + rz * fz) > length / 2 + r || Math.abs(rz * fx - rx * fz) > width / 2 + r) return;
+      this.sim.respawn(i, spot, RESPAWN_DISTANCE);
+      if (this.sim.cars[i].state === 'driving') this.drive(i);
+      else this.bodies[i].setEnabled(false); // no free spot: parked instead
+      moved++;
+    });
+    return moved;
   }
 
   isCar(c: RAPIER.Collider): boolean {

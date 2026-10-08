@@ -7,8 +7,8 @@ export const FARE_CENTS = 35;
 export const START_TIME = 90;
 /** Stop within this distance of the zone center to service a stop. */
 export const ZONE_RADIUS = 7;
-/** Below this speed (m/s) inside the zone the stop is served. */
-export const STOP_SPEED = 2;
+/** Passengers get on and off below this speed (m/s): 25 km/h, a Quito bus barely stops. */
+export const STOP_SPEED = 25 / 3.6;
 const APPROACH_DIST = 60;
 const MIN_STOP_SPACING = 90;
 /** Straight-line distance undercounts street distance on a grid. */
