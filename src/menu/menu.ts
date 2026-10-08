@@ -10,6 +10,7 @@ import { RADIO_OFF, STATIONS } from '../core/radioStations';
 import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
 import { MISSIONS } from '../gameplay/missions';
 import { money, starText, targetsText } from '../ui/gameHud';
+import { MenuSounds } from './menuSounds';
 
 export interface Selection {
   mode: 'route' | 'free';
@@ -40,12 +41,15 @@ export class Menu {
   private root: HTMLElement;
   private settings: Settings;
   private cities = new Map<string, Promise<CityData>>();
+  private sounds: MenuSounds;
 
   constructor(host: HTMLElement) {
     this.settings = loadSettings();
     this.root = document.createElement('div');
     this.root.className = 'mn';
     host.appendChild(this.root);
+    this.sounds = new MenuSounds(this.root, () => this.settings.volume);
+    if (import.meta.env.DEV) (window as any).__qbusMenu = { sounds: this.sounds };
     this.title();
   }
 
@@ -174,7 +178,9 @@ export class Menu {
     );
     this.on('[data-go="play"]', () => {
       saveSettings(this.settings);
-      location.search = playUrl(this.settings);
+      // Leave a moment for the horn (the game starts its own audio).
+      const url = playUrl(this.settings);
+      setTimeout(() => (location.search = url), this.sounds.leaveDelay);
     });
     this.showRoutes();
     this.root.querySelector<HTMLElement>('[data-mode][aria-checked="true"]')?.focus();
