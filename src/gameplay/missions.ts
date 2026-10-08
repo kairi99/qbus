@@ -62,7 +62,7 @@ export const MISSIONS: MissionDef[] = [
   { id: 'rapidazo', text: 'Anda 6 s a más de 80 km/h', goal: 3, reward: 50, next: counting(isTrick('speed')) },
   {
     id: 'piruetas',
-    text: 'Gana $1.00 en piruetas',
+    text: 'Gana $1.00 en acrobacias',
     goal: 100,
     reward: 50,
     unit: '$',

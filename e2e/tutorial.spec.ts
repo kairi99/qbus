@@ -33,7 +33,7 @@ test('a shift opens with the how-to-play card, and the clock waits for it', asyn
 
   // Enter/Space/→ page through; ← goes back.
   await page.keyboard.press('Enter');
-  await expect(card.locator('.tut-page:not([hidden]) h2')).toHaveText('Nitro y piruetas');
+  await expect(card.locator('.tut-page:not([hidden]) h2')).toHaveText('Nitro y acrobacias');
   await expect(card).toContainText('derrapando');
   await page.keyboard.press('ArrowLeft');
   await expect(card.locator('.tut-page:not([hidden]) h2')).toHaveText('Tu turno, ñaño');

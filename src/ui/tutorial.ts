@@ -72,10 +72,10 @@ function pages(free: boolean, targets: StarThresholds | null): string[] {
       <li>Tres <b>misiones</b> opcionales (en la esquina) pagan un bono.</li>
     </ul>
     ${targets ? `<p class="tut-stars">Metas: ${targetsText(targets)}</p>` : ''}`,
-    `<h2>Nitro y piruetas</h2>
+    `<h2>Nitro y acrobacias</h2>
     <ul>
       ${nitroText()}
-      <li><b>Piruetas que pagan:</b> derrapes, saltos, pasar con las justas, chutar cosas y ir a más de ${kmh(TOP_SPEED)} km/h.</li>
+      <li><b>Acrobacias que pagan:</b> derrapes, saltos, pasar con las justas, golpear objetos e ir a más de ${kmh(TOP_SPEED)} km/h.</li>
       <li>Encadénalas (menos de ${COMBO_WINDOW} s entre una y otra) para un <b>combo</b> de hasta ×${MAX_MULTIPLIER}. Un choque lo corta.</li>
     </ul>`,
     controls(),
