@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from '../src/world/procCity';
-import { buildRoute, RouteGame, FARE_CENTS, START_TIME, ZONE_RADIUS, type GameEvent } from '../src/gameplay/routeGame';
+import { buildRoute, RouteGame, FARE_CENTS, START_TIME, ZONE_RADIUS, STOP_SPEED, type GameEvent } from '../src/gameplay/routeGame';
 import type { Vec2 } from '../src/world/cityData';
 
 const city = generateCity({ seed: 42 });
@@ -16,7 +16,7 @@ function newGame(seed = 1, capacity = 30) {
 /** Park at the active stop and let the game service it. */
 function arrive(game: RouteGame, after = 5): GameEvent[] {
   const zone = game.activeStop.zone;
-  const events = game.update(after, { pos: { x: zone.x + 3, z: zone.z }, speed: 5 }); // rolling in: not yet
+  const events = game.update(after, { pos: { x: zone.x + 3, z: zone.z }, speed: STOP_SPEED + 2 }); // rolling in: not yet
   return [...events, ...game.update(0.1, { pos: zone, speed: 0.5 })];
 }
 
@@ -70,6 +70,7 @@ describe('RouteGame', () => {
     const { game } = newGame();
     const zone = game.activeStop.zone;
     expect(game.update(1, { pos: zone, speed: 10 })).toEqual([]); // blasting through
+    expect(game.update(0.1, { pos: zone, speed: STOP_SPEED + 0.3 })).toEqual([]); // just over 25 km/h
     expect(game.update(1, { pos: { x: zone.x + ZONE_RADIUS + 5, z: zone.z }, speed: 0 })).toEqual([]); // stopped too far
     const events = game.update(0.1, { pos: zone, speed: 0.5 });
     expect(events.some((e) => e.type === 'arrive')).toBe(true);

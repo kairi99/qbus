@@ -97,9 +97,10 @@ export class Menu {
           </section>
           <section>
             <h2>Relieve</h2>
-            <p lang="en">Produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018
-            provided under COPERNICUS by the European Union and ESA; all rights reserved. The organisations in charge of the
-            Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.</p>
+            <p>Elaborado con Copernicus WorldDEM-30 © DLR e.V. 2010-2014 y © Airbus Defence and Space GmbH 2014-2018,
+            proporcionado en el marco de COPERNICUS por la Unión Europea y la ESA; todos los derechos reservados. Las
+            organizaciones a cargo del programa Copernicus, por ley o por delegación, no asumen responsabilidad alguna por
+            el uso del Copernicus WorldDEM-30.</p>
           </section>
           <section>
             <h2>Sonidos</h2>
