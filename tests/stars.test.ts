@@ -24,11 +24,11 @@ describe('starsFor', () => {
 const PLAYED: Record<string, [number, number, number]> = {
   circuito: [257, 432, 637],
   'linea-katar-061': [1197, 1462, 1765],
-  'linea-c4': [80, 473, 508],
-  'linea-belavista-002': [0, 303, 1522],
-  'linea-translatinoz-135': [100, 380, 975],
-  'linea-transplanetta-040': [230, 343, 870],
-  'linea-semgilfor-069': [230, 363, 1005],
+  'linea-c4': [80, 453, 508],
+  'linea-belavista-002': [0, 267, 1325],
+  'linea-translatinoz-135': [60, 133, 877],
+  'linea-transplanetta-040': [173, 323, 935],
+  'linea-semgilfor-069': [210, 343, 1085],
   'linea-transporcel-099': [512, 762, 1468],
   'linea-e3': [47, 588, 790],
 };
