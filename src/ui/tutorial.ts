@@ -39,7 +39,7 @@ const PAD = 'RT/LT acelerar/frenar · stick izq. girar · A mano · RB nitro · 
 
 const nitroText = () => `
   <li><b>Nitro:</b> el tanque arranca lleno y se quema en ${NITRO_DURATION} s. Para soltarlo necesitas al menos ${MIN_TO_START === 0.5 ? 'medio tanque' : `el ${Math.round(MIN_TO_START * 100)} % del tanque`} (la rayita del medidor).</li>
-  <li>Solo se recarga <b>derrapando</b> y pasando <b>con las justas</b> junto a los carros (o haciendo saltar a la gente). Esperar no lo llena.</li>`;
+  <li>Solo se recarga <b>derrapando</b>, pasando <b>con las justas</b> junto a los carros (o haciendo saltar a la gente) y <b>pasándote los rojos</b> de los semáforos. Esperar no lo llena.</li>`;
 
 const keyList = (rows: [string, string][], cls: string) =>
   `<dl class="tut-keys ${cls}">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
@@ -75,7 +75,7 @@ function pages(free: boolean, targets: StarThresholds | null): string[] {
     `<h2>Nitro y acrobacias</h2>
     <ul>
       ${nitroText()}
-      <li><b>Acrobacias que pagan:</b> derrapes, saltos, pasar con las justas, golpear objetos e ir a más de ${kmh(TOP_SPEED)} km/h.</li>
+      <li><b>Acrobacias que pagan:</b> derrapes, saltos, pasar con las justas, pasarte un rojo, golpear objetos e ir a más de ${kmh(TOP_SPEED)} km/h.</li>
       <li>Encadénalas (menos de ${COMBO_WINDOW} s entre una y otra) para un <b>combo</b> de hasta ×${MAX_MULTIPLIER}. Un choque lo corta.</li>
     </ul>`,
     controls(),
