@@ -15,6 +15,7 @@ export const TRICK_LABEL: Record<TrickKind, string> = {
   nearMiss: 'Con las justas',
   knock: 'Chuta',
   speed: 'Rapidazo',
+  redLight: '¡Pasó en rojo!',
   crash: 'Choque',
 };
 

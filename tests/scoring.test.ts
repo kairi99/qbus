@@ -45,12 +45,16 @@ describe('TrickScorer', () => {
     expect(e.cents).toBeGreaterThan(0);
   });
 
-  it('awards near misses and knocked props per event', () => {
+  it('awards near misses, knocked props and red lights per event', () => {
     const s = new TrickScorer();
     const [miss] = s.update({ ...base, nearMisses: 1 });
     expect(miss.kind).toBe('nearMiss');
     const knocks = s.update({ ...base, propsKnocked: 3 });
     expect(knocks.filter((e) => e.kind === 'knock')).toHaveLength(3);
+    const [red] = s.update({ ...base, redLights: 1 });
+    expect(red.kind).toBe('redLight');
+    expect(red.cents).toBeGreaterThan(0);
+    expect(red.multiplier).toBeGreaterThan(1); // part of the combo
   });
 
   it('rewards sustained top speed', () => {

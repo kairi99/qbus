@@ -10,9 +10,11 @@ export interface Telemetry {
   nearMisses: number;
   /** Props newly knocked over this step. */
   propsKnocked: number;
+  /** Red lights run this step (`RedLightRunner`). */
+  redLights?: number;
 }
 
-export type TrickKind = 'drift' | 'air' | 'nearMiss' | 'knock' | 'speed' | 'crash';
+export type TrickKind = 'drift' | 'air' | 'nearMiss' | 'knock' | 'speed' | 'redLight' | 'crash';
 
 export interface TrickEvent {
   kind: TrickKind;
@@ -46,6 +48,7 @@ const CENTS = {
   nearMiss: 15,
   knock: 5,
   speed: 5,
+  redLight: 20,
 };
 
 /** Detects reckless tricks from per-step telemetry and scores them with a combo multiplier. */
@@ -121,6 +124,7 @@ export class TrickScorer {
 
     for (let i = 0; i < t.nearMisses; i++) out.push(this.award('nearMiss', CENTS.nearMiss));
     for (let i = 0; i < t.propsKnocked; i++) out.push(this.award('knock', CENTS.knock));
+    for (let i = 0; i < (t.redLights ?? 0); i++) out.push(this.award('redLight', CENTS.redLight));
 
     // A trick in progress keeps the combo alive.
     const busy = this.drift > 0 || this.air > 0 || this.fast > 0;

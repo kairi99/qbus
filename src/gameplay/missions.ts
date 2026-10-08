@@ -60,6 +60,8 @@ export const MISSIONS: MissionDef[] = [
   { id: 'chuta', text: 'Tumba 5 conos o tachos', goal: 5, reward: 30, next: counting(isTrick('knock')) },
   // A "Rapidazo" is scored every 2 s above 80 km/h.
   { id: 'rapidazo', text: 'Anda 6 s a más de 80 km/h', goal: 3, reward: 50, next: counting(isTrick('speed')) },
+  // Once per junction and light cycle (`RedLightRunner`).
+  { id: 'rojos', text: 'Pásate 3 rojos', goal: 3, reward: 50, next: counting(isTrick('redLight')) },
   {
     id: 'piruetas',
     text: 'Gana $1.00 en acrobacias',
