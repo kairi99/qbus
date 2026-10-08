@@ -20,8 +20,10 @@ const COORDINATE = 60;
 /** Approaches whose axes are within this angle share a phase (opposite approaches go together). */
 const SAME_AXIS = (35 * Math.PI) / 180;
 /**
- * Approaches shorter than this get no light: the link between two crossings close together (a
- * divided avenue's median), where a car can't stop without blocking the crossing behind it.
+ * Approaches shorter than this get no light of their own: the link between two crossings close
+ * together (a divided avenue's median), where a car can't stop without blocking the crossing
+ * behind it. It still counts as a direction (its crossing keeps its phases), and the two
+ * crossings run in step, so it was let in by the light before.
  */
 const MIN_APPROACH = 12;
 /** Lifts further apart than this are different levels (a bridge, an underpass). */
@@ -98,7 +100,6 @@ export class TrafficLights {
     for (const id of [...lit].sort((a, b) => a - b)) {
       const phases: { edge: number; axis: Vec2 }[][] = [];
       for (const e of graph.nodes[id].in) {
-        if (graph.edges[e].len < MIN_APPROACH) continue;
         const axis = axisOf(graph.edges[e].endDir);
         const same = phases.find((p) => dot(p[0].axis, axis) > Math.cos(2 * SAME_AXIS));
         if (same) same.push({ edge: e, axis });
@@ -148,6 +149,7 @@ export class TrafficLights {
       phases.forEach((p, k) =>
         p.forEach(({ edge }) => {
           const e = graph.edges[edge];
+          if (e.len < MIN_APPROACH) return;
           const s = Math.max(0, e.len - Math.min(STOP_BACK, e.len * 0.4));
           const a: Approach = { edge, phase: k, line: pointAt(e.center, s), dir: edgeDir(e, s), s, halfWidth: e.roadWidth / 2, lift: edgeLift(e, s) };
           junction.approaches.push(a);
