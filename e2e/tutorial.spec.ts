@@ -35,6 +35,7 @@ test('a shift opens with the how-to-play card, and the clock waits for it', asyn
   await page.keyboard.press('Enter');
   await expect(card.locator('.tut-page:not([hidden]) h2')).toHaveText('Nitro y acrobacias');
   await expect(card).toContainText('derrapando');
+  await expect(card).toContainText('pasarte un rojo');
   await page.keyboard.press('ArrowLeft');
   await expect(card.locator('.tut-page:not([hidden]) h2')).toHaveText('Tu turno, ñaño');
   await page.keyboard.press('Space');
@@ -69,6 +70,7 @@ test('free roam opens with its own card; "No mostrar otra vez" turns it off', as
   await expect(card.locator('.tut-page:not([hidden]) h2')).toHaveText('Paseo libre');
   await expect(card).toContainText('no hay paradas, reloj ni pasajes');
   await expect(card).toContainText('derrapando');
+  await expect(card).toContainText('pasándote los rojos');
   await page.screenshot({ path: `${shots}/92-tutorial-free.png` });
   await page.getByLabel('No mostrar otra vez').check();
   await page.keyboard.press('Enter');
