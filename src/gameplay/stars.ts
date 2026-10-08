@@ -7,17 +7,19 @@ import { RouteGame, type RouteStop } from './routeGame';
  * to stop, corners and braking included), trick money per second of the shift, and missions
  * completed. The paces are what the real physics bus keeps when an autopilot drives it
  * (`tools/sim-shift.ts`, no traffic, rolling through stops under 25 km/h): 10 m/s cruising at
- * 40 km/h, 14 at 60 km/h with nitro, 16.5 flat out with handbrake drifts (which earns it 0.6 to 4 cents a second in tricks).
+ * 40 km/h, 14 at 60 km/h with nitro, 16.5 flat out with handbrake drifts. The autopilot ignores
+ * traffic lights, so it runs the reds on its way (a decent one picks up 0.3 to 0.8 cents a
+ * second that way; flat out, drifts, speed and reds earn it 1 to 6 cents a second in tricks).
  *  - 1 star: a steady, clean shift; fares and tips only.
- *  - 2 stars: a quick shift with some tricks and a mission done.
- *  - 3 stars: an expert run flat out, chaining tricks all the way (3 cents a second: more than
- *    the autopilot, so it takes combos with close calls in traffic), two missions done.
- * The autopilot's shifts are pinned in tests/stars.test.ts: it never gets 3 stars.
+ *  - 2 stars: a quick shift with some tricks (a few reds) and a mission done.
+ *  - 3 stars: an expert run flat out, chaining tricks all the way (5 cents a second: more than
+ *    the autopilot, so it takes combos with close calls in traffic and reds), two missions done.
+ * The autopilot's shifts are pinned in tests/stars.test.ts: it never gets 3 stars (but on Belavista 002).
  */
 export const STAR_TIERS = [
   { pace: 10, tricks: 0, missions: 0 },
-  { pace: 14, tricks: 0.5, missions: 1 },
-  { pace: 16.5, tricks: 3, missions: 2 },
+  { pace: 14, tricks: 0.75, missions: 1 },
+  { pace: 16.5, tricks: 5, missions: 2 },
 ] as const;
 /** Reference capacity: the thresholds don't depend on the bus. */
 const CAPACITY = 40;
