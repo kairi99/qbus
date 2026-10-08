@@ -9,6 +9,54 @@ import { pickSign, signUV } from './signAtlas';
 export const FLOOR_HEIGHT = 3.2;
 
 /**
+ * How far each layer of facade detail stands out of its wall (m). Layers that overlap on the
+ * wall are kept centimeters apart (never coplanar: two quads in one plane flicker as the camera
+ * moves), and the shop sign stands well clear of the fascia board behind it.
+ */
+export const OUT = { plinth: 0.02, frame: 0.03, fascia: 0.04, pane: 0.05, slab: 0.06, cornice: 0.07, pier: 0.08, sign: 0.1 } as const;
+/** The cornice along the roof edge: from this far below the roof to `CORNICE_UP` above it. */
+const CORNICE_DOWN = 0.35;
+const CORNICE_UP = 0.12;
+/** Top of the shopfront's fascia above the sidewalk, when the building has room for it. */
+const FASCIA_TOP = 3.2;
+/** Lowest a shopfront can be (sidewalk to fascia top) and still look like one. */
+const MIN_SHOPFRONT = 2.6;
+
+/**
+ * Rows of windows a building of this height has room for: the top row (window, frame and all)
+ * stays below the cornice, so a 5 m house gets one floor of windows, not one poking out of the roof.
+ */
+export function windowFloors(height: number): number {
+  return Math.max(1, Math.floor((height + 0.4) / FLOOR_HEIGHT));
+}
+
+/** Heights of a shopfront's parts (absolute y). */
+export interface ShopBand {
+  /** Top of the opening (shop window or shutter). */
+  open: number;
+  /** Fascia board: bottom and top. */
+  fascia0: number;
+  fascia1: number;
+  /** The sign on the fascia: bottom and top. */
+  sign0: number;
+  sign1: number;
+  /** Room for an awning under the fascia (above people's heads). */
+  awning: boolean;
+}
+
+/**
+ * A shopfront on sidewalk height `g` that must stay under `ceiling` (the first floor's windows
+ * and balconies, or the cornice). A `parapet` fascia (one-storey shops) runs right up to the
+ * ceiling, standing in for the cornice. Callers make sure `ceiling - g >= MIN_SHOPFRONT`.
+ */
+export function shopBand(g: number, ceiling: number, parapet: boolean): ShopBand {
+  const fascia1 = parapet ? ceiling : Math.min(g + FASCIA_TOP, ceiling);
+  const fascia0 = Math.min(g + 2.5, fascia1 - 0.45);
+  const open = fascia0 - 0.05;
+  return { open, fascia0, fascia1, sign0: fascia0 + 0.08, sign1: Math.min(fascia0 + 0.62, fascia1 - 0.08), awning: open - g >= 2.3 };
+}
+
+/**
  * How a building looks: old houses with pastel paint (2–4 floors), apartment towers with
  * balconies, glass offices along the main avenues, plain institutional blocks (campus,
  * schools, hospitals, churches: no shops or balconies).
@@ -139,10 +187,11 @@ export function buildingLook(ctx: FacadeContext, b: Building): BuildingLook {
  * `top` is the highest ground under the building (where its floors are counted from).
  */
 export function addFacades(ctx: FacadeContext, b: Building, look: BuildingLook, top: number): void {
+  if (b.height < 1) return; // a slab (OSM roofs, carports): nothing to decorate
   const c = centroid(b.footprint);
   const mb = ctx.detail.at(c.x, c.z);
   const glow = ctx.glow.at(c.x, c.z);
-  const floors = Math.max(1, Math.round(b.height / FLOOR_HEIGHT));
+  const floors = windowFloors(b.height);
   const roofY = top + b.height;
   const r = (salt: number) => hash2(c.x, c.z, salt);
   const orient = signedArea(b.footprint) > 0 ? 1 : -1;
@@ -179,29 +228,37 @@ export function addFacades(ctx: FacadeContext, b: Building, look: BuildingLook, 
     // A wall against the next building (party walls fill La Mariscal's blocks) can't be seen.
     if ([0.2, 0.5, 0.8].every((k) => ctx.buildings.contains(at(len * k, 1.2)))) continue;
     const street = facesStreet(ctx, at(len / 2, 0.6), n);
-    const shops = hasShops && street !== null && len >= 3.5;
     const g0 = ctx.ground(p0);
     const g1 = ctx.ground(p1);
+    // Shopfronts take the ground floor, below the first floor's windows and balconies (or, on
+    // one-storey buildings, the roof). Where the sidewalk runs too high up the wall for one, none.
+    const sidewalk = Math.max(g0, g1, ctx.ground(at(len / 2, 0.5))) + 0.04;
+    const parapet = floors === 1 && sidewalk + FASCIA_TOP > roofY - CORNICE_DOWN - 0.05;
+    const ceiling = floors > 1 ? top + FLOOR_HEIGHT - 0.15 : parapet ? roofY + CORNICE_UP : roofY - CORNICE_DOWN - 0.05;
+    const shops = hasShops && street !== null && len >= 3.5 && ceiling - sidewalk >= MIN_SHOPFRONT;
+    // Highest a row of windows can reach: tucked behind the cornice, never past the roof.
+    const under = roofY - 0.15;
 
     // Plinth: a darker band along the foot of the wall (shopfronts have their own).
     if (!shops && look.style !== 'glass')
-      mb.quad(pt(0, Math.min(g0, g1) - 0.3, 0.02), pt(len, Math.min(g0, g1) - 0.3, 0.02), pt(len, g1 + 0.6, 0.02), pt(0, g0 + 0.6, 0.02), plinth);
-    // Cornice / parapet edge along the top.
-    quad(mb, -0.08, len + 0.08, roofY - 0.35, roofY + 0.12, 0.07, look.style === 'glass' ? look.trim : look.trim);
+      mb.quad(pt(0, Math.min(g0, g1) - 0.3, OUT.plinth), pt(len, Math.min(g0, g1) - 0.3, OUT.plinth), pt(len, g1 + 0.6, OUT.plinth), pt(0, g0 + 0.6, OUT.plinth), plinth);
+    // Cornice / parapet edge along the top (a one-storey shop's fascia is its parapet).
+    if (!(shops && parapet)) quad(mb, -0.08, len + 0.08, roofY - CORNICE_DOWN, roofY + CORNICE_UP, OUT.cornice, look.trim);
 
-    if (shops) shopfronts(ctx, mb, glow, b, len, at, pt, quad, r(20 + i), Math.min(street!, 6), orient > 0);
+    if (shops) shopfronts(ctx, mb, glow, b, len, at, pt, quad, r(20 + i), Math.min(street!, 6), orient > 0, ceiling, parapet);
     const first = shops ? 1 : 0;
 
     if (look.style === 'glass') {
       // Curtain wall: a glass band per floor, mullions down the whole height.
       const lobby = !shops;
-      if (lobby) pane(0.4, len - 0.4, top, top + FLOOR_HEIGHT - 0.2, 0.05, look.glass);
+      if (lobby) pane(0.4, len - 0.4, top, Math.min(top + FLOOR_HEIGHT - 0.2, under), OUT.pane, look.glass);
       for (let f = 1; f < floors; f++) {
         const y = top + f * FLOOR_HEIGHT;
-        if (!dark) quad(mb, 0.3, len - 0.3, y + 0.35, y + 2.95, 0.05, look.glass);
-        else for (let t = 0.3; t < len - 0.4; t += bay * 3) pane(t, Math.min(len - 0.3, t + bay * 3), y + 0.35, y + 2.95, 0.05);
+        const y1 = Math.min(y + 2.95, under);
+        if (!dark) quad(mb, 0.3, len - 0.3, y + 0.35, y1, OUT.pane, look.glass);
+        else for (let t = 0.3; t < len - 0.4; t += bay * 3) pane(t, Math.min(len - 0.3, t + bay * 3), y + 0.35, y1, OUT.pane);
       }
-      if (floors > 1) for (let t = bay; t < len - 0.5; t += bay) quad(mb, t - 0.06, t + 0.06, top + FLOOR_HEIGHT, roofY - 0.35, 0.08, look.wall);
+      if (floors > 1) for (let t = bay; t < len - 0.5; t += bay) quad(mb, t - 0.06, t + 0.06, top + FLOOR_HEIGHT, roofY - CORNICE_DOWN, OUT.pier, look.wall);
       continue;
     }
 
@@ -209,13 +266,14 @@ export function addFacades(ctx: FacadeContext, b: Building, look: BuildingLook, 
       // Window rows: a band per floor split into windows by piers running up the facade.
       for (let f = first; f < floors; f++) {
         const y = top + f * FLOOR_HEIGHT;
-        if (!dark) quad(mb, 0.6, len - 0.6, y + 0.85, y + 2.45, 0.05, look.glass);
-        else for (let t = 0.6; t < len - 0.7; t += bay) pane(t, Math.min(len - 0.6, t + bay), y + 0.85, y + 2.45, 0.05);
+        if (y + 2.45 > under) break;
+        if (!dark) quad(mb, 0.6, len - 0.6, y + 0.85, y + 2.45, OUT.pane, look.glass);
+        else for (let t = 0.6; t < len - 0.7; t += bay) pane(t, Math.min(len - 0.6, t + bay), y + 0.85, y + 2.45, OUT.pane);
         // Floor slab line.
-        quad(mb, 0, len, y - 0.09, y + 0.09, 0.06, look.trim);
+        quad(mb, 0, len, y - 0.09, y + 0.09, OUT.slab, look.trim);
       }
       const y0 = top + first * FLOOR_HEIGHT + 0.5;
-      for (let t = bay; t < len - 0.7; t += bay) quad(mb, t - 0.22, t + 0.22, y0, roofY - 0.35, 0.08, look.wall);
+      for (let t = bay; t < len - 0.7; t += bay) quad(mb, t - 0.22, t + 0.22, y0, roofY - CORNICE_DOWN, OUT.pier, look.wall);
       if (balconies && street !== null && look.style === 'tower') {
         const railing = r(13) < 0.5 ? '#9fb7c4' : look.trim;
         for (let t = bay; t + bay < len - 0.7; t += bay * 3)
@@ -229,13 +287,14 @@ export function addFacades(ctx: FacadeContext, b: Building, look: BuildingLook, 
     const gap = len / count;
     for (let f = first; f < floors; f++) {
       const y = top + f * FLOOR_HEIGHT;
+      if (y + 2.5 > under) break; // no room under the cornice (very low buildings)
       for (let w = 0; w < count; w++) {
         const t = gap * (w + 0.5);
         const door = balconies && street !== null && f >= 1 && (w + f) % 2 === 0 && look.style === 'house';
         const y0 = door ? y + 0.15 : y + 0.95;
         const y1 = door ? y + 2.35 : y + 2.3;
-        if (street !== null) quad(mb, t - 0.72, t + 0.72, y0 - 0.14, y1 + 0.14, 0.03, look.trim); // frames on the street side
-        pane(t - 0.55, t + 0.55, y0, y1, 0.05);
+        if (street !== null) quad(mb, t - 0.72, t + 0.72, y0 - 0.14, y1 + 0.14, OUT.frame, look.trim); // frames on the street side
+        pane(t - 0.55, t + 0.55, y0, y1, OUT.pane);
         if (door) balcony(mb, pt, t - 0.95, t + 0.95, y, 0.75, look.trim, look.wall);
       }
     }
@@ -288,6 +347,10 @@ function shopfronts(
   room: number,
   /** The wall runs right to left as seen from the street: signs are laid out the other way. */
   flip: boolean,
+  /** Everything stays below this (the first floor's windows and balconies, or the cornice). */
+  ceiling: number,
+  /** One-storey building: the fascia runs up to the roof as its parapet. */
+  parapet: boolean,
 ): void {
   const units = Math.max(1, Math.round((len - 0.6) / (4 + seed * 2)));
   const w = (len - 0.6) / units;
@@ -299,29 +362,35 @@ function shopfronts(
     const mid = (t0 + t1) / 2;
     const k = (salt: number) => hash2(at(mid, 0).x, at(mid, 0).z, salt);
     const g = Math.max(ctx.ground(at(t0, 0.5)), ctx.ground(at(t1, 0.5)), ctx.ground(at(mid, 0.5))) + 0.04;
-    // Fascia band and the sign on it.
-    quad(mb, t0, t1, g + 2.5, g + 3.2, 0.04, '#2f3336');
-    if (signs) {
-      const half = (flip ? -1 : 1) * (Math.min(w - 0.4, 3.6) / 2);
+    const band = shopBand(g, ceiling, parapet);
+    // Fascia band and the sign on it, well clear of the board (and of any other building's
+    // wall: at an inner corner the next wall can come close).
+    quad(mb, t0, t1, band.fascia0, band.fascia1, OUT.fascia, '#2f3336');
+    const half = (flip ? -1 : 1) * (Math.min(w - 0.4, 3.6) / 2);
+    if (signs && [mid - half, mid + half].every((t) => !ctx.buildings.contains(at(t, OUT.sign + 0.05)))) {
       const uv = signUV(pickSign(k(1), b.shop, b.use));
-      signs.quad(pt(mid - half, g + 2.58, 0.07), pt(mid + half, g + 2.58, 0.07), pt(mid + half, g + 3.12, 0.07), pt(mid - half, g + 3.12, 0.07), uv);
+      const s0 = band.sign0;
+      const s1 = band.sign1;
+      signs.quad(pt(mid - half, s0, OUT.sign), pt(mid + half, s0, OUT.sign), pt(mid + half, s1, OUT.sign), pt(mid - half, s1, OUT.sign), uv);
     }
     // The opening: shop window with a door, or a closed shutter (more of them at night).
+    const opening = band.open;
     const shut = k(2) < (ctx.light.pools ? 0.45 : 0.15); // at night many have closed
     const o0 = t0 + 0.2;
     const o1 = t1 - 0.2;
     if (shut) {
-      quad(mb, o0, o1, g - 0.1, g + 2.45, 0.04, pick(SHUTTER, k(3)));
-      for (let y = g + 0.35; y < g + 2.4; y += 0.42) quad(mb, o0, o1, y, y + 0.05, 0.05, '#5d6166');
+      quad(mb, o0, o1, g - 0.1, opening, OUT.fascia, pick(SHUTTER, k(3)));
+      for (let y = g + 0.35; y < opening - 0.05; y += 0.42) quad(mb, o0, o1, y, y + 0.05, OUT.pane, '#5d6166');
     } else {
-      quad(mb, o0, o1, g - 0.1, g + 2.45, 0.03, '#2d3236'); // frame and bulkhead
+      quad(mb, o0, o1, g - 0.1, opening, OUT.frame, '#2d3236'); // frame and bulkhead
       const door = k(4) < 0.5 ? o0 + 0.15 : o1 - 1.15;
       const panes: [number, number][] = door < mid ? [[door + 1.1, o1 - 0.1]] : [[o0 + 0.1, door - 0.1]];
-      for (const [a, z] of panes) if (z - a > 0.4) (dark ? glow : mb).quad(pt(a, g + 0.45, 0.05), pt(z, g + 0.45, 0.05), pt(z, g + 2.35, 0.05), pt(a, g + 2.35, 0.05), dark ? pick(SHOP_LIT, k(5)) : pick(SHOP_GLASS, k(5)));
-      quad(dark ? glow : mb, door, door + 1.0, g, g + 2.3, 0.05, dark ? '#c9a66a' : '#1e2328');
+      const p = OUT.pane;
+      for (const [a, z] of panes) if (z - a > 0.4) (dark ? glow : mb).quad(pt(a, g + 0.45, p), pt(z, g + 0.45, p), pt(z, opening - 0.1, p), pt(a, opening - 0.1, p), dark ? pick(SHOP_LIT, k(5)) : pick(SHOP_GLASS, k(5)));
+      quad(dark ? glow : mb, door, door + 1.0, g, opening - 0.15, p, dark ? '#c9a66a' : '#1e2328');
     }
-    // Awning, only where the sidewalk has room for it (never over the road).
-    if (k(6) < 0.6 && room >= 2 && [t0, t1].every((t) => ctx.roads.clearance(at(t, 1.2)) > 0.3 && !ctx.buildings.contains(at(t, 1.2)))) {
+    // Awning, only where the sidewalk has room for it (never over the road) and people fit under it.
+    if (band.awning && k(6) < 0.6 && room >= 2 && [t0, t1].every((t) => ctx.roads.clearance(at(t, 1.2)) > 0.3 && !ctx.buildings.contains(at(t, 1.2)))) {
       const color = pick(AWNING, k(7));
       const striped = k(8) < 0.45;
       const n = striped ? Math.max(2, Math.round(w / 0.5)) : 1;
@@ -329,8 +398,9 @@ function shopfronts(
         const a = t0 + 0.1 + ((w - 0.2) * s) / n;
         const z = t0 + 0.1 + ((w - 0.2) * (s + 1)) / n;
         const col = striped && s % 2 ? '#f4f1e8' : color;
-        mb.quad(pt(a, g + 2.55, 0.05), pt(z, g + 2.55, 0.05), pt(z, g + 2.2, 1.1), pt(a, g + 2.2, 1.1), col);
-        mb.quad(pt(a, g + 2.2, 1.1), pt(z, g + 2.2, 1.1), pt(z, g + 1.98, 1.1), pt(a, g + 1.98, 1.1), col);
+        const y = band.fascia0 + 0.05; // hung from the fascia, under the sign
+        mb.quad(pt(a, y, OUT.pane), pt(z, y, OUT.pane), pt(z, y - 0.35, 1.1), pt(a, y - 0.35, 1.1), col);
+        mb.quad(pt(a, y - 0.35, 1.1), pt(z, y - 0.35, 1.1), pt(z, y - 0.57, 1.1), pt(a, y - 0.57, 1.1), col);
       }
     }
   }
