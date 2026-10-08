@@ -224,6 +224,11 @@ export class Menu {
             ${choice('radio', 'off', RADIO_OFF, s.radio === 'off')}
             ${STATIONS.map((st) => choice('radio', st.id, st.name, s.radio === st.id)).join('')}
           </fieldset>
+          <fieldset>
+            <legend>Cómo jugar (al empezar)</legend>
+            ${choice('tutorial', 'on', 'Mostrar', s.tutorial)}
+            ${choice('tutorial', 'off', 'No mostrar', !s.tutorial)}
+          </fieldset>
           ${slider('volume', 'Volumen', s.volume)}
           ${slider('musicVolume', 'Música', s.musicVolume)}
         </div>
@@ -235,6 +240,7 @@ export class Menu {
         if (el.name === 'hills') this.settings.hills = Number(el.value);
         if (el.name === 'timeOfDay') this.settings.timeOfDay = el.value as Settings['timeOfDay'];
         if (el.name === 'radio') this.settings.radio = el.value as Settings['radio'];
+        if (el.name === 'tutorial') this.settings.tutorial = el.value === 'on';
         saveSettings(this.settings);
       }),
     );

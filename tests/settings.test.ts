@@ -23,6 +23,14 @@ describe('settings', () => {
     expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2 }) })).timeOfDay).toBe('day');
   });
 
+  it('shows the tutorial unless it was turned off, also for saves from before it', () => {
+    const { tutorial: _, ...old } = DEFAULTS;
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2 }) })).tutorial).toBe(true);
+    const store = memory();
+    saveSettings({ ...DEFAULTS, tutorial: false }, store);
+    expect(loadSettings(store).tutorial).toBe(false);
+  });
+
   it('starts on real hills', () => {
     expect(DEFAULTS.hills).toBe(1);
   });

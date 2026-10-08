@@ -9,12 +9,12 @@ export interface DriveInput {
   boost?: boolean;
 }
 
-export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause' | 'radio';
+export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause' | 'radio' | 'confirm';
 
 const KEY_ACTIONS: Record<string, Action> = { KeyC: 'camera', KeyR: 'reset', KeyH: 'horn', Enter: 'restart', NumpadEnter: 'restart', Escape: 'pause', KeyP: 'pause', KeyM: 'radio' };
 // Standard gamepad mapping: Y toggles camera, Back resets, left stick press honks, Start pauses,
-// X changes the radio station.
-const PAD_ACTIONS: Record<number, Action> = { 3: 'camera', 8: 'reset', 10: 'horn', 9: 'pause', 2: 'radio' };
+// X changes the radio station. A (also the handbrake while driving) confirms on screens like the tutorial.
+const PAD_ACTIONS: Record<number, Action> = { 0: 'confirm', 3: 'camera', 8: 'reset', 10: 'horn', 9: 'pause', 2: 'radio' };
 
 /** What the on-screen touch controls are holding (written by `ui/touchControls.ts`). */
 export interface TouchState {

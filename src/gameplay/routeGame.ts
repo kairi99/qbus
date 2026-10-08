@@ -7,7 +7,8 @@ export const FARE_CENTS = 35;
 export const START_TIME = 90;
 /** Stop within this distance of the zone center to service a stop. */
 export const ZONE_RADIUS = 7;
-const STOP_SPEED = 2;
+/** Below this speed (m/s) inside the zone the stop is served. */
+export const STOP_SPEED = 2;
 const APPROACH_DIST = 60;
 const MIN_STOP_SPACING = 90;
 /** Straight-line distance undercounts street distance on a grid. */

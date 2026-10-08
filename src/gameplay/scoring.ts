@@ -25,7 +25,7 @@ export interface TrickEvent {
 
 /** Seconds after a trick during which the next one extends the combo. */
 export const COMBO_WINDOW = 3;
-const MAX_MULTIPLIER = 5;
+export const MAX_MULTIPLIER = 5;
 
 const DRIFT_MIN_SLIP = (15 * Math.PI) / 180;
 const DRIFT_MIN_SPEED = 20 / 3.6;
@@ -33,7 +33,8 @@ const DRIFT_MIN_TIME = 0.5;
 /** A drift survives this long below the slip threshold (wobbles while countersteering). */
 const DRIFT_GRACE = 0.25;
 const AIR_MIN_TIME = 0.35;
-const TOP_SPEED = 80 / 3.6;
+/** Holding more than this (m/s) pays a "Rapidazo" every couple of seconds. */
+export const TOP_SPEED = 80 / 3.6;
 const TOP_SPEED_INTERVAL = 2;
 /** Losing this much speed within CRASH_WINDOW seconds is a crash, not braking. */
 const CRASH_DROP = 18 / 3.6;

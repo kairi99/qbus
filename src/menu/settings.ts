@@ -24,9 +24,11 @@ export interface Settings {
   musicVolume: number;
   /** Station the bus radio is on when a game starts (the last one tuned in). */
   radio: RadioSetting;
+  /** Show the how-to-play card when a shift or free roam starts. */
+  tutorial: boolean;
 }
 
-export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito' };
+export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito', tutorial: true };
 export const HILLS_OPTIONS = [
   { value: 1, label: 'Reales' },
   { value: 1.3, label: 'Un poquito más' },
@@ -72,6 +74,7 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     timeOfDay: parseTimeOfDay(raw.timeOfDay) ?? DEFAULTS.timeOfDay,
     musicVolume: num('musicVolume', 0, 1),
     radio: parseRadio(raw.radio) ?? DEFAULTS.radio,
+    tutorial: raw.tutorial !== false,
   };
 }
 
