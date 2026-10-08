@@ -91,4 +91,22 @@ describe('TrafficBodies', () => {
     step();
     expect(bodies.bodies.filter((b) => b.isEnabled())).toHaveLength(12);
   });
+  it('an R reset onto a car sends it (and only nearby ones) elsewhere', () => {
+    const { bus, sim, bodies, step } = setup(20, 3);
+    step();
+    const car = sim.cars.find((c) => c.state === 'driving')!;
+    const p = bodies.bodies[car.id].translation();
+    const others = sim.cars.filter((c) => c !== car && c.state === 'driving' && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 40);
+    const before = others.map((c) => ({ ...c.pos }));
+    const spot = { x: p.x, y: 0, z: p.z, heading: car.heading + 0.4 };
+    bus.reset({ ...spot, pitch: 0 });
+    expect(bodies.clearSpot(spot, bus.preset.body.length, bus.preset.body.width)).toBeGreaterThanOrEqual(1);
+    const q = bodies.bodies[car.id].translation();
+    expect(Math.hypot(q.x - spot.x, q.z - spot.z)).toBeGreaterThan(20);
+    expect(others.map((c) => c.pos)).toEqual(before);
+    // The bus drives off from the spot without a car to wedge it.
+    for (let i = 0; i < 30; i++) expect(step(0)).toEqual([]);
+    // A car well above the spot (a street over an underpass) stays.
+    expect(bodies.clearSpot({ ...spot, y: -6.5 }, bus.preset.body.length, bus.preset.body.width)).toBe(0);
+  });
 });
