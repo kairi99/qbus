@@ -49,6 +49,8 @@ export interface ImportOptions {
   smoothing?: number;
   /** OSM way ids to leave out (known mapping errors). */
   dropWays?: number[];
+  /** One-way OSM way ids drawn backwards (known mapping errors): traffic runs against their node order. */
+  reverseWays?: number[];
 }
 
 const SIDEWALK = 3;
@@ -121,7 +123,8 @@ const EDGE_INSET = 70;
 export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra: ExtraData = {}): CityData {
   const { routes: routesOsm, stations: stationsOsm, areas: areasOsm } = extra;
   const drop = new Set(opts.dropWays ?? []);
-  const osm = drop.size ? { ...source, elements: source.elements.filter((e) => !(e.type === 'way' && drop.has(e.id))) } : source;
+  const reverse = new Set(opts.reverseWays ?? []);
+  const osm = drop.size || reverse.size ? { ...source, elements: source.elements.filter((e) => !(e.type === 'way' && drop.has(e.id))).map((e) => (e.type === 'way' && reverse.has(e.id) ? reversedWay(e) : e)) } : source;
   const rng = new Rng(opts.seed ?? 1);
   const proj = makeProjection(opts.bbox);
   const sw = proj.toXZ(opts.bbox[0], opts.bbox[1]);
@@ -246,7 +249,11 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   // Humps only where the game happens, and never on a ramp, bridge or underpass.
   // Humps also keep well clear of a ramp's ends along the road (a car comes off the top of a
   // ramp pitched up and fast): nearLifted only looks across the lifted stretch.
-  const features = placeFeatures(roads, opts.seed ?? 1).filter((f) => playable(f.pos) && !nearLifted(roads, f.pos, 20) && !nearRampPoint(roads, f.pos, 25));
+  // Nor across another road's lanes where two run side by side (a link merging into an avenue:
+  // traffic coming off it at speed meets a hump it can't see coming).
+  const features = placeFeatures(roads, opts.seed ?? 1).filter(
+    (f) => playable(f.pos) && !nearLifted(roads, f.pos, 20) && !nearRampPoint(roads, f.pos, 25) && !onAnotherRoad(roads, f),
+  );
   const spawn = pickSpawn(roads.filter((r) => !r.lift), bounds);
 
   return {
@@ -310,6 +317,12 @@ function inFootprint(p: Vec2, c: Vec2, heading: number, halfL: number, halfW: nu
   const dx = p.x - c.x;
   const dz = p.z - c.z;
   return Math.abs(dx * f.x + dz * f.z) <= halfL && Math.abs(dx * f.z - dz * f.x) <= halfW;
+}
+
+/** A way with its nodes in the opposite order (a one-way drawn backwards). */
+function reversedWay(e: OsmElement): OsmElement {
+  if (e.tags?.oneway !== 'yes') throw new Error(`reverseWays: way ${e.id} is not oneway=yes`);
+  return { ...e, ...(e.geometry ? { geometry: [...e.geometry].reverse() } : {}) };
 }
 
 function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bounds: { min: Vec2; max: Vec2 }): Road[] {
@@ -591,6 +604,14 @@ function nearLifted(roads: Road[], p: Vec2, margin: number): boolean {
 /** Within `reach` of any point of a road that's off the ground (a ramp, deck or cut). */
 function nearRampPoint(roads: Road[], p: Vec2, reach: number): boolean {
   return roads.some((r) => r.lift && r.points.some((q, i) => Math.abs(r.lift![i]) > 0.05 && Math.hypot(q.x - p.x, q.z - p.z) < reach));
+}
+
+/** A hump reaching onto the asphalt of a road other than its own (whose centerline it's on). */
+function onAnotherRoad(roads: Road[], f: Feature): boolean {
+  return roads.some((r) => {
+    const { d } = projectOnRoad(r, f.pos);
+    return d > 0.5 && d < r.width / 2 + f.width / 2;
+  });
 }
 
 function placeFeatures(roads: Road[], seed: number): Feature[] {

@@ -18,7 +18,14 @@ import { TRAFFIC } from './thresholds';
 
 // Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS): the test's own
 // first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
-known({});
+// Same bug as G2 in drive.slow.test.ts: Av. Patria eastbound's down-ramp deck (#358) is overlapped
+// 0.2–0.35 m higher by the westbound up-ramp (#401) just before their joint with the Puente del
+// Guambra, so a car on #358 there is under #401's slab. Seen once the traffic's dice changed
+// (Av. América's northbound carriageway became drivable, 2026-10-08).
+known({
+  "traffic rides at the road's height in bridge Av. Patria @(-658,290)":
+    'seed 2 car on e517 (Av. Patria #358) at (-631.8, 322.1) sunk 0.35 m: under the overlapping westbound up-ramp deck (#401) at the joint with the Puente del Guambra',
+});
 
 const LIST = 8;
 const base = cityAndCatalog();
