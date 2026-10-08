@@ -231,7 +231,9 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   const solidMaterial = vertexColorMaterial({ side: THREE.DoubleSide });
   // Drawn in 3 × 3 blocks of tiles; the shadow pass still culls tile by tile.
   const solidMeshes = solid.build(solidMaterial, { merge: 3, shadows: true });
-  const decor = detail.build(solidMaterial);
+  // Facade detail stands a few centimeters off its wall, and the depth buffer can't tell that
+  // apart far away: pulled toward the camera a little more, it never flickers into the wall.
+  const decor = detail.build(vertexColorMaterial({ side: THREE.DoubleSide, ...ON_WALL }));
   // Facade detail lies flat on the walls (or barely out of them): it takes shadows but casting
   // them would only double its cost in the shadow pass.
   for (const m of decor) m.receiveShadow = true;
@@ -249,6 +251,9 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   return { props: new PropSystem(world, scene, { ...city, props: [...city.props, ...works.cones] }), signals };
 }
 
+/** Depth bias for things laid on a wall (facade detail, lit windows, signs). */
+const ON_WALL = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 } as const;
+
 /**
  * Unshaded layers: windows lit from inside and lamp bulbs (`glow`), and shop signs. By day
  * the signs are painted boards (shaded); when it's dark they're lit and share each tile's
@@ -256,9 +261,9 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
  */
 function lights(glow: ChunkedMeshBuilder, signs: ChunkedUVQuadBuilder | null, atlas: THREE.Texture | null): THREE.Mesh[] {
   const glowing = glow.geometries();
-  if (!signs || !atlas) return [...glowing.values()].map((g) => new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
-  if (!glowing.size) return signs.build(new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide }));
-  const material = new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, side: THREE.DoubleSide });
+  if (!signs || !atlas) return [...glowing.values()].map((g) => new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, ...ON_WALL })));
+  if (!glowing.size) return signs.build(new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide, ...ON_WALL }));
+  const material = new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, side: THREE.DoubleSide, ...ON_WALL });
   const tiles = signs.geometries();
   for (const k of glowing.keys()) if (!tiles.has(k)) tiles.set(k, new THREE.BufferGeometry());
   return [...tiles].map(([k, sg]) => {
