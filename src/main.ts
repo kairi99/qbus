@@ -73,7 +73,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   if (!city.terrain) addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
   const graph = buildRoadGraph(city);
   performance.mark('qbus:graph');
-  const { props } = buildCity(city, world, scene, graph);
+  const { props, signals } = buildCity(city, world, scene, graph);
   performance.mark('qbus:city-built');
   const { min, max } = city.bounds;
   const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))), tod);
@@ -99,7 +99,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const hud = new Hud(hudRoot, city.attribution);
   // Records are kept per zone and route (a generated city other than the default seed is its own zone).
   const zone = params.get('city') ?? (params.has('seed') ? `grid-${params.get('seed')}` : DEFAULT_ZONE);
-  const session = new GameSession({ world, scene, city, bus, props, audio, hudRoot, graph, route, zone });
+  const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone });
   if (touch) new TouchControls(document.body, input);
   audio.setVolume(settings.volume);
   // The radio keeps its own level (under the engine) and plays straight to the speakers.

@@ -27,7 +27,7 @@ import { groundHeightAt, inPlayArea, nearestRoad, terrainAt } from '../world/cit
 import { pointInPolygon } from '../world/geom';
 import { TrafficSim, type Obstacle } from './traffic';
 import { RedLightRunner, TrafficLights } from './trafficLights';
-import { TrafficLightView } from '../world/trafficLightView';
+import type { SignalLamps } from '../world/signalBuilder';
 import { TrafficBodies, laneSurface } from './trafficBodies';
 import type { RoadPose } from '../world/roadSnap';
 import { PedestrianSim } from './pedestrians';
@@ -50,6 +50,8 @@ export interface SessionDeps {
   city: CityData;
   bus: BusPhysics;
   props: PropSystem;
+  /** The traffic light lamps built with the city (`buildCity`). */
+  signals?: SignalLamps;
   audio: BusAudio;
   hudRoot: HTMLElement;
   graph: RoadGraph;
@@ -96,7 +98,6 @@ export class GameSession {
   /** Signals at the city's lit junctions, on the traffic's clock. */
   readonly lights: TrafficLights;
   private redLights: RedLightRunner;
-  private lightView: TrafficLightView;
   private redsRun = 0;
   readonly trafficBodies: TrafficBodies;
   readonly peds: PedestrianSim;
@@ -127,7 +128,6 @@ export class GameSession {
     const graph = d.graph;
     this.lights = new TrafficLights(graph, d.city.signals ?? []);
     this.redLights = new RedLightRunner(this.lights);
-    this.lightView = new TrafficLightView(d.scene, this.lights);
     this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 }, lights: this.lights });
     this.traffic.setBudget(this.budget, spawn);
     this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic, d.world));
@@ -273,7 +273,7 @@ export class GameSession {
     const bus = this.d.bus;
     this.clock += dt;
     this.trafficView.sync();
-    this.lightView.update(this.traffic.time);
+    this.d.signals?.update(this.lights, this.traffic.time);
     this.pedView.sync(this.clock);
     // People may only appear or vanish off-screen (or far away).
     this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);

@@ -20,6 +20,8 @@ import { addStreetscape } from './streetscape';
 import { WHITE_UV, signAtlas } from './signAtlas';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { LIGHTING, timeOfDayOf } from './sky';
+import { SignalLamps } from './signalBuilder';
+import { TrafficLights } from '../gameplay/trafficLights';
 
 // Draw order on the ground is enforced with polygon offsets, not height gaps, so layers stay
 // put at any distance: terrain < sidewalk < asphalt < paint.
@@ -43,6 +45,8 @@ type QuadSink = Pick<MeshBuilder, 'quad' | 'drapedQuad'>;
 
 export interface BuiltCity {
   props: PropSystem;
+  /** Traffic light lamps: `update` them with the session's lights and clock. */
+  signals: SignalLamps;
 }
 
 /**
@@ -192,6 +196,20 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
       fixed,
     );
   }
+  // Traffic lights before trees and lamps, which keep clear of their poles.
+  const signals = new SignalLamps({
+    city,
+    graph,
+    lights: new TrafficLights(graph, city.signals ?? []),
+    roads: roadIndex,
+    buildings: buildingIndex,
+    ground: hUp,
+    solid,
+    paint,
+    light,
+    world,
+    fixed,
+  });
   const streets = addStreetscape({
     city,
     graph,
@@ -202,6 +220,7 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     buildings: buildingIndex,
     ground: hUp,
     bulbs: light.lamps ? glow : detail,
+    keepClear: signals.poles,
     light,
     world,
     fixed,
@@ -223,11 +242,11 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     ...streets.map((m) => withinRange(m, light.fogFar * 0.75)),
     ...lights(glow, signs, atlas).map((m) => withinRange(m, light.fogFar)),
   ];
-  scene.add(...ground, ...solidMeshes, ...far, ...transitSigns(city.stations ?? [], city.metro ?? [], h), ...worksSigns(works.signs));
+  scene.add(...ground, ...solidMeshes, ...far, ...signals.meshes, ...transitSigns(city.stations ?? [], city.metro ?? [], h), ...worksSigns(works.signs));
 
   markStatic(world);
   // The roadworks' cones can be knocked over like any other.
-  return { props: new PropSystem(world, scene, { ...city, props: [...city.props, ...works.cones] }) };
+  return { props: new PropSystem(world, scene, { ...city, props: [...city.props, ...works.cones] }), signals };
 }
 
 /**
