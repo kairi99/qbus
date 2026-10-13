@@ -3,10 +3,13 @@ import { forward, right } from '../cityData';
 import { distToPolyline, pointInPolygon } from '../geom';
 import { type OsmJson, nearestOnRoads, tidyStopName } from './import';
 import { METRO_ENTRANCE as ENTRANCE } from '../metro';
+import { BUSWAY_GAP, generalRoads, nearestBusway, shiftBusway } from './busways';
 
 /** Stop positions of one system closer than this are the same station. */
 const CLUSTER = 45;
 const MAX_LENGTH = 32;
+/** A platform beside a busway needs no more than an articulated bus and a little (keeps shelters and trees nearby). */
+const BUSWAY_MAX_LENGTH = 24;
 const MIN_LENGTH = 12;
 /** A platform this long fits a whole bus with room to spare. */
 const GOOD_LENGTH = 20;
@@ -99,7 +102,8 @@ const DIVIDED = 30;
  * The divided avenue at `at`: the carriageway nearest it and the nearest parallel one across
  * the median from it, with the median's direction `n` (from `a` toward `b`) and its width.
  */
-function dividedPair(at: Vec2, roads: Road[]): { a: RoadPoint; b: RoadPoint; n: Vec2; gap: number } | null {
+function dividedPair(at: Vec2, allRoads: Road[]): { a: RoadPoint; b: RoadPoint; n: Vec2; gap: number } | null {
+  const roads = generalRoads(allRoads);
   const a = nearestOnRoads(roads, at);
   if (!a) return null;
   let best: { b: RoadPoint; across: number } | null = null;
@@ -134,6 +138,12 @@ function dividedPair(at: Vec2, roads: Road[]): { a: RoadPoint; b: RoadPoint; n: 
 export function widenMedians(roads: Road[], stationsOsm: OsmJson, routesOsm: OsmJson, toXZ: Context['toXZ'], inside: (p: Vec2) => boolean): Road[] {
   let out = roads;
   for (const c of clusterStops(stationsOsm, routesOsm, toXZ, inside)) {
+    // A busway beside the station takes its platform: the avenue stays as drawn.
+    const roomed = makeRoomAtBusway(out, c.at);
+    if (roomed) {
+      out = roomed;
+      continue;
+    }
     const pair = dividedPair(c.at, out);
     if (!pair || pair.gap >= ISLAND_ROOM) continue;
     const need = ISLAND_ROOM - pair.gap;
@@ -148,6 +158,85 @@ export function widenMedians(roads: Road[], stationsOsm: OsmJson, routesOsm: Osm
       const shift = drop ? laneW / 2 : Math.min(2.5, need / 2);
       out = reshapeCarriageway(out, cw, mid, away, shift, drop);
     }
+  }
+  return out;
+}
+
+/** Half the length of a platform the pair of busways must have room for. */
+const PLATFORM_HALF = 14;
+
+/** Clear ground between a busway's edge and the next asphalt (or busway) for a platform with a curb strip either side. */
+const PLATFORM_ROOM = CURB_WIDTH + 2 * ASPHALT_GAP;
+
+/**
+ * A station beside a busway (null when there's none within `BUSWAY_NEAR`): makes room for its
+ * platform. The opposite busway of the pair is pulled apart from this one until a platform fits
+ * between them (both tapering back to where OSM put them, the way ends staying exact), or, with
+ * no pair, the carriageway beside the platform's side gives up a lane (`reshapeCarriageway`).
+ * Then each busway's outer side gets the same treatment against the carriageway there, so the
+ * median reads as busway | platform | busway between the avenue's lanes. Returns the new roads.
+ */
+function makeRoomAtBusway(roads: Road[], at: Vec2): Road[] | null {
+  const a = nearestBusway(roads, at, BUSWAY_NEAR);
+  if (!a) return null;
+  let out = roads;
+  const hwA = a.road.width / 2;
+  const left = { x: a.dir.z, z: -a.dir.x };
+  const rightV = { x: -left.x, z: -left.z };
+  // A one-way busway is boarded from the left (between it and its opposite); a two-way one gets a platform on each side.
+  const side = a.road.oneway ? left : (at.x - a.point.x) * left.x + (at.z - a.point.z) * left.z > 0 ? left : rightV;
+  // The opposite busway on the platform's side (a one-way pair: the platform goes between them).
+  let b: RoadPoint | null = null;
+  let bAcross = Infinity;
+  if (a.road.oneway)
+    for (const r of roads) {
+      if (r.access !== 'brt' || r === a.road) continue;
+      // Across the pair along the platform's length (a lens: the narrowest spot counts).
+      let narrow = Infinity;
+      let here: RoadPoint | null = null;
+      for (let t = -PLATFORM_HALF; t <= PLATFORM_HALF; t += 2) {
+        const pa = nearestBusway([a.road], offset(a.point, a.dir, t), 4);
+        if (!pa) continue;
+        const o = nearestBusway([r], offset(pa.point, side, hwA + 2), 12);
+        if (!o) continue;
+        const dot = o.dir.x * pa.dir.x + o.dir.z * pa.dir.z;
+        const across = (o.point.x - pa.point.x) * side.x + (o.point.z - pa.point.z) * side.z;
+        if (Math.abs(dot) < 0.8 || across < 1.5 || (o.road.oneway && dot > 0)) continue;
+        narrow = Math.min(narrow, across);
+        if (t === 0 || !here) here = o;
+      }
+      if (here && narrow < bAcross) (b = here), (bAcross = narrow);
+    }
+  // A lone one-way busway has no opposite direction to serve: the station keeps to the avenue's median.
+  if (a.road.oneway && !b) return null;
+  const neg = { x: -side.x, z: -side.z };
+  const swap = (from: Road, to: Road) => (out = out.map((r) => (r === from ? to : r)));
+  let aRoad = a.road;
+  let bRoad = b?.road;
+  if (b) {
+    const need = hwA + b.road.width / 2 + PLATFORM_ROOM;
+    if (bAcross < need) {
+      const d = (need - bAcross) / 2;
+      aRoad = shiftBusway(a.road, roads, at, a.dir, { x: neg.x * d, z: neg.z * d });
+      bRoad = shiftBusway(b.road, roads, at, a.dir, { x: side.x * d, z: side.z * d });
+      swap(a.road, aRoad);
+      swap(b.road, bRoad);
+    }
+  }
+  // Each busway's outer side keeps a curb from the carriageway there; a platform side with no pair needs the room.
+  const ends: { bw: Road; point: Vec2; away: Vec2; room: number }[] = [];
+  if (b) ends.push({ bw: aRoad, point: a.point, away: neg, room: BUSWAY_GAP }, { bw: bRoad!, point: b.point, away: side, room: BUSWAY_GAP });
+  else for (const v of [left, rightV]) ends.push({ bw: aRoad, point: a.point, away: v, room: PLATFORM_ROOM });
+  for (const { bw, point, away, room } of ends) {
+    const edge = offset(point, away, bw.width / 2 + 0.2);
+    const cw = nearestOnRoads(generalRoads(out), edge);
+    if (!cw) continue;
+    const clearance = cw.dist - cw.road.width / 2 + 0.2;
+    if (clearance >= room || cw.dist > 30) continue;
+    const deficit = room - clearance;
+    const laneW = cw.road.width / cw.road.lanes;
+    const drop = cw.road.lanes >= 3;
+    out = reshapeCarriageway(out, cw, point, away, drop ? laneW / 2 : Math.min(deficit, 4), drop);
   }
   return out;
 }
@@ -284,10 +373,13 @@ function simplifyStraight(pts: Vec2[]): Vec2[] {
  */
 function placeStation(at: Vec2, ctx: Context): Built[] {
   const one = (b: Built | null) => (b ? [b] : []);
+  // A segregated busway beside it: the platform sits on the busway's left (or between two busways).
+  const onBusway = buswayStation(at, ctx);
+  if (onBusway.length) return onBusway;
   const pair = dividedPair(at, ctx.roads);
   if (!pair || pair.gap < MIN_WIDTH + 2 * ASPHALT_GAP) {
     // Mixed traffic: a curb platform on the right of travel.
-    const near = nearestOnRoads(ctx.roads, at);
+    const near = nearestOnRoads(generalRoads(ctx.roads), at);
     if (!near) return [];
     const n = right(Math.atan2(-near.dir.z, near.dir.x));
     return one(platform(offset(near.point, n, near.road.width / 2 + ASPHALT_GAP + CURB_WIDTH / 2), CURB_WIDTH, near.dir, n, [near], ctx));
@@ -324,6 +416,59 @@ function placeStation(at: Vec2, ctx: Context): Built[] {
   return one((first && island(first.platform.pos)) ?? first);
 }
 
+/** A busway this close to a station's stop positions is the one it serves. */
+const BUSWAY_NEAR = 25;
+
+/**
+ * A platform for a station beside a busway: between two opposite busways when they have room for
+ * one (boarded from the left from both), else along the left side of a one-way busway (the right
+ * side of a two-way one: its lane is on the right). Null when nothing clear fits, and the
+ * station falls back to the avenue's own lanes.
+ */
+function buswayStation(at: Vec2, ctx: Context): Built[] {
+  const a0 = nearestBusway(ctx.roads, at, BUSWAY_NEAR);
+  if (!a0) return [];
+  const oneway = !!a0.road.oneway;
+  const hwA = a0.road.width / 2;
+  const leftOf = (a: RoadPoint) => ({ x: a.dir.z, z: -a.dir.x });
+  // Between a one-way busway and the opposite one beside it: try spots along it, nearest the stop positions first
+  // (OSM draws a station bay as a lens, so the gap changes along it), and keep the first with room for a bus.
+  if (oneway) {
+    let best: Built | null = null;
+    for (const t of [0, 3, -3, 6, -6, 9, -9, 12, -12, 16, -16, 20, -20, 25, -25]) {
+      const a = nearestBusway([a0.road], offset(a0.point, a0.dir, t), 4);
+      if (!a) continue;
+      const side = leftOf(a);
+      for (const r of ctx.roads) {
+        if (r.access !== 'brt' || r === a.road) continue;
+        const b = nearestBusway([r], offset(a.point, side, hwA + 3), 14);
+        if (!b) continue;
+        const dot = b.dir.x * a.dir.x + b.dir.z * a.dir.z;
+        const across = (b.point.x - a.point.x) * side.x + (b.point.z - a.point.z) * side.z;
+        const gap = across - hwA - b.road.width / 2;
+        if (Math.abs(dot) < 0.8 || across < 1.5 || (b.road.oneway && dot > 0) || gap < MIN_WIDTH + 2 * ASPHALT_GAP) continue;
+        // The widest platform that's long enough for a bus (a lens narrows toward its ends), else the longest.
+        for (let w = Math.min(MAX_WIDTH, gap - 2 * ASPHALT_GAP); w >= MIN_WIDTH; w -= 0.4) {
+          const built = platform(offset(a.point, side, hwA + gap / 2), w, a.dir, side, [a, b], ctx);
+          if (built && built.platform.length >= GOOD_LENGTH) return [built];
+          if (built && (!best || built.platform.length > best.platform.length)) best = built;
+        }
+      }
+    }
+    return best ? [best] : [];
+  }
+  // Beside a two-way busway: a platform on each side.
+  const a = a0;
+  const sides = [leftOf(a), { x: -leftOf(a).x, z: -leftOf(a).z }];
+  return sides.map((side) => platform(offset(a.point, side, hwA + BUSWAY_GAP + CURB_WIDTH / 2), CURB_WIDTH, a.dir, side, [a], ctx)).filter((x): x is Built => !!x);
+}
+
+/** The side of busway point `a` that `at` is on (a one-way busway's platform is on its left instead). */
+function sideToward(a: RoadPoint, at: Vec2): Vec2 {
+  const left = { x: a.dir.z, z: -a.dir.x };
+  return (at.x - a.point.x) * left.x + (at.z - a.point.z) * left.z > 0 ? left : { x: -left.x, z: -left.z };
+}
+
 /** The median across `p` (along `n`): its middle and width, from the asphalt on either side. */
 function medianAt(p: Vec2, n: Vec2, roads: Road[]): { center: Vec2; width: number } | null {
   const paved = (q: Vec2) => roads.some((r) => distToPolyline(q, r.points) < r.width / 2);
@@ -348,11 +493,14 @@ function platform(center: Vec2, width: number, axis: Vec2, n: Vec2, carriageways
       const p = offset(offset(center, axis, t), n, (s * width) / 2);
       return offRoads(ctx.roads, p, 0.2) && !ctx.onJunction(p) && !ctx.buildings.some((b) => pointInPolygon(p, b.footprint));
     });
-  if (!clear(0)) return null;
+  if (!clear(0)) {
+    return null;
+  }
   let lo = 0;
   let hi = 0;
-  while (lo > -MAX_LENGTH / 2 && clear(lo - 1)) lo--;
-  while (hi < MAX_LENGTH / 2 && clear(hi + 1)) hi++;
+  const maxLength = carriageways.some((c) => c.road.access) ? BUSWAY_MAX_LENGTH : MAX_LENGTH;
+  while (lo > -maxLength / 2 && clear(lo - 1)) lo--;
+  while (hi < maxLength / 2 && clear(hi + 1)) hi++;
   if (hi - lo < MIN_LENGTH) return null;
   const mid = offset(center, axis, (lo + hi) / 2);
   // A canonical direction, so two platforms of a station line up the same way.
@@ -400,7 +548,7 @@ function placeEntrance(p: Vec2, ctx: Context): { pos: Vec2; heading: number } | 
     for (let i = 0; i < steps; i++) {
       const a = (i / steps) * 2 * Math.PI;
       const c = { x: p.x + Math.cos(a) * r, z: p.z + Math.sin(a) * r };
-      const road = nearestOnRoads(ctx.roads, c);
+      const road = nearestOnRoads(generalRoads(ctx.roads), c);
       if (!road || !ctx.inside(c)) continue;
       const toRoad = unit({ x: road.point.x - c.x, z: road.point.z - c.z });
       const heading = Math.atan2(-toRoad.z, toRoad.x);
@@ -419,7 +567,8 @@ function placeEntrance(p: Vec2, ctx: Context): { pos: Vec2; heading: number } | 
 }
 
 /** "Av. América y Pérez Guerrero" for a station without a name. */
-function crossName(roads: Road[], p: Vec2): string {
+function crossName(allRoads: Road[], p: Vec2): string {
+  const roads = generalRoads(allRoads);
   const main = nearestOnRoads(roads, p);
   const cross = main && nearestOnRoads(roads.filter((r) => r.name !== main.road.name && !/sin nombre/i.test(r.name)), p);
   const short = (s: string) => s.replace(/^Av\. /, '');

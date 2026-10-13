@@ -3,10 +3,11 @@ import type { Building, CityData, Feature, Horizon, Prop, Road, Stop, TrafficSig
 import { forward, inPlayArea, right, stopZone } from '../cityData';
 import { distToPolyline, pointInPolygon, polygonToPolylineDistance } from '../geom';
 import { type Terrain, smoothHeights } from '../terrain';
-import { buildRoadGraph, dirAt, projectOnPath } from '../roadGraph';
+import { buildRoadGraph, dirAt, edgeAllows, projectOnPath } from '../roadGraph';
 import { importLines } from './lines';
 import { importStations, widenMedians } from './stations';
 import { importCampuses } from './campus';
+import { BUSWAY_NAME, buswayWidth, clearBusways, generalRoads, isBusway } from './busways';
 import { CLEARANCE, type Level, separateGrades } from './grades';
 import { liftAlong, projectOnRoad } from '../elevation';
 
@@ -75,6 +76,9 @@ const ROAD_CLASSES: Record<string, { lanes: number; onewayLanes: number; kind: R
   tertiary_link: { lanes: 1, onewayLanes: 1, kind: 'street' },
 };
 
+/** A segregated busway: one lane each way unless OSM says otherwise (see busways.ts). */
+const BUSWAY_CLASS = { lanes: 2, onewayLanes: 1, kind: 'street' as Road['kind'] };
+
 const WALLS = ['#f2e8d5', '#e9d3b4', '#d8e2dc', '#f4c7a1', '#c9d6e8', '#f0d98c', '#e6b8b8', '#fbfaf5', '#cfd8c4', '#b9c4cc'];
 const TERRACOTTA = '#b5563a';
 const CONCRETE_ROOF = '#9a9a96';
@@ -133,11 +137,12 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   const inside = (p: Vec2, pad = 0) =>
     p.x >= bounds.min.x - pad && p.x <= bounds.max.x + pad && p.z >= bounds.min.z - pad && p.z <= bounds.max.z + pad;
 
-  // Median stations need room between the carriageways: make it before anything else uses the roads.
-  const flat =
-    stationsOsm && routesOsm
-      ? widenMedians(importRoads(osm, proj.toXZ, bounds), stationsOsm, routesOsm, proj.toXZ, (p) => inside(p))
-      : importRoads(osm, proj.toXZ, bounds);
+  // Busways come in first, pushed off the avenues' asphalt (OSM puts them in the medians, right
+  // against the carriageways); then stations get room beside them (platform between a pair of
+  // busways, the avenue's lanes giving way) or, on plain avenues, in their median: make it before
+  // anything else uses the roads.
+  const imported = clearBusways(importRoads(osm, proj.toXZ, bounds));
+  const flat = stationsOsm && routesOsm ? widenMedians(imported, stationsOsm, routesOsm, proj.toXZ, (p) => inside(p)) : imported;
   // Bridges go up and underpasses down, with ramps; roads on different levels don't meet.
   // Then again with every junction's paved area (as the road graph clusters and trims them)
   // kept level on the ramps that run into it, until none still climbs there. One that would
@@ -182,7 +187,13 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
     max: { x: bounds.max.x - EDGE_INSET, z: bounds.max.z - EDGE_INSET },
   };
   const playable = (p: Vec2) => inPlayArea({ playArea }, p, 15);
-  let stops = importStops(osm, proj.toXZ, inside, roads, buildings).filter((st) => !onJunction(st.pos) && playable(st.pos));
+  // Junction areas as they'd be without busways: shelters there are dropped, but one that a busway's
+  // junction swallowed slides clear instead (below).
+  const bareHulls = buildRoadGraph({ roads: generalRoads(roads) } as CityData)
+    .nodes.filter((n) => n.hull)
+    .map((n) => n.hull!);
+  const onBareJunction = (p: Vec2) => bareHulls.some((h) => pointInPolygon(p, h));
+  let stops = importStops(osm, proj.toXZ, inside, roads, buildings).filter((st) => !onBareJunction(st.pos) && playable(st.pos));
   const transit =
     stationsOsm && routesOsm ? importStations(stationsOsm, routesOsm, { toXZ: proj.toXZ, roads, buildings, onJunction, inside: playable }) : undefined;
   // Keep station platforms and Metro canopies free of shelters, trees and street furniture.
@@ -190,7 +201,21 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
     !!transit &&
     (transit.stations.some((s) => inFootprint(p, s.pos, s.heading, s.length / 2 + pad, s.width / 2 + pad)) ||
       transit.metro.some((m) => Math.hypot(p.x - m.pos.x, p.z - m.pos.z) < 4 + pad));
-  if (transit) stops = [...stops.filter((st) => !occupied(st.pos, 3)), ...transit.stops];
+  // A shelter on a platform or a junction slides along its street to the nearest clear spot (a line
+  // loses no stop to a station or to the wider junction a busway makes).
+  const clearOfPlatforms = (st: Stop): Stop | null => {
+    const bad = (p: Vec2) => onJunction(p) || (!!transit && occupied(p, 3));
+    if (!bad(st.pos)) return st;
+    const f = forward(st.heading);
+    for (let k = 3; k <= 30; k += 1.5)
+      for (const sgn of [1, -1]) {
+        const pos = { x: st.pos.x + f.x * k * sgn, z: st.pos.z + f.z * k * sgn };
+        if (!bad(pos) && !buildings.some((b) => pointInPolygon(pos, b.footprint)) && stops.every((o) => o === st || Math.hypot(o.pos.x - pos.x, o.pos.z - pos.z) >= 12)) return { ...st, pos };
+      }
+    return null;
+  };
+  stops = stops.map(clearOfPlatforms).filter((st): st is Stop => !!st);
+  if (transit) stops = [...stops, ...transit.stops];
   // Stops only count where a bus can get to them: on a lane going their way that traffic
   // (and route planning) uses. Near the roadworks some streets are closed.
   const graph = buildRoadGraph({ roads, playArea } as CityData);
@@ -198,7 +223,7 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
     const z = stopZone(st);
     const f = forward(st.heading);
     return graph.edges.some((e) => {
-      if (!e.drivable) return false;
+      if (!edgeAllows(e, st.system ? 'brt' : 'general')) return false;
       const { s, d } = projectOnPath(e.center, z);
       const dir = dirAt(e.center, s);
       return d < 10 && dir.x * f.x + dir.z * f.z > 0.5;
@@ -254,7 +279,7 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   const features = placeFeatures(roads, opts.seed ?? 1).filter(
     (f) => playable(f.pos) && !nearLifted(roads, f.pos, 20) && !nearRampPoint(roads, f.pos, 25) && !onAnotherRoad(roads, f),
   );
-  const spawn = pickSpawn(roads.filter((r) => !r.lift), bounds);
+  const spawn = pickSpawn(roads.filter((r) => !r.lift && !r.access), bounds);
 
   return {
     name: opts.name,
@@ -330,7 +355,8 @@ function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bou
   const roads: Road[] = [];
   for (const e of osm.elements) {
     const t = e.tags ?? {};
-    const cls = ROAD_CLASSES[t.highway];
+    const busway = e.type === 'way' && isBusway(t);
+    const cls = busway ? BUSWAY_CLASS : ROAD_CLASSES[t.highway];
     if (e.type !== 'way' || !cls || !e.geometry || t.area === 'yes' || t.tunnel === 'building_passage') continue;
     // Bridges and underpasses sit on their own level (see grades.ts); `layer` alone means nothing.
     const layer = t.bridge && t.bridge !== 'no' ? Number(t.layer) || 1 : t.tunnel && t.tunnel !== 'no' ? Number(t.layer) || -1 : 0;
@@ -338,16 +364,17 @@ function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bou
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.oneway === '-1' || t.junction === 'roundabout';
     if (t.oneway === '-1') pts.reverse();
     const lanes = clampInt(t.lanes, 1, 6) ?? (oneway ? cls.onewayLanes : cls.lanes);
-    const width = oneway ? Math.max(6, lanes * LANE + 1) : Math.max(7, lanes * LANE + 1);
+    const width = busway ? buswayWidth(lanes, oneway) : oneway ? Math.max(6, lanes * LANE + 1) : Math.max(7, lanes * LANE + 1);
     for (const piece of clipPolyline(simplify(pts, 0.4), bounds)) {
       if (length(piece) < 3) continue;
       roads.push({
-        name: shortName(t.name ?? t.ref ?? 'Calle sin nombre'),
-        kind: lanes >= 4 || (cls.kind === 'avenue' && !oneway) ? 'avenue' : 'street',
+        name: busway ? BUSWAY_NAME : shortName(t.name ?? t.ref ?? 'Calle sin nombre'),
+        kind: busway ? 'street' : lanes >= 4 || (cls.kind === 'avenue' && !oneway) ? 'avenue' : 'street',
         points: piece,
         width: round(width, 1),
         lanes,
         oneway,
+        ...(busway ? { access: 'brt' as const } : {}),
         ...(layer ? { layer } : {}),
       });
     }
@@ -520,7 +547,7 @@ function importStops(
     const name = tidy && !/^(bus|parada|bus stop|parada de bus)$/i.test(tidy) && !/sin nombre/i.test(tidy) ? tidy : undefined;
     const p = toXZ(e.lat!, e.lon!);
     if (!inside(p, -40)) continue;
-    const near = nearestOnRoads(roads.filter((r) => r.kind === 'avenue' || r.lanes >= 2), p);
+    const near = nearestOnRoads(roads.filter((r) => !r.access && (r.kind === 'avenue' || r.lanes >= 2)), p);
     if (!near || near.dist > 30) continue;
     const { road, point, dir } = near;
     const along = Math.atan2(-dir.z, dir.x);
@@ -534,7 +561,7 @@ function importStops(
     if (buildings.some((b) => pointInPolygon(shelter, b.footprint) || pointInPolygon(pos, b.footprint))) continue;
     if (stops.some((s) => Math.hypot(s.pos.x - pos.x, s.pos.z - pos.z) < 25)) continue;
     const cross = nearestOnRoads(
-      roads.filter((o) => o.name !== road.name && !/sin nombre/i.test(o.name)),
+      roads.filter((o) => !o.access && o.name !== road.name && !/sin nombre/i.test(o.name)),
       point,
     );
     stops.push({
@@ -583,7 +610,7 @@ function scatterProps(roads: Road[], stops: Stop[], buildings: Building[], seed:
     roads.every((r) => distToPolyline(p, r.points) > r.width / 2 + 0.25) &&
     !stops.some((s) => Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < 7) &&
     !props.some((q) => Math.hypot(q.pos.x - p.x, q.pos.z - p.z) < 3);
-  for (const road of roads) {
+  for (const road of generalRoads(roads)) {
     for (let i = 0; i < road.points.length - 1; i++) {
       const a = road.points[i];
       const b = road.points[i + 1];
@@ -644,7 +671,7 @@ function onAnotherRoad(roads: Road[], f: Feature): boolean {
 
 function placeFeatures(roads: Road[], seed: number): Feature[] {
   const out: Feature[] = [];
-  for (const road of roads) {
+  for (const road of generalRoads(roads)) {
     if (road.kind === 'avenue') continue;
     for (let i = 0; i < road.points.length - 1; i++) {
       const a = road.points[i];

@@ -21,6 +21,11 @@ export interface Road {
   lanes: number;
   /** Traffic only flows in the direction the points are listed. */
   oneway?: boolean;
+  /**
+   * Who may drive it. Absent = general traffic. `'brt'` = a segregated busway (OSM
+   * `highway=service` + `access=no` + bus/psv): only articulated BRT buses; see `world/osm/busways.ts`.
+   */
+  access?: 'brt';
   /** OSM level of a bridge (> 0) or underpass (< 0). */
   layer?: number;
   /**
