@@ -100,6 +100,8 @@ export interface Car {
   held: boolean;
   /** Busway bus: seconds left at the station it is stopped at. */
   dwell: number;
+  /** Busway bus: the junction its tail is still crossing (kept reserved until it is clear). */
+  tail: number | null;
   /** Busway bus: the station (edge and distance along it) it last stopped at, so it leaves it behind. */
   served: number;
   /** Bumped every time the car is placed somewhere new, so the physics body knows to snap. */
@@ -127,6 +129,8 @@ const STUCK_WAIT = 25;
 /** Braking a car accepts to stop for an amber light; harder than this and it goes through. */
 const AMBER_DECEL = 3.5;
 const EXIT_CLEAR = 9;
+/** Offset for the phantom junction claim a long bus's tail keeps (car ids stay below it). */
+const TAIL = 100000;
 
 const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.z * b.z;
 const sameDir = (a: Vec2, b: Vec2) => dot(a, b) > 0.7;
@@ -211,6 +215,7 @@ export class TrafficSim {
         blocker: null,
         held: false,
         dwell: 0,
+        tail: null,
         served: -1,
         generation: 0,
       };
@@ -297,6 +302,7 @@ export class TrafficSim {
       this.place(car, this.focus.pos, 0, (p) => hiddenFrom(this.focus, p));
       return;
     }
+    if (car.tail !== null && !car.turn && car.s > car.kind.length / 2 + 2) this.clearTail(car);
     const e = this.graph.edges[car.edge];
     const vmax = car.kind.vmax * (car.hurry > 0 ? 1.15 : 1);
     car.hurry = Math.max(0, car.hurry - dt);
@@ -366,7 +372,19 @@ export class TrafficSim {
         }
       }
       if (!exiting) vTarget = Math.min(vTarget, Math.sqrt(this.turnSpeed(car) ** 2 + 2 * DECEL * remaining));
-      if (car.kind === BRT_KIND) vTarget = Math.min(vTarget, this.station(car, e, dt));
+      if (car.kind === BRT_KIND) {
+        vTarget = Math.min(vTarget, this.station(car, e, dt));
+        if (exiting) {
+          // A busway that ends: stop with the nose at the end (18 m must not hang over the street
+          // it meets) and, once out of sight, go back into service elsewhere.
+          const room = remaining - car.kind.length / 2 - 0.5;
+          vTarget = Math.min(vTarget, Math.sqrt(2 * BRT_DECEL * Math.max(0, room)));
+          if (room < 1 && car.speed < 0.3) {
+            car.wait += dt;
+            if (car.wait > 3 && outOfSight(this.focus, car.pos)) this.place(car, this.focus.pos, 0, (p) => hiddenFrom(this.focus, p));
+          }
+        }
+      }
 
       // Stuck behind something that isn't moving on a multi-lane road: change lanes.
       if (e.lanes > 1 && blocker && car.speed < 1 && car.blockedTime > 2) {
@@ -519,11 +537,19 @@ export class TrafficSim {
   }
 
   private unreserve(car: Car): void {
+    this.clearTail(car);
     if (car.reserved !== null) this.occupants.get(car.reserved)?.delete(car.id);
     if (car.reserved !== null && this.priority.get(car.reserved)?.car === car.id) this.priority.delete(car.reserved);
     for (const [node, p] of this.priority) if (p.car === car.id) this.priority.delete(node);
     car.reserved = null;
     car.turn = null;
+  }
+
+  /** A busway bus's tail has left the junction (or the bus was moved): other streams may enter. */
+  private clearTail(car: Car): void {
+    if (car.tail === null) return;
+    this.occupants.get(car.tail)?.delete(TAIL + car.id);
+    car.tail = null;
   }
 
   private startTurn(car: Car, overshoot: number): void {
@@ -593,7 +619,14 @@ export class TrafficSim {
   }
 
   private finishTurn(car: Car, overshoot: number): void {
+    // An 18 m bus is still crossing the junction when its middle leaves it: keep it taken.
+    const node = car.reserved;
+    const held = car.kind === BRT_KIND && node !== null ? this.occupants.get(node)?.get(car.id) : undefined;
     this.unreserve(car);
+    if (held && node !== null) {
+      this.occupants.get(node)!.set(TAIL + car.id, held);
+      car.tail = node;
+    }
     car.edge = car.next;
     car.lane = car.nextLane;
     const e = this.graph.edges[car.edge];
@@ -611,7 +644,12 @@ export class TrafficSim {
     const node = this.graph.nodes[e.to];
     // Busway buses stay on busway lanes (turning round at a dead end); the rest stay off them.
     const brt = car.kind === BRT_KIND;
-    const drivable = node.out.filter((id) => (brt ? this.graph.edges[id].access === 'brt' && this.graph.edges[id].brtDrivable : this.graph.edges[id].drivable));
+    // An 18 m bus only drives straight on: a turn or U-turn would swing its box over the street
+    // beside the busway, so where the busway turns it ends (see the end-of-busway wait in `drive`).
+    const drivable = node.out.filter((id) => {
+      const o = this.graph.edges[id];
+      return brt ? o.access === 'brt' && o.brtDrivable && sameDir(e.endDir, o.dir) : o.drivable;
+    });
     if (!drivable.length) {
       car.next = -1; // leaving the map
       car.nextLane = 0;
@@ -674,7 +712,7 @@ export class TrafficSim {
       );
       if (!free) continue;
       const dir = edgeDir(e, s);
-      Object.assign(car, { state: 'driving', edge: e.id, s, lane, offset: laneOffset(e, lane), pos: p, heading: Math.atan2(-dir.z, dir.x), speed: car.kind.vmax * 0.6, wait: 0, blockedTime: 0, held: false, dwell: 0, turn: null });
+      Object.assign(car, { state: 'driving', edge: e.id, s, lane, offset: laneOffset(e, lane), pos: p, heading: Math.atan2(-dir.z, dir.x), speed: car.kind.vmax * 0.6, wait: 0, blockedTime: 0, held: false, dwell: 0, tail: null, turn: null });
       car.generation++;
       this.chooseNext(car);
       return;
