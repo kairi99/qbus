@@ -28,6 +28,9 @@ export const CAR_KINDS: Record<Exclude<CarKind['name'], 'brt'>, CarKind> = {
  */
 export const BRT_KIND: CarKind = { name: 'brt', length: 18, width: 2.55, height: 3.1, mass: 9000, vmax: 9.5, weight: 0 };
 
+/** Extra width cars keep clear of a busway bus: its 18 m box sweeps wide on a bend beside a street. */
+const BRT_CLEARANCE = 1.6;
+
 /** A busway bus stops this long at a station, seconds. */
 const DWELL = 5;
 /** Braking it plans for into a station (gentle: it carries standing passengers), m/s². */
@@ -229,7 +232,7 @@ export class TrafficSim {
     this.time += dt;
     const driving = this.cars.filter((c) => c.state === 'driving');
     const others: Obstacle[] = [
-      ...driving.map((c) => ({ id: `car${c.id}`, pos: c.pos, heading: c.heading, length: c.kind.length, width: c.kind.width, lift: this.liftOf(c) })),
+      ...driving.map((c) => ({ id: `car${c.id}`, pos: c.pos, heading: c.heading, length: c.kind.length, width: c.kind.width + (c.kind === BRT_KIND ? BRT_CLEARANCE : 0), lift: this.liftOf(c) })),
       ...obstacles,
     ];
     for (const car of driving) this.drive(car, dt, others, obstacles, events);
@@ -324,6 +327,18 @@ export class TrafficSim {
       if (standoff && car.id < other.id) continue;
       const of = forward(o.heading);
       const or = right(o.heading);
+      if (car.kind === BRT_KIND && other && other.kind !== BRT_KIND) {
+        // An 18 m bus has a body behind its center that its forward path never covers: with
+        // someone already alongside it (a street running beside the busway), wait for them to clear.
+        const bf = forward(car.heading);
+        const rel = { x: o.pos.x - car.pos.x, z: o.pos.z - car.pos.z };
+        const lift = this.liftOf(car);
+        if (Math.abs(dot(rel, bf)) < car.kind.length / 2 + o.length / 2 + 0.5 && Math.abs(dot(rel, right(car.heading))) < car.kind.width / 2 + o.width / 2 + 0.3 && (o.lift === undefined || Math.abs(o.lift - lift) <= LEVEL_SEP)) {
+          vTarget = 0;
+          blocker = o.id;
+          continue;
+        }
+      }
       for (const p of path) {
         const rel = { x: p.pos.x - o.pos.x, z: p.pos.z - o.pos.z };
         if (Math.abs(dot(rel, of)) > o.length / 2 + pad || Math.abs(dot(rel, or)) > o.width / 2 + pad) continue;
@@ -458,7 +473,17 @@ export class TrafficSim {
     const settled = Math.abs(car.offset - target) < 1e-6;
     car.pos = settled ? lanePoint(edge, car.s, car.lane) : lanePoint(edge, car.s, car.lane, car.offset);
     const d = edgeDir(edge, car.s);
-    car.heading = Math.atan2(-d.z, d.x) - (car.speed > 1 ? Math.atan2(lateral / dt, car.speed) : 0);
+    // Skew toward the lane we are moving to; capped by a nominal speed so a crawling car does not turn sideways.
+    if (car.kind === BRT_KIND) {
+      // A rigid 18 m box lies along the chord of the bend under it, not the tangent at its middle.
+      const a = lanePoint(edge, Math.max(0, car.s - car.kind.length / 2), car.lane);
+      const b = lanePoint(edge, Math.min(edge.len, car.s + car.kind.length / 2), car.lane);
+      if (Math.hypot(b.x - a.x, b.z - a.z) > 4) {
+        car.heading = Math.atan2(-(b.z - a.z), b.x - a.x);
+        return;
+      }
+    }
+    car.heading = Math.atan2(-d.z, d.x) - (car.speed > 1 && car.kind !== BRT_KIND ? Math.atan2(lateral / dt, Math.max(car.speed, 12)) : 0);
   }
 
   /** Speed cap for a busway bus approaching or standing at a station on its lane. */
