@@ -131,7 +131,7 @@ export class PassengersView {
     const t = bus.body.translation();
     const fw = forward(bus.heading);
     const rt = right(bus.heading + (left ? Math.PI : 0));
-    const L = bus.preset.body.length;
+    const L = bus.frontLength;
     const W = bus.preset.body.width;
     return this.at({ x: t.x + fw.x * (L / 2 - 1.3) + rt.x * (W / 2 + 0.3), z: t.z + fw.z * (L / 2 - 1.3) + rt.z * (W / 2 + 0.3) });
   }

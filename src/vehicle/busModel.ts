@@ -14,15 +14,23 @@ export class BusModel {
   readonly root = new THREE.Group();
   private exterior = new THREE.Group();
   private cockpit = new THREE.Group();
-  private wheels: { pivot: THREE.Object3D; spin: THREE.Object3D }[] = [];
+  private wheels: { pivot: THREE.Object3D; spin: THREE.Object3D; rear: boolean; index: number }[] = [];
+  /** Rear section of an articulated bus, posed relative to the front one. */
+  private rearGroup: THREE.Group | null = null;
+  /** Length of the front section (the whole bus when rigid). */
+  private frontLength: number;
   private steeringWheel!: THREE.Object3D;
   /** Exhaust flames, shown while the nitro burns. */
   private flames = new THREE.Group();
 
   constructor(private preset: BusPreset) {
-    const { length: L, width: W, height: H } = preset.body;
+    const { length: total, width: W, height: H } = preset.body;
+    const art = preset.articulated;
+    const L = art ? total - art.rearLength - art.gap : total;
+    this.frontLength = L;
     const car = preset.kind === 'car';
     if (car) this.exterior.add(...carExterior(preset));
+    else if (art) this.articulatedExterior(preset, art);
     else this.busExterior(preset);
     this.exterior.traverse((o) => (o.castShadow = true));
 
@@ -37,11 +45,11 @@ export class BusModel {
       const core = new THREE.Mesh(flameGeo, inner);
       core.scale.set(0.6, 0.5, 0.5);
       flame.add(core);
-      flame.position.set(-L / 2, car ? -H * 0.3 : -H * 0.42, z);
+      flame.position.set(-(art ? art.rearLength : L) / 2, car ? -H * 0.3 : -H * 0.42, z);
       this.flames.add(flame);
     }
     this.flames.visible = false;
-    this.exterior.add(this.flames);
+    (this.rearGroup ?? this.exterior).add(this.flames);
 
     // Cockpit: dashboard, pillars, roof edge and steering wheel seen from the driver seat.
     this.steeringWheel = new THREE.Mesh(new THREE.TorusGeometry(car ? 0.18 : 0.22, 0.03, 6, 16), flat('#111'));
@@ -59,12 +67,17 @@ export class BusModel {
     tire.rotateX(Math.PI / 2);
     const tireMat = flat('#1b1b1b');
     const hubMat = flat(car ? '#d9d9d4' : '#bbbbbb');
-    for (const [x, z] of [
-      [w.frontOffset, -w.track],
-      [w.frontOffset, w.track],
-      [w.rearOffset, -w.track],
-      [w.rearOffset, w.track],
-    ]) {
+    const axles: [number, number, boolean][] = [
+      [w.frontOffset, -w.track, false],
+      [w.frontOffset, w.track, false],
+      [w.rearOffset, -w.track, false],
+      [w.rearOffset, w.track, false],
+    ];
+    if (art)
+      axles.push([art.rearAxle, -w.track, true], [art.rearAxle, w.track, true]);
+    let nFront = 0;
+    let nRear = 0;
+    for (const [x, z, rear] of axles) {
       const pivot = new THREE.Group();
       pivot.position.set(x, w.mountHeight, z);
       const spin = new THREE.Group();
@@ -73,15 +86,23 @@ export class BusModel {
       const hub = new THREE.Mesh(new THREE.BoxGeometry(w.radius * 0.9, w.radius * 0.3, tireWidth + 0.02), hubMat);
       spin.add(mesh, hub);
       pivot.add(spin);
-      this.exterior.add(pivot);
-      this.wheels.push({ pivot, spin });
+      (rear ? this.rearGroup! : this.exterior).add(pivot);
+      this.wheels.push({ pivot, spin, rear, index: rear ? nRear++ : nFront++ });
     }
 
     this.root.add(this.exterior, this.cockpit);
   }
 
   private busExterior(preset: BusPreset): void {
-    const { length: L, width: W, height: H, color, stripe, roof } = preset.body;
+    this.exterior.add(...this.busSection(preset, preset.body.length, true, true));
+  }
+
+  /**
+   * One box-built bus body of length `L` (a whole bus, or one section of an articulated one):
+   * windows, stripe, and a nose (windshield, headlights, sign) and/or a tail (tail lights).
+   */
+  private busSection(preset: BusPreset, L: number, nose: boolean, tail: boolean): THREE.Object3D[] {
+    const { width: W, height: H, color, stripe, roof } = preset.body;
     const glass = flat('#1c2a38');
     const body = new THREE.Mesh(new THREE.BoxGeometry(L, H * 0.92, W), flat(color));
     body.position.y = -H * 0.04;
@@ -90,23 +111,76 @@ export class BusModel {
     const band = new THREE.Mesh(new THREE.BoxGeometry(L + 0.02, H * 0.12, W + 0.02), flat(stripe));
     band.position.y = -H * 0.18;
     const sideWindows = new THREE.Mesh(new THREE.BoxGeometry(L * 0.72, H * 0.3, W + 0.04), glass);
-    sideWindows.position.set(-L * 0.08, H * 0.16, 0);
-    const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.06, H * 0.42, W * 0.9), glass);
-    windshield.position.set(L / 2 + 0.01, H * 0.12, 0);
-    const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.2, H * 0.12, W * 1.02), flat('#333'));
-    bumper.position.set(L / 2 + 0.05, -H * 0.4, 0);
-    this.exterior.add(body, roofMesh, band, sideWindows, windshield, bumper, this.makeSign(preset, L, H, W));
-    for (const z of [-W * 0.36, W * 0.36]) {
-      const light = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), new THREE.MeshBasicMaterial({ color: '#fff6c8' }));
-      light.position.set(L / 2 + 0.04, -H * 0.28, z);
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.3), new THREE.MeshBasicMaterial({ color: '#d42020' }));
-      tail.position.set(-L / 2 - 0.04, -H * 0.2, z);
-      this.exterior.add(light, tail);
+    sideWindows.position.set(nose ? -L * 0.08 : 0, H * 0.16, 0);
+    const out: THREE.Object3D[] = [body, roofMesh, band, sideWindows];
+    if (nose) {
+      const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.06, H * 0.42, W * 0.9), glass);
+      windshield.position.set(L / 2 + 0.01, H * 0.12, 0);
+      const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.2, H * 0.12, W * 1.02), flat('#333'));
+      bumper.position.set(L / 2 + 0.05, -H * 0.4, 0);
+      out.push(windshield, bumper, this.makeSign(preset, L, H, W));
+      for (const z of [-W * 0.36, W * 0.36]) {
+        const light = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), new THREE.MeshBasicMaterial({ color: '#fff6c8' }));
+        light.position.set(L / 2 + 0.04, -H * 0.28, z);
+        out.push(light);
+      }
+    }
+    if (tail)
+      for (const z of [-W * 0.36, W * 0.36]) {
+        const light = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.3), new THREE.MeshBasicMaterial({ color: '#d42020' }));
+        light.position.set(-L / 2 - 0.04, -H * 0.2, z);
+        out.push(light);
+      }
+    return out;
+  }
+
+  /**
+   * Articulated bus: a front section (in `exterior`) and a rear one (in `rearGroup`, posed by
+   * `sync`), each with half of the black bellows over the turntable, and passenger doors on both
+   * sides: right ones for street stops, left ones for BRT median platforms.
+   */
+  private articulatedExterior(preset: BusPreset, art: NonNullable<BusPreset['articulated']>): void {
+    const { width: W, height: H } = preset.body;
+    const Lf = this.frontLength;
+    const Lr = art.rearLength;
+    this.exterior.add(...this.busSection(preset, Lf, true, false));
+    const rear = new THREE.Group();
+    rear.add(...this.busSection(preset, Lr, false, true));
+    this.rearGroup = rear;
+    this.exterior.add(rear);
+    const bellowsMat = flat('#202225');
+    const bellowsLen = art.gap / 2 + 0.25;
+    for (const [group, x] of [
+      [this.exterior, -(Lf / 2 + art.gap / 4 - 0.12)],
+      [rear, Lr / 2 + art.gap / 4 - 0.12],
+    ] as [THREE.Object3D, number][]) {
+      const bellows = new THREE.Mesh(new THREE.BoxGeometry(bellowsLen, H * 0.88, W * 0.94), bellowsMat);
+      bellows.position.set(x, -H * 0.04, 0);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(bellowsLen, 0.06, W * 0.9), flat('#777'));
+      plate.position.set(x, -H * 0.5 + 0.02, 0);
+      group.add(bellows, plate);
+    }
+    // Doors: a glazed double leaf with a yellow frame, on each side, one per section.
+    const leaf = flat('#2a4458');
+    const frame = flat('#f2c230');
+    const door = (group: THREE.Object3D, x: number, side: number) => {
+      const f = new THREE.Mesh(new THREE.BoxGeometry(1.5, H * 0.74, 0.04), frame);
+      f.position.set(x, -H * 0.1, side * (W / 2 + 0.03));
+      const g = new THREE.Mesh(new THREE.BoxGeometry(1.34, H * 0.66, 0.05), leaf);
+      g.position.set(x, -H * 0.1, side * (W / 2 + 0.045));
+      group.add(f, g);
+    };
+    for (const side of [-1, 1]) {
+      door(this.exterior, Lf / 2 - 1.8, side);
+      door(this.exterior, -Lf / 2 + 1.0, side);
+      door(rear, Lr / 2 - 1.6, side);
+      door(rear, -Lr / 2 + 2.2, side);
     }
   }
 
   private busCockpit(preset: BusPreset): void {
-    const { length: L, width: W, height: H, color } = preset.body;
+    const { width: W, height: H, color } = preset.body;
+    const L = this.frontLength;
     const frame = flat(color);
     const trim = flat('#3a3d42');
     const part = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material) => {
@@ -146,7 +220,8 @@ export class BusModel {
    */
   setHeadlights(on: boolean): void {
     if (!on || this.root.getObjectByName('headlights')) return;
-    const { length: L, height: H } = this.preset.body;
+    const L = this.frontLength;
+    const { height: H } = this.preset.body;
     const spot = new THREE.SpotLight('#fff1d0', 90, 85, 0.62, 0.55, 1.2);
     spot.name = 'headlights';
     spot.position.set(L / 2 + 0.1, -H * 0.2, 0);
@@ -170,16 +245,29 @@ export class BusModel {
     this.root.position.set(t.x, t.y, t.z);
     this.root.quaternion.set(q.x, q.y, q.z, q.w);
 
+    if (this.rearGroup && bus.rear) {
+      // The rear section relative to the front one: inverse(front) * rear.
+      const r = bus.rear.body;
+      const tr = r.translation();
+      const qr = r.rotation();
+      this.inv.copy(this.root.quaternion).invert();
+      this.rearGroup.position.set(tr.x - t.x, tr.y - t.y, tr.z - t.z).applyQuaternion(this.inv);
+      this.rearGroup.quaternion.copy(this.inv).multiply(this.qTmp.set(qr.x, qr.y, qr.z, qr.w));
+    }
     const mount = bus.preset.wheels.mountHeight;
-    this.wheels.forEach(({ pivot, spin }, i) => {
-      pivot.position.y = mount - (bus.vehicle.wheelSuspensionLength(i) ?? 0);
-      pivot.rotation.y = bus.vehicle.wheelSteering(i) ?? 0;
-      spin.rotation.z = -(bus.vehicle.wheelRotation(i) ?? 0);
-    });
+    for (const { pivot, spin, rear, index } of this.wheels) {
+      const v = rear ? bus.rear!.vehicle : bus.vehicle;
+      pivot.position.y = mount - (v.wheelSuspensionLength(index) ?? 0);
+      pivot.rotation.y = v.wheelSteering(index) ?? 0;
+      spin.rotation.z = -(v.wheelRotation(index) ?? 0);
+    }
     this.steeringWheel.rotation.z = (bus.vehicle.wheelSteering(0) ?? 0) * 4;
     this.flames.visible = bus.boosting;
     if (bus.boosting) for (const f of this.flames.children) f.scale.x = 0.8 + Math.random() * 0.6;
   }
+
+  private inv = new THREE.Quaternion();
+  private qTmp = new THREE.Quaternion();
 
   /** Destination sign above the windshield, drawn to a canvas texture. */
   private makeSign(preset: BusPreset, L: number, H: number, W: number): THREE.Mesh {
