@@ -126,7 +126,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   };
 
   // How to play, every time a shift or free roam starts (unless turned off, or ?tutorial=0).
-  const tutorial = new Tutorial(hudRoot, free, session.stars);
+  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system);
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
   if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
 

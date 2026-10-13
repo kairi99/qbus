@@ -15,7 +15,7 @@ import { buildCity } from '../src/world/cityBuilder';
 import { type CityData, groundHeightAt, terrainAt, type Vec2 } from '../src/world/cityData';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { generateCity } from '../src/world/procCity';
-import { Navigator, type NavPath } from '../src/gameplay/navigation';
+import { BRT_GENERAL_COST, Navigator, type NavPath } from '../src/gameplay/navigation';
 import { type RouteDef, routeLegs, routeStops, routesFor, startPose } from '../src/gameplay/routes';
 import { RouteGame, STOP_SPEED } from '../src/gameplay/routeGame';
 import { TrickScorer } from '../src/gameplay/scoring';
@@ -30,7 +30,7 @@ const zone = process.argv[5] ?? 'mariscal';
 const city: CityData = zone === 'grid' ? generateCity({ seed: 42 }) : JSON.parse(readFileSync(`data/cities/${zone}.json`, 'utf8'));
 if (city.terrain) city.terrain.scale = 1;
 const graph = buildRoadGraph(city);
-const nav = new Navigator(graph);
+const navs = { general: new Navigator(graph), brt: new Navigator(graph, 'brt', BRT_GENERAL_COST) };
 const lights = new TrafficLights(graph, city.signals ?? []);
 
 interface Profile {
@@ -53,6 +53,7 @@ const PROFILES: Record<string, Profile> = {
 const angle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 function run(route: RouteDef, prof: Profile, seed: number) {
+  const nav = route.system ? navs.brt : navs.general;
   const world = createWorld();
   buildCity(city, world, new THREE.Scene(), graph);
   const stops = routeStops(city, route);

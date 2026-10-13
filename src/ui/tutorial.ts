@@ -51,7 +51,7 @@ const controls = () => `
   <p class="tut-pad" data-pad hidden><b>Control:</b> ${PAD}</p>`;
 
 /** The pages of the card: a route shift explains the job, free roam just the ride. */
-function pages(free: boolean, targets: StarThresholds | null): string[] {
+function pages(free: boolean, targets: StarThresholds | null, brt: boolean): string[] {
   if (free)
     return [
       `<h2>Paseo libre</h2>
@@ -67,6 +67,7 @@ function pages(free: boolean, targets: StarThresholds | null): string[] {
     <ul>
       <li>Recoge y deja pasajeros en cada <b>parada</b> de la ruta, en orden: métete en la zona marcada y baja de <b>${kmh(STOP_SPEED)} km/h</b>.</li>
       <li>Sigue la <b>flecha</b> y el <b>minimapa</b>: te llevan por calles legales.</li>
+      ${brt ? '<li>Esta ruta va por el <b>carril exclusivo</b> del corredor y las estaciones quedan a tu <b>izquierda</b>. El bus recomendado es el <b>Articulado</b>.</li>' : ''}
       <li>El <b>reloj</b> arranca en ${START_TIME} s cuando aceleras; cada parada suma tiempo, más si llegas volando. En 0 se acaba el turno.</li>
       <li>Cada pasajero paga ${money(FARE_CENTS)} al bajarse, más <b>propina</b> si lo llevas rápido.</li>
       <li>Tres <b>misiones</b> opcionales (en la esquina) pagan un bono.</li>
@@ -104,6 +105,7 @@ export class Tutorial {
     private root: HTMLElement,
     free: boolean,
     targets: StarThresholds | null,
+    brt = false,
   ) {
     const el = (this.el = document.createElement('div'));
     el.className = 'gh-results tut';
@@ -113,7 +115,7 @@ export class Tutorial {
     el.setAttribute('aria-label', free ? 'Cómo jugar el paseo libre' : 'Cómo jugar el turno');
     el.innerHTML = `
       <div class="gh-results-card tut-card">
-        ${pages(free, targets).map((p) => `<section class="tut-page" hidden>${p}</section>`).join('')}
+        ${pages(free, targets, brt).map((p) => `<section class="tut-page" hidden>${p}</section>`).join('')}
         <div class="tut-foot">
           <label class="tut-skip"><input type="checkbox" data-dont /> No mostrar otra vez</label>
           <span class="tut-dots" data-dots aria-hidden="true"></span>
