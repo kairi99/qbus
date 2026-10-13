@@ -19,6 +19,9 @@ export interface NavPath {
 /** Path points whose lift is this far from the bus's are on another level (over or under it). */
 const LEVEL_SEP = 2;
 
+/** BRT guidance weighs general-street meters this much, so a route follows the busway whenever there is one. */
+export const BRT_GENERAL_COST = 3;
+
 const SEARCH = 40;
 /**
  * Meters of sideways distance one meter of height mismatch is worth in `locate`: near a ramp's
@@ -100,6 +103,11 @@ export class Navigator {
     if (from.edge === to.edge && to.s >= from.s) return to.s - from.s;
     const d = this.search(from, to.edge).dist.get(to.edge);
     return d === undefined ? Infinity : d + to.s;
+  }
+
+  /** Real meters of the path `route` would take (unlike `distanceTo`, not scaled by `generalCost`). */
+  pathMeters(from: GraphSpot, to: GraphSpot): number {
+    return this.route(from, to)?.length ?? Infinity;
   }
 
   /** Distances from `from` to the start of every reachable edge. */

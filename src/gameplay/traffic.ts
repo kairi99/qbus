@@ -1,11 +1,11 @@
 import { Rng } from '../core/rng';
 import type { CityData, Vec2 } from '../world/cityData';
-import { forward, right } from '../world/cityData';
+import { forward, right, stopZone } from '../world/cityData';
 import { type LaneEdge, type RoadGraph, edgeDir, edgeLift, laneOffset, lanePoint, projectOnPath } from '../world/roadGraph';
 import type { TrafficLights } from './trafficLights';
 
 export interface CarKind {
-  name: 'sedan' | 'taxi' | 'buseta';
+  name: 'sedan' | 'taxi' | 'buseta' | 'brt';
   length: number;
   width: number;
   height: number;
@@ -16,11 +16,24 @@ export interface CarKind {
   weight: number;
 }
 
-export const CAR_KINDS: Record<CarKind['name'], CarKind> = {
+export const CAR_KINDS: Record<Exclude<CarKind['name'], 'brt'>, CarKind> = {
   sedan: { name: 'sedan', length: 4.3, width: 1.8, height: 1.45, mass: 700, vmax: 12.5, weight: 0.5 },
   taxi: { name: 'taxi', length: 4.4, width: 1.8, height: 1.5, mass: 700, vmax: 14, weight: 0.35 },
   buseta: { name: 'buseta', length: 8.5, width: 2.3, height: 2.8, mass: 2600, vmax: 10.5, weight: 0.15 },
 };
+
+/**
+ * The articulated bus that shuttles along the busways. Not in `CAR_KINDS`: ordinary traffic
+ * never rolls it, only `TrafficSim`'s `brt` option adds a few (see `brtBusCount`).
+ */
+export const BRT_KIND: CarKind = { name: 'brt', length: 18, width: 2.55, height: 3.1, mass: 9000, vmax: 9.5, weight: 0 };
+
+/** A busway bus stops this long at a station, seconds. */
+const DWELL = 5;
+/** Braking it plans for into a station (gentle: it carries standing passengers), m/s². */
+const BRT_DECEL = 2.5;
+/** A station counts for a busway lane when its stop zone is this close to the lane, m. */
+const STATION_REACH = 7;
 
 /** Something cars must not drive into: the player's bus, wrecked cars, people crossing. */
 export interface Obstacle {
@@ -85,6 +98,10 @@ export interface Car {
   blocker: string | null;
   /** Waiting for a light: at the stop line, or queued behind a car that is (not stuck). */
   held: boolean;
+  /** Busway bus: seconds left at the station it is stopped at. */
+  dwell: number;
+  /** Busway bus: the station (edge and distance along it) it last stopped at, so it leaves it behind. */
+  served: number;
   /** Bumped every time the car is placed somewhere new, so the physics body knows to snap. */
   generation: number;
 }
@@ -130,13 +147,18 @@ export class TrafficSim {
   private occupants = new Map<number, Map<number, { from: number; lane: number; next: number; nextLane: number }>>();
   private priority = new Map<number, { car: number; edge: number }>();
   private humps: number[][];
+  /** Lanes ordinary cars spawn on / busway buses spawn on. */
+  private carEdges: LaneEdge[];
+  private brtEdges: LaneEdge[];
+  /** Per edge, distances along it where a busway bus stops at a station (busway lanes only). */
+  private stations: number[][];
   /** Where the bus was last seen; cars leaving the map re-enter out of its sight. */
   private focus: { pos: Vec2; heading: number } = { pos: { x: 0, z: 0 }, heading: 0 };
 
   constructor(
     private graph: RoadGraph,
     city: CityData,
-    opts: { seed: number; count: number; avoid?: { pos: Vec2; radius: number }; lights?: TrafficLights },
+    opts: { seed: number; count: number; /** Busway buses on top of `count` (0 when the city has no busway). */ brt?: number; avoid?: { pos: Vec2; radius: number }; lights?: TrafficLights },
   ) {
     this.rng = new Rng(opts.seed);
     this.lights = opts.lights ?? null;
@@ -147,10 +169,25 @@ export class TrafficSim {
         .filter((pr) => pr.d < e.roadWidth / 2)
         .map((pr) => pr.s),
     );
+    this.carEdges = graph.edges.filter((e) => e.drivable && e.len > 16);
+    this.brtEdges = graph.edges.filter((e) => e.access === 'brt' && e.brtDrivable && e.len > 30);
+    this.stations = graph.edges.map(() => []);
+    for (const st of city.stops) {
+      if (!st.system) continue;
+      const z = stopZone(st);
+      const f = forward(st.heading);
+      for (const e of this.brtEdges) {
+        const pr = projectOnPath(e.center, z);
+        const d = edgeDir(e, pr.s);
+        if (pr.d < STATION_REACH && dot(d, f) > 0.7 && pr.s > 3 && pr.s < e.len - 6) this.stations[e.id].push(pr.s);
+      }
+    }
+    for (const list of this.stations) list.sort((a, b) => a - b);
     const kinds = Object.values(CAR_KINDS);
-    for (let i = 0; i < opts.count; i++) {
+    const total = opts.count + (this.brtEdges.length ? (opts.brt ?? 0) : 0);
+    for (let i = 0; i < total; i++) {
       let r = this.rng.next() * kinds.reduce((s, k) => s + k.weight, 0);
-      const kind = kinds.find((k) => (r -= k.weight) < 0) ?? kinds[0];
+      const kind = i >= opts.count ? BRT_KIND : (kinds.find((k) => (r -= k.weight) < 0) ?? kinds[0]);
       const car: Car = {
         id: i,
         kind,
@@ -173,6 +210,8 @@ export class TrafficSim {
         hurry: 0,
         blocker: null,
         held: false,
+        dwell: 0,
+        served: -1,
         generation: 0,
       };
       this.cars.push(car);
@@ -223,6 +262,8 @@ export class TrafficSim {
   recycle(focus: { pos: Vec2; heading: number }, fill = false): void {
     this.focus = focus;
     for (const c of this.cars) {
+      // A busway bus parked for lack of a corridor in range comes back when one is.
+      if (c.state === 'parked' && c.kind === BRT_KIND) this.place(c, focus.pos, 0, fill ? () => true : (p) => hiddenFrom(focus, p));
       if (c.state !== 'driving') continue;
       const d = Math.hypot(c.pos.x - focus.pos.x, c.pos.z - focus.pos.z);
       if (fill) this.place(c, focus.pos, 20, (p) => Math.hypot(p.x - focus.pos.x, p.z - focus.pos.z) < RECYCLE_RADIUS * 0.8);
@@ -232,7 +273,7 @@ export class TrafficSim {
 
   /** Parks the cars farthest from the bus (or brings parked ones back) to hit `budget` drivers. */
   setBudget(budget: number, bus: Vec2, heading = 0): void {
-    const driving = this.cars.filter((c) => c.state === 'driving');
+    const driving = this.cars.filter((c) => c.state === 'driving' && c.kind !== BRT_KIND);
     const far = (c: Car) => -Math.hypot(c.pos.x - bus.x, c.pos.z - bus.z);
     if (driving.length > budget) {
       driving.sort((a, b) => far(a) - far(b));
@@ -241,7 +282,7 @@ export class TrafficSim {
         c.state = 'parked';
       }
     } else {
-      const parked = this.cars.filter((c) => c.state === 'parked');
+      const parked = this.cars.filter((c) => c.state === 'parked' && c.kind !== BRT_KIND);
       for (const c of parked.slice(0, budget - driving.length)) this.place(c, bus, 0, (p) => hiddenFrom({ pos: bus, heading }, p));
     }
   }
@@ -325,6 +366,7 @@ export class TrafficSim {
         }
       }
       if (!exiting) vTarget = Math.min(vTarget, Math.sqrt(this.turnSpeed(car) ** 2 + 2 * DECEL * remaining));
+      if (car.kind === BRT_KIND) vTarget = Math.min(vTarget, this.station(car, e, dt));
 
       // Stuck behind something that isn't moving on a multi-lane road: change lanes.
       if (e.lanes > 1 && blocker && car.speed < 1 && car.blockedTime > 2) {
@@ -399,6 +441,26 @@ export class TrafficSim {
     car.pos = settled ? lanePoint(edge, car.s, car.lane) : lanePoint(edge, car.s, car.lane, car.offset);
     const d = edgeDir(edge, car.s);
     car.heading = Math.atan2(-d.z, d.x) - (car.speed > 1 ? Math.atan2(lateral / dt, car.speed) : 0);
+  }
+
+  /** Speed cap for a busway bus approaching or standing at a station on its lane. */
+  private station(car: Car, e: LaneEdge, dt: number): number {
+    if (car.dwell > 0) {
+      car.dwell -= dt;
+      return 0;
+    }
+    for (const sd of this.stations[e.id]) {
+      const key = e.id * 10000 + Math.round(sd);
+      const left = sd - car.s;
+      if (key === car.served || left < -1) continue;
+      if (left < 0.8 && car.speed < 0.5) {
+        car.served = key;
+        car.dwell = DWELL;
+        return 0;
+      }
+      return Math.sqrt(2 * BRT_DECEL * Math.max(0, left - 0.5)) + 0.3;
+    }
+    return Infinity;
   }
 
   private turnSpeed(car: Car): number {
@@ -547,7 +609,9 @@ export class TrafficSim {
   private chooseNext(car: Car): void {
     const e = this.graph.edges[car.edge];
     const node = this.graph.nodes[e.to];
-    const drivable = node.out.filter((id) => this.graph.edges[id].drivable);
+    // Busway buses stay on busway lanes (turning round at a dead end); the rest stay off them.
+    const brt = car.kind === BRT_KIND;
+    const drivable = node.out.filter((id) => (brt ? this.graph.edges[id].access === 'brt' && this.graph.edges[id].brtDrivable : this.graph.edges[id].drivable));
     if (!drivable.length) {
       car.next = -1; // leaving the map
       car.nextLane = 0;
@@ -586,7 +650,12 @@ export class TrafficSim {
   /** Drops a car on a random free lane spot at least `radius` from `avoid`. */
   private place(car: Car, avoid: Vec2, radius: number, accept: (p: Vec2) => boolean = () => true): void {
     this.unreserve(car);
-    const edges = this.graph.edges.filter((e) => e.drivable && e.len > 16);
+    // Busway buses start on a corridor lane near `avoid` (any other would rarely be in range).
+    const edges = car.kind === BRT_KIND ? this.brtEdges.filter((e) => Math.hypot(e.a.x - avoid.x, e.a.z - avoid.z) < SPAWN_MAX_DIST + e.len) : this.carEdges;
+    if (!edges.length) {
+      car.state = 'parked';
+      return;
+    }
     const total = edges.reduce((s, e) => s + e.len, 0);
     for (let attempt = 0; attempt < 200; attempt++) {
       let roll = this.rng.next() * total;
@@ -605,13 +674,19 @@ export class TrafficSim {
       );
       if (!free) continue;
       const dir = edgeDir(e, s);
-      Object.assign(car, { state: 'driving', edge: e.id, s, lane, offset: laneOffset(e, lane), pos: p, heading: Math.atan2(-dir.z, dir.x), speed: car.kind.vmax * 0.6, wait: 0, blockedTime: 0, held: false, turn: null });
+      Object.assign(car, { state: 'driving', edge: e.id, s, lane, offset: laneOffset(e, lane), pos: p, heading: Math.atan2(-dir.z, dir.x), speed: car.kind.vmax * 0.6, wait: 0, blockedTime: 0, held: false, dwell: 0, turn: null });
       car.generation++;
       this.chooseNext(car);
       return;
     }
     car.state = 'parked';
   }
+}
+
+/** Busway buses a city gets: one per ~1.2 km of busway lane, 1 to 4 (0 without a busway). */
+export function brtBusCount(graph: RoadGraph): number {
+  const m = graph.edges.reduce((s, e) => s + (e.access === 'brt' && e.brtDrivable ? e.len : 0), 0);
+  return m < 100 ? 0 : Math.max(1, Math.min(4, Math.round(m / 1200)));
 }
 
 /** Out of the player's sight: in the fog ahead, or somewhere behind. Not too far either way. */

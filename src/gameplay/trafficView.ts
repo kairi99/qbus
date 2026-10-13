@@ -3,7 +3,7 @@ import { MeshBuilder, vertexColorMaterial } from '../world/meshBuilder';
 import { LIGHTING, timeOfDayOf } from '../world/sky';
 import { glowTexture } from '../world/streetscape';
 import { type CityData, groundHeightAt } from '../world/cityData';
-import { CAR_KINDS, type CarKind, type TrafficSim } from './traffic';
+import { BRT_KIND, CAR_KINDS, type CarKind, type TrafficSim } from './traffic';
 import type { TrafficBodies } from './trafficBodies';
 import type { Pedestrian } from './pedestrians';
 
@@ -18,6 +18,7 @@ const PAINT: Record<CarKind['name'], string[]> = {
   sedan: ['#c9ccd1', '#1e2a44', '#8a1c1c', '#ececec', '#2d4f2d', '#5a5f66', '#b0862a', '#3f6fa8'],
   taxi: ['#f5c400'],
   buseta: ['#f4f4f4', '#1f7a3a', '#c62828', '#1565c0', '#f2a900'],
+  brt: ['#c9372c', '#f2b300', '#2a7fb8'],
 };
 
 const at = (x: number, y: number, z: number) => new THREE.Matrix4().makeTranslation(x, y, z);
@@ -32,7 +33,17 @@ function wheels(mb: MeshBuilder, L: number, W: number, H: number, r: number): vo
 function carGeometry(k: CarKind): THREE.BufferGeometry {
   const { length: L, width: W, height: H } = k;
   const mb = new MeshBuilder();
-  if (k.name === 'buseta') {
+  if (k.name === 'brt') {
+    // Two sections joined by a dark bellows (one mesh part each: 3 boxes + wheels).
+    const sec = (L - 1) / 2;
+    wheels(mb, L, W, H, 0.5);
+    for (const x of [-(sec + 1) / 2, (sec + 1) / 2]) {
+      mb.add(new THREE.BoxGeometry(sec, H - 0.5, W), at(x, 0.25, 0), TINT);
+      mb.add(new THREE.BoxGeometry(sec * 0.92, 0.8, W + 0.04), at(x, 0.6, 0), GLASS);
+    }
+    mb.add(new THREE.BoxGeometry(1, H - 0.9, W - 0.3), at(0, 0.05, 0), TIRE);
+    mb.add(new THREE.BoxGeometry(0.06, 1, W * 0.9), at(L / 2 + 0.01, 0.5, 0), GLASS);
+  } else if (k.name === 'buseta') {
     wheels(mb, L, W, H, 0.45);
     mb.add(new THREE.BoxGeometry(L, H - 0.45, W), at(0, 0.22, 0), TINT);
     mb.add(new THREE.BoxGeometry(L * 0.8, 0.7, W + 0.04), at(-L * 0.05, 0.55, 0), GLASS);
@@ -92,7 +103,7 @@ export class TrafficView {
     const beam = night
       ? new THREE.MeshBasicMaterial({ map: glowTexture(), color: '#fff0c8', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 })
       : null;
-    for (const kind of Object.values(CAR_KINDS)) {
+    for (const kind of [...Object.values(CAR_KINDS), BRT_KIND]) {
       const ids = sim.cars.filter((c) => c.kind.name === kind.name).map((c) => c.id);
       if (!ids.length) continue;
       const mesh = new THREE.InstancedMesh(carGeometry(kind), material, ids.length);

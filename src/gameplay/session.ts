@@ -11,7 +11,7 @@ import { type RouteDef, freeStartPose, routeLegs, routeStops, startPose } from '
 import { type StarThresholds, starThresholds, starsFor } from './stars';
 import { Missions, pickMissions, type MissionEvent } from './missions';
 import { recordMissions, recordShift } from './records';
-import { type NavPath, Navigator } from './navigation';
+import { BRT_GENERAL_COST, type NavPath, Navigator } from './navigation';
 import { MiniMap } from '../ui/minimap';
 import type { Vec2 } from '../world/cityData';
 import { TrickScorer, type TrickEvent } from './scoring';
@@ -25,7 +25,7 @@ import { LINES, SPEAKER, type LineKind } from './lines';
 import type { RoadGraph } from '../world/roadGraph';
 import { groundHeightAt, inPlayArea, nearestRoad, terrainAt } from '../world/cityData';
 import { pointInPolygon } from '../world/geom';
-import { TrafficSim, type Obstacle } from './traffic';
+import { TrafficSim, brtBusCount, type Obstacle } from './traffic';
 import { RedLightRunner, TrafficLights } from './trafficLights';
 import type { SignalLamps } from '../world/signalBuilder';
 import { TrafficBodies, laneSurface } from './trafficBodies';
@@ -123,7 +123,7 @@ export class GameSession {
     this.marker = new StopMarker(d.scene, d.city);
     this.arrow = new NavArrow(d.scene);
     this.hud = new GameHud(d.hudRoot, d.route?.name ?? 'Paseo libre', !d.route);
-    this.nav = new Navigator(d.graph, d.route?.system ? 'brt' : 'general');
+    this.nav = new Navigator(d.graph, d.route?.system ? 'brt' : 'general', BRT_GENERAL_COST);
     this.minimap = new MiniMap(d.hudRoot, d.city);
     this.start0 = d.route ? startPose(d.city, d.graph, d.route) : freeStartPose(d.city, d.graph);
     if (d.route) this.stars = starThresholds(routeStops(d.city, d.route), routeLegs(d.city, d.route, d.graph), this.start0.pos);
@@ -131,7 +131,7 @@ export class GameSession {
     const graph = d.graph;
     this.lights = new TrafficLights(graph, d.city.signals ?? []);
     this.redLights = new RedLightRunner(this.lights);
-    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, avoid: { pos: spawn, radius: 25 }, lights: this.lights });
+    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, brt: brtBusCount(graph), avoid: { pos: spawn, radius: 25 }, lights: this.lights });
     this.traffic.setBudget(this.budget, spawn);
     this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic, d.world));
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.

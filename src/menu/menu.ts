@@ -1,5 +1,5 @@
 import type { BusPreset } from '../vehicle/busPreset';
-import { BUSES, VEHICLES, busStats } from '../vehicle/buses';
+import { BRT_BUS, BUSES, VEHICLES, busStats } from '../vehicle/buses';
 import { ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose } from '../gameplay/routes';
@@ -25,6 +25,24 @@ export function playUrl(s: Selection): string {
   return `?${new URLSearchParams({ play: '1', city: s.zone, bus: s.bus, route: s.route })}`;
 }
 
+/** Which bus the menu has selected, and whether the player chose it themselves. */
+export interface BusChoice {
+  bus: string;
+  /** The bus the menu swapped out when it picked the articulated one for a BRT route. */
+  restore: string | null;
+  /** The player picked a bus by hand while on a BRT route: leave it alone on BRT routes. */
+  manual: boolean;
+}
+
+/**
+ * Picking a Trolebús/Ecovía route selects the articulated bus (unless the player chose another
+ * bus for BRT routes); going back to an ordinary route puts back the bus it replaced.
+ */
+export function busForRoute(c: BusChoice, brt: boolean): BusChoice {
+  if (brt) return c.manual || c.bus === BRT_BUS ? c : { bus: BRT_BUS, restore: c.bus, manual: false };
+  return { bus: c.restore ?? c.bus, restore: null, manual: false };
+}
+
 const MODES = [
   { id: 'route', name: 'Turno', blurb: 'Una ruta con paradas, pasajeros, reloj y plata' },
   { id: 'free', name: 'Paseo libre', blurb: 'Recorra la ciudad a su gusto, sin paradas ni reloj' },
@@ -42,9 +60,12 @@ export class Menu {
   private settings: Settings;
   private cities = new Map<string, Promise<CityData>>();
   private sounds: MenuSounds;
+  private busChoice: BusChoice;
+  private routeDefs = new Map<string, RouteDef>();
 
   constructor(host: HTMLElement) {
     this.settings = loadSettings();
+    this.busChoice = { bus: this.settings.bus, restore: null, manual: false };
     this.root = document.createElement('div');
     this.root.className = 'mn';
     host.appendChild(this.root);
@@ -198,6 +219,7 @@ export class Menu {
     row.querySelectorAll<HTMLElement>('[data-bus]').forEach((el) =>
       el.addEventListener('click', () => {
         this.pick('bus', el.dataset.bus!);
+        this.busChoice = { bus: el.dataset.bus!, restore: null, manual: this.isBrt(this.settings.route) };
         this.mark('[data-bus]', el);
       }),
     );
@@ -283,6 +305,7 @@ export class Menu {
     if (this.settings.zone !== zone || !box.isConnected) return; // switched zone meanwhile
     const graph = buildRoadGraph(city);
     const routes = routesFor(city, graph);
+    this.routeDefs = new Map(routes.map((r) => [r.id, r]));
     const draw = (id: string) => {
       const route = routes.find((r) => r.id === id)!;
       drawMap(this.root.querySelector('canvas')!, city, route, routePaths(city, route, graph));
@@ -298,6 +321,7 @@ export class Menu {
       el.addEventListener('click', () => {
         this.pick('route', el.dataset.route!);
         this.mark('[data-route]', el);
+        this.chooseBusFor(el.dataset.route!);
         draw(el.dataset.route!);
       }),
     );
@@ -307,6 +331,19 @@ export class Menu {
   }
 
   // ---- helpers ---------------------------------------------------------------
+
+  private isBrt(routeId: string): boolean {
+    return !!this.routeDefs.get(routeId)?.system;
+  }
+
+  /** A BRT route selects the articulated bus (see `busForRoute`); the cards follow. */
+  private chooseBusFor(routeId: string): void {
+    this.busChoice = busForRoute({ ...this.busChoice, bus: this.settings.bus }, this.isBrt(routeId));
+    if (this.busChoice.bus === this.settings.bus) return;
+    this.pick('bus', this.busChoice.bus);
+    const card = this.root.querySelector<HTMLElement>(`[data-bus="${this.busChoice.bus}"]`);
+    if (card) this.mark('[data-bus]', card);
+  }
 
   private pick<K extends keyof Selection>(k: K, v: Settings[K]): void {
     this.settings[k] = v;
@@ -435,6 +472,7 @@ function placard(r: RouteDef, names: Map<string, string>, checked: boolean, targ
       </span>
       <span class="mn-placard-stops">${list.join(' · ')}</span>
       <span class="mn-placard-meta">${r.stops.length} paradas · ${(r.lengthM / 1000).toFixed(1)} km · ${r.blurb}</span>
+      ${r.system ? '<span class="mn-placard-tip">Carril exclusivo · Recomendado: Articulado</span>' : ''}
       <span class="mn-placard-goal" title="Plata para ganar cada estrella">${targetsText(targets)}</span>
     </button>`;
 }

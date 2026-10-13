@@ -13,6 +13,9 @@ export const BUSES: { preset: BusPreset; blurb: string }[] = [
   { preset: articulado as BusPreset, blurb: 'El del corredor: 18 metros que se doblan en la curva, con puertas a ambos lados' },
 ];
 
+/** The bus a Trolebús/Ecovía/Metrobus route suggests (the menu selects it, the player may pick another). */
+export const BRT_BUS = 'articulado';
+
 /** Cars: free roam only (a car carries no passengers on a route). */
 export const CARS: { preset: BusPreset; blurb: string }[] = [
   { preset: ae86 as BusPreset, blurb: 'El 86 del tofu: liviano, rapidísimo y nacido para derrapar' },
