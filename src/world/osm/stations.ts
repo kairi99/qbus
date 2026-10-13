@@ -460,7 +460,14 @@ function buswayStation(at: Vec2, ctx: Context): Built[] {
   // Beside a two-way busway: a platform on each side.
   const a = a0;
   const sides = [leftOf(a), { x: -leftOf(a).x, z: -leftOf(a).z }];
-  return sides.map((side) => platform(offset(a.point, side, hwA + BUSWAY_GAP + CURB_WIDTH / 2), CURB_WIDTH, a.dir, side, [a], ctx)).filter((x): x is Built => !!x);
+  const built = sides.map((side) => platform(offset(a.point, side, hwA + BUSWAY_GAP + CURB_WIDTH / 2), CURB_WIDTH, a.dir, side, [a], ctx)).filter((x): x is Built => !!x);
+  // Only one side had room (a carriageway too close, no stretch to widen): the other direction's bus
+  // boards from the same platform across the near lane, from its left door (the zone is 7 m wide).
+  if (built.length === 1 && built[0].sides.length === 1) {
+    const s0 = built[0].sides[0];
+    built[0].sides.push({ pos: s0.pos, heading: round(s0.heading + Math.PI > Math.PI ? s0.heading - Math.PI : s0.heading + Math.PI), left: true });
+  }
+  return built;
 }
 
 /** The side of busway point `a` that `at` is on (a one-way busway's platform is on its left instead). */

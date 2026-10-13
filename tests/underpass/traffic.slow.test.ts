@@ -23,26 +23,19 @@ import { TRAFFIC } from './thresholds';
 // higher by the westbound up-ramp (#401) at the Puente del Guambra joint, was also seen here as a
 // sunk car on e516, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
 // no car happens to be there. The bug is still open; it's tracked by G2.)
-// Seed-dependent stalls (QBUS_SEEDS=n runs one seed; default 1,2). Failures per single seed, checks
-// 'stuck / overlap / height', master city+code vs the busway branch (W2), seeds 1-6 and master only 7-14:
-//   master: 1 ok, 2 ok, 3 sin nombre(-876,-220) stuck+overlap, 4 ok, 5 ok, 6 12 de Octubre passage
-//           (known key), 7 sin nombre(-820,774) height, 8 ok, 9 sin nombre(-876,-220) stuck, 10 ok,
-//           11 12 de Octubre stuck, 12 sin nombre(-876,-220) stuck, 13 ok, 14 ok
-//   branch (margin 4 busways): every seed 1-6 fails something: 10 de Agosto (-172,-870) in 2,3,5,
-//           José Riofrío in 2,4,5,6, sin nombre(-876,-220) in 1,4, Patria bridge overlap in 4.
-// The geometry of those cuts is identical to master's (roads within 100 m unchanged, no busway enters a
-// structure: clipBusways), no ordinary car ever enters a busway; the graph's edge ids/lengths shift, so
-// the dice differ. The 10 de Agosto stall is a car stopped on the e564 ramp 0.6 m sunk (the known
-// 'lips [e564→e564]' bug in geometry.slow) that master's dice never put a car on in seeds 1-14.
-// 'sin nombre @(-876,-220)' stuck reproduces on master (seeds 3, 9, 12). The 10 de Agosto entries do NOT
-// reproduce on master with any seed 1-14; they are kept as known because they trace to the existing lip.
-const LATENT_MASTER = 'Reproduces on master with other seeds (3, 9, 12): dice-dependent stall in this cut';
-const LATENT_LIP = 'Car stops on the e564 ramp 0.6 m sunk, the known lip (geometry.slow [e564→e564]); master dice never meet it in seeds 1-14';
+// Seed-dependent stalls (QBUS_SEEDS=n runs one seed; default 1,2). Failing checks per single seed,
+// master city+code (seeds 1-14) vs the busway branch (seeds 1-6, measured before the structure clip was
+// widened to 12 m):
+//   master: 3 sin nombre(-876,-220) stuck+overlap, 6 12 de Octubre passage, 7 sin nombre(-820,774) height,
+//           9 and 12 sin nombre(-876,-220) stuck, 11 12 de Octubre stuck; 1,2,4,5,8,10,13,14 clean
+//   branch: 10 de Agosto (-172,-870) in 2,3,5, José Riofrío in 2,4,5,6, sin nombre(-876,-220) in 1,4,
+//           Patria bridge overlap in 4
+// The branch's geometry at those structures equals master's and no ordinary car enters a busway; edge
+// ids/lengths shift, so the dice differ. 'sin nombre @(-876,-220)' stuck reproduces on master (seeds 3, 9,
+// 12), so it stays known. The 10 de Agosto and José Riofrío failures do NOT reproduce on master with any
+// seed 1-14; with the final data (busways kept 12 m from structures) they no longer fail at seeds 1/2.
 known({
-  'no car stuck in cut sin nombre @(-876,-220)': LATENT_MASTER,
-  'no car stuck in cut Av. 10 de Agosto @(-172,-870)': LATENT_LIP,
-  'no cars overlap in cut Av. 10 de Agosto @(-172,-870)': LATENT_LIP,
-  "traffic rides at the road's height in cut Av. 10 de Agosto @(-172,-870)": LATENT_LIP,
+  'no car stuck in cut sin nombre @(-876,-220)': 'Reproduces on master with other seeds (3, 9, 12): dice-dependent stall in this cut',
 });
 
 const LIST = 8;

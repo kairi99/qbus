@@ -186,8 +186,10 @@ export function clipBusways(busways: Road[], roads: Road[]): Road[] {
   const near = (p: Vec2, hw: number) =>
     lifted.some((o) => {
       if (distToPolyline(p, o.points) >= o.width / 2 + hw + STRUCTURE_MARGIN) return false;
+      // Off the ground there, or within 30 m along the road of where it is (a ramp's foot).
       const { s } = projectOnRoad(o, p);
-      return Math.abs(liftAlong(o, s)) > 0.3;
+      for (let k = -30; k <= 30; k += 10) if (Math.abs(liftAlong(o, Math.max(0, s + k))) > 0.3) return true;
+      return false;
     });
   const out: Road[] = [];
   for (const road of busways) {
