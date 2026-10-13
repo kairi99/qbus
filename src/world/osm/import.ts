@@ -149,7 +149,10 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   // cost a crossing (no room left for a ramp: the roads would meet at grade) isn't kept, and
   // past the play area's edge (nobody drives there) nothing is reshaped.
   const playBox = { playArea: { min: { x: bounds.min.x + EDGE_INSET, z: bounds.min.z + EDGE_INSET }, max: { x: bounds.max.x - EDGE_INSET, z: bounds.max.z - EDGE_INSET } } };
-  let { roads, crossings } = separateGrades(flat);
+  // Busways stay at street level and take no part in solving the grades (they only meet roads there).
+  const busways = flat.filter((r) => r.access);
+  const flatGeneral = generalRoads(flat);
+  let { roads, crossings } = separateGrades(flatGeneral);
   const level: Level[] = [];
   const tried = new Set<string>();
   const key = (l: Level) => `${l.road}@${l.area.map((p) => `${p.x.toFixed(0)},${p.z.toFixed(0)}`).join(';')}`;
@@ -158,7 +161,7 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
     if (!more.length) break;
     for (const l of more) {
       tried.add(key(l));
-      const next = separateGrades(flat, [...level, l]);
+      const next = separateGrades(flatGeneral, [...level, l]);
       if (next.crossings.length < crossings.length) continue;
       // Nor one that folds a ramp into a sharp V or crest (a long bus high-centers on it).
       if (next.roads.some((r, i) => r !== roads[i] && sharpestBend(r) > Math.max(sharpestBend(roads[i]), MAX_BEND) + 0.01)) continue;
@@ -166,6 +169,7 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
       ({ roads, crossings } = next);
     }
   }
+  roads = [...roads, ...busways];
   for (const c of crossings)
     if (c.gap < CLEARANCE * 0.8) console.warn(`grade crossing squeezed to ${c.gap.toFixed(1)} m: ${roads[c.upper].name} over ${roads[c.lower].name}`);
   // Junction areas are paved (the game draws them as asphalt): nothing may stand on them.
@@ -379,7 +383,8 @@ function importRoads(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, bou
       });
     }
   }
-  return roads;
+  // Busways go last, so the general roads keep their order (and indices) with or without them.
+  return [...roads.filter((r) => !r.access), ...roads.filter((r) => r.access)];
 }
 
 /** Smoothed, city-relative heights, flattened across every road so streets are level side to side. */

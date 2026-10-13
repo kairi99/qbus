@@ -46,6 +46,8 @@ export function sidewalkSections(city: CityData, graph: RoadGraph): SidewalkSect
 
   const out: SidewalkSection[][] = [];
   for (const r of city.roads) {
+    // Nobody walks along a busway (its median sidewalks belong to the carriageways beside it).
+    if (r.access) continue;
     const path = makePath(r.points);
     const samples = new Set<number>([path.len]);
     for (let s = 0; s < path.len; s += STEP) samples.add(s);
@@ -75,8 +77,25 @@ export function sidewalkSections(city: CityData, graph: RoadGraph): SidewalkSect
           continue;
         }
         // Stop half a probe short of whatever blocked us.
-        const w = clear >= SIDEWALK_WIDTH ? SIDEWALK_WIDTH : clear - PROBE / 2;
-        run.push({ p, dir: d, from: side * curb, to: side * (curb + w) });
+        let w = clear >= SIDEWALK_WIDTH ? SIDEWALK_WIDTH : clear - PROBE / 2;
+        // A sliver of junction hull (or asphalt) can sit between two probes, or over the first few
+        // centimeters at the curb: the strip starts after the last paved spot and ends before the first.
+        let a0 = 0;
+        for (let o = 0; o <= w + 0.02; o += 0.02) {
+          const off = side * (curb + o);
+          if (!paved({ x: p.x - d.z * off, z: p.z + d.x * off })) continue;
+          if (o < w / 2) a0 = o + 0.05;
+          else {
+            w = o - 0.1;
+            break;
+          }
+        }
+        if (w - a0 < PROBE) {
+          if (run.length > 1) out.push(run);
+          run = [];
+          continue;
+        }
+        run.push({ p, dir: d, from: side * (curb + a0), to: side * (curb + w) });
       }
       if (run.length > 1) out.push(run);
     }
