@@ -99,8 +99,12 @@ export class BusPhysics {
   private section(length: number, m: number): RAPIER.RigidBody {
     const { width, height } = this.preset.body;
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setCcdEnabled(true).setAngularDamping(0.4).setLinearDamping(0.05));
+    // Articulated sections have their lower ends chamfered (approach and departure angles), or
+    // the nose digs into the road where a ramp flattens out (a box 9 m long high-centers there).
+    const bevel = this.preset.articulated?.bevel ?? 0;
+    const hull = bevel ? this.chamferedBox(length, width, height, bevel, bevel * 0.35) : null;
     this.world.createCollider(
-      RAPIER.ColliderDesc.cuboid(length / 2, height / 2, width / 2)
+      (hull ?? RAPIER.ColliderDesc.cuboid(length / 2, height / 2, width / 2))
         .setFriction(0.3)
         .setMassProperties(
           m,
@@ -115,6 +119,17 @@ export class BusPhysics {
       body,
     );
     return body;
+  }
+
+  /** A box whose bottom edges at both ends are cut back by `run` along x and up by `rise`. */
+  private chamferedBox(length: number, width: number, height: number, run: number, rise: number): RAPIER.ColliderDesc | null {
+    const [hx, hy, hz] = [length / 2, height / 2, width / 2];
+    const pts: number[] = [];
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        pts.push(sx * hx, hy, sz * hz, sx * hx, -hy + rise, sz * hz, sx * (hx - run), -hy, sz * hz);
+      }
+    return RAPIER.ColliderDesc.convexHull(new Float32Array(pts));
   }
 
   private addAxles(body: RAPIER.RigidBody, mounts: number[][]): RAPIER.DynamicRayCastVehicleController {

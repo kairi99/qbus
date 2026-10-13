@@ -87,13 +87,13 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
   const startY = edgeY(first, s0) ?? groundHeightAt(city, start);
   const head = nav.pose({ edge: first.id, s: s0 }).heading;
   const bus = new BusPhysics(world, preset, { x: start.x, y: startY, z: start.z, heading: head });
-  const chassis = bus.body.collider(0);
+  const chassis = bus.colliders;
   const goal = path.points[path.points.length - 1];
   const cruise = opts.kmh / 3.6;
   const budget = path.length / (cruise / 2) + (opts.slack ?? 10);
   const r: DriveResult = {
     reached: false, time: 0, budget, stuck: 0, stuckAt: null, airborne: 0, airAt: null, bodyContacts: 0, maxImpulse: 0, maxLateralImpulse: 0,
-    contactAt: null, lateralAt: null, mass: preset.mass, maxRise: 0, maxSink: 0, riseAt: null, sinkAt: null, fellThrough: false, maxOffPath: 0, offPathAt: null, topKmh: 0,
+    contactAt: null, lateralAt: null, mass: preset.mass + (preset.articulated?.rearMass ?? 0), maxRise: 0, maxSink: 0, riseAt: null, sinkAt: null, fellThrough: false, maxOffPath: 0, offPathAt: null, topKmh: 0,
   };
   const passageEdges = opts.passage ? new Set(route.slice(opts.passage.from, opts.passage.to)) : null;
   let ride: number | null = null;
@@ -153,8 +153,9 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
       if (air > r.airborne) (r.airborne = air), (r.airAt = pos);
 
       let touched = false;
-      world.contactPairsWith(chassis, (other) => {
-        world.contactPair(chassis, other, (m) => {
+      for (const own of chassis)
+      world.contactPairsWith(own, (other) => {
+        world.contactPair(own, other, (m) => {
           if (m.numContacts() === 0) return;
           let imp = 0;
           for (let i = 0; i < m.numContacts(); i++) imp += m.contactImpulse(i);
@@ -180,7 +181,8 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
     }
   } finally {
     world.removeVehicleController(bus.vehicle);
-    world.removeRigidBody(bus.body);
+    if (bus.rear) world.removeVehicleController(bus.rear.vehicle);
+    for (const b of bus.bodies) world.removeRigidBody(b);
   }
   return r;
 }

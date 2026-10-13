@@ -24,6 +24,8 @@ export interface BusPreset {
     yawLimitDeg: number;
     /** Largest nod between the sections (degrees), for humps and ramps. */
     pitchLimitDeg: number;
+    /** Chamfer under both ends of each section's box (m along the bus): approach and departure angles. */
+    bevel?: number;
   };
   /** Passengers that fit on board. */
   capacity: number;
