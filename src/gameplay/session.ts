@@ -194,7 +194,7 @@ export class GameSession {
 
   /** The player honked: traffic ahead hurries, people on the crosswalk run. */
   playerHonk(): void {
-    const t = this.d.bus.body.translation();
+    const t = this.d.bus.position();
     this.traffic.honk({ x: t.x, z: t.z }, this.d.bus.heading);
     this.peds.honk({ x: t.x, z: t.z });
   }
@@ -202,7 +202,7 @@ export class GameSession {
   /** Called every fixed physics step, before world.step(): moves traffic and pedestrians. */
   beforeStep(dt: number): void {
     const bus = this.d.bus;
-    const t = bus.body.translation();
+    const t = bus.position();
     const busPos = { x: t.x, z: t.z };
     this.sinceRecycle += dt;
     if (this.sinceRecycle > RECYCLE_EVERY) {
@@ -212,7 +212,8 @@ export class GameSession {
     }
     const obstacles: Obstacle[] = [
       // The bus at its level (in an underpass it doesn't hold up the street over it), people on the street.
-      { id: 'bus', pos: busPos, heading: bus.heading, length: bus.preset.body.length, width: bus.preset.body.width, lift: bus.roadHeight() - terrainAt(this.d.city, busPos) },
+      // (an articulated bus is two boxes, each at its own heading)
+      ...bus.sections().map((s, i) => ({ id: i ? `bus${i}` : 'bus', pos: s.pos, heading: s.heading, length: s.length, width: bus.preset.body.width, lift: bus.roadHeight() - terrainAt(this.d.city, s.pos) })),
       ...this.trafficBodies.obstacles(),
       ...this.peds.peds.filter((p) => p.onRoad).map((p) => ({ id: `ped${p.id}`, pos: p.pos, heading: p.heading, length: 0.8, width: 0.8, lift: 0 })),
     ];
@@ -233,12 +234,12 @@ export class GameSession {
   /** Called every fixed physics step, after world.step(). */
   physicsStep(dt: number): void {
     const bus = this.d.bus;
-    const t0 = bus.body.translation();
-    const hits = this.trafficBodies.afterStep(dt, bus.body.collider(0), { x: t0.x, z: t0.z });
+    const t0 = bus.position();
+    const hits = this.trafficBodies.afterStep(dt, bus.colliders, { x: t0.x, z: t0.z });
     if (hits.length) this.say('carHit', 0.7);
     // Front bumper over a stop line on red (free roam too: it refills the nitro).
-    const f = bus.preset.body.length / 2;
-    const front = { x: t0.x + Math.cos(bus.heading) * f, z: t0.z - Math.sin(bus.heading) * f };
+    const nose = bus.nose();
+    const front = { x: nose.x, z: nose.z };
     this.redsRun += this.redLights.update(front, bus.heading, bus.roadHeight() - terrainAt(this.d.city, front), this.traffic.time).length;
     if (!this.startedFlag || this.game?.over) {
       this.dives = 0;
@@ -264,7 +265,7 @@ export class GameSession {
     this.wasBoosting = this.nitro.active;
 
     if (!this.game) return;
-    const p = bus.body.translation();
+    const p = bus.position();
     for (const e of this.game.update(dt, { pos: { x: p.x, z: p.z }, speed: bus.speed })) this.onGame(e);
   }
 
@@ -280,10 +281,10 @@ export class GameSession {
     this.frustum.setFromProjectionMatrix(this.viewProj);
     const eye = camera.position;
     const hidden = (p: Vec2) => Math.hypot(p.x - eye.x, p.z - eye.z) > 120 || !this.frustum.containsPoint(this.probe.set(p.x, groundHeightAt(this.d.city, p) + 1, p.z));
-    this.metro.update(dt, { x: bus.body.translation().x, z: bus.body.translation().z }, hidden);
+    this.metro.update(dt, { x: bus.position().x, z: bus.position().z }, hidden);
     this.metroView.sync(this.clock);
     this.knocked += this.d.props.consumeKnocked();
-    const t = bus.body.translation();
+    const t = bus.position();
     this.busPos.set(t.x, t.y, t.z);
     const game = this.game;
     this.passengers.update(dt, bus, game?.activeStop.stop.side === 'left');
@@ -316,7 +317,7 @@ export class GameSession {
     if (this.fpsHighFor > 5) (next = Math.min(MAX_CARS, this.budget + 2)), (this.fpsHighFor = 0);
     if (next === this.budget) return;
     this.budget = next;
-    const t = this.d.bus.body.translation();
+    const t = this.d.bus.position();
     this.traffic.setBudget(next, { x: t.x, z: t.z }, this.d.bus.heading);
   }
 
@@ -331,7 +332,7 @@ export class GameSession {
     if (t.kind === 'crash') {
       this.d.audio.cue('crash');
       // Rammed the roadworks at the edge of the map.
-      const p = this.d.bus.body.translation();
+      const p = this.d.bus.position();
       if (this.d.city.playArea && !inPlayArea(this.d.city, { x: p.x, z: p.z }, 12)) return this.say('works');
       this.mission({ type: 'crash' });
       if (this.game?.onBoard.length) this.say('crash');

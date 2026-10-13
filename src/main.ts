@@ -158,7 +158,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       }
       if (action === 'camera') rig.toggle();
       if (action === 'reset') {
-        const t = bus.body.translation();
+        const t = bus.position();
         // A road at the level the bus is on, on a spot where it fits (clear of walls and roofs).
         const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length });
         bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
@@ -218,7 +218,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       paused ? 0 : dt,
     );
     radio.update(audio.context, paused);
-    const t = bus.body.translation();
+    const t = bus.position();
     hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, nearestRoad(city, { x: t.x, z: t.z })?.name ?? '');
     // Backdrop first (sky, far hills, landmarks) through a matching long-range camera, then the city.
     farCamera.position.copy(camera.position);

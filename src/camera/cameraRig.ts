@@ -32,7 +32,9 @@ const LOOK_FORWARD = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0
 export class CameraRig {
   mode: CameraMode = 'chase';
   private lookTarget = new THREE.Vector3();
+  /** Middle of the whole vehicle (the chase camera's pivot), and the front section's center (the driver's seat is in it). */
   private busPos = new THREE.Vector3();
+  private framePos = new THREE.Vector3();
   private busQuat = new THREE.Quaternion();
   private flatFwd = new THREE.Vector3();
   private tmp = new THREE.Vector3();
@@ -73,7 +75,9 @@ export class CameraRig {
     }
     const t = bus.body.translation();
     const q = bus.body.rotation();
-    this.busPos.set(t.x, t.y, t.z);
+    const c = bus.position();
+    this.busPos.set(c.x, c.y, c.z);
+    this.framePos.set(t.x, t.y, t.z);
     // A teleport (reset, restart) snaps the camera instead of gliding through buildings.
     if (this.busPos.distanceTo(this.lastBus) > 15) this.first = true;
     this.lastBus.copy(this.busPos);
@@ -109,7 +113,8 @@ export class CameraRig {
   private chase(dt: number, bus: BusPhysics, speedFrac: number): void {
     // Scaled to the vehicle: high and far behind a bus, lower and closer behind a car.
     const { length, height } = bus.preset.body;
-    const back = Math.max(7, length * 1.3) + speedFrac * 4;
+    // A long (articulated) bus doesn't need to be framed as far back as its length would suggest.
+    const back = Math.max(7, length > 14 ? length * 0.5 + 9 : length * 1.3) + speedFrac * 4;
     const desired = this.tmp.copy(this.busPos).addScaledVector(this.flatFwd, -back);
     desired.y += Math.min(7, 2 + height * 1.8);
     const k = this.first ? 1 : 1 - Math.exp(-dt * 5);
@@ -155,10 +160,11 @@ export class CameraRig {
   }
 
   private cockpit(dt: number, bus: BusPhysics): void {
-    const { length, width, height } = bus.preset.body;
-    const [sx, sy, sz] = bus.preset.cockpit?.seat ?? [length / 2 - 1.6, height * 0.32, -width / 2 + 0.75];
+    const { width, height } = bus.preset.body;
+    // The seat is in the front section's space.
+    const [sx, sy, sz] = bus.preset.cockpit?.seat ?? [bus.frontLength / 2 - 1.6, height * 0.32, -width / 2 + 0.75];
     const seat = this.tmp.set(sx, sy, sz).applyQuaternion(this.busQuat);
-    this.camera.position.copy(this.busPos).add(seat);
+    this.camera.position.copy(this.framePos).add(seat);
     // Head lags a little behind the chassis rotation so bumps and turns feel physical.
     const target = this.busQuat.clone().multiply(LOOK_FORWARD);
     if (this.first) this.headQuat.copy(target);

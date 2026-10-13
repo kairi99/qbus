@@ -144,17 +144,16 @@ export class BusPhysics {
     return this.bodies.map((b) => b.collider(0));
   }
 
-  private mid: V3 = { x: 0, y: 0, z: 0 };
   private ax: V3 = { x: 0, y: 0, z: 0 };
 
   /**
    * Middle of the whole vehicle (nose to tail): the point stops, traffic and the R reset treat
-   * as "the bus". For a rigid bus it's the body's center. Shared object: copy what you keep.
+   * as "the bus". For a rigid bus it's the body's center. A new object each call.
    */
   position(): V3 {
     const t = this.body.translation();
-    const c = this.mid;
-    if (!this.rear) return Object.assign(c, t);
+    const c = { x: t.x, y: t.y, z: t.z };
+    if (!this.rear) return c;
     const r = this.rear.body.translation();
     const f = this.forwardOf(this.body.rotation(), this.frontLength / 2);
     c.x = t.x + f.x;
@@ -165,6 +164,20 @@ export class BusPhysics {
     c.y = (c.y + r.y + b.y) / 2;
     c.z = (c.z + r.z + b.z) / 2;
     return c;
+  }
+
+  /** Each section's center, heading and length (one for a rigid bus), e.g. for the boxes traffic steers around. */
+  sections(): { pos: { x: number; y: number; z: number }; heading: number; length: number }[] {
+    const out = [{ pos: this.body.translation(), heading: this.heading, length: this.frontLength }];
+    if (this.rear) out.push({ pos: this.rear.body.translation(), heading: this.headingOf(this.rear.body.rotation()), length: this.rear.length });
+    return out;
+  }
+
+  /** The middle of the front bumper, at chassis height (a new object each call). */
+  nose(): V3 {
+    const t = this.body.translation();
+    const f = this.forwardOf(this.body.rotation(), this.frontLength / 2);
+    return { x: t.x + f.x, y: t.y + f.y, z: t.z + f.z };
   }
 
   /** The body's +X axis scaled by `k` (shared object). */
