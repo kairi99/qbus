@@ -36,6 +36,8 @@ export interface DriveResult {
   maxLateralImpulse: number;
   contactAt: { pos: Vec2; y: number; normal: { x: number; y: number; z: number } } | null;
   lateralAt: { pos: Vec2; y: number; normal: { x: number; y: number; z: number } } | null;
+  /** Which section of the vehicle took the biggest sideways hit (an articulated bus has two). */
+  lateralSection?: "front" | "rear";
   /** Vehicle mass (to turn impulses into a speed change). */
   mass: number;
   /** Chassis height minus road height, relative to its ride height at the start (m). */
@@ -75,6 +77,7 @@ export function describe(r: DriveResult): string {
     `body contacts ${r.bodyContacts} steps, max impulse ${r.maxImpulse.toFixed(0)} at ${fmt(r.contactAt?.pos ?? null)} y=${r.contactAt?.y.toFixed(2) ?? '-'}, lateral ${r.maxLateralImpulse.toFixed(0)} (Δv ${(r.maxLateralImpulse / r.mass).toFixed(2)} m/s) at ${fmt(r.lateralAt?.pos ?? null)} y=${r.lateralAt?.y.toFixed(2) ?? '-'} n=${r.lateralAt ? `(${r.lateralAt.normal.x.toFixed(2)}, ${r.lateralAt.normal.y.toFixed(2)}, ${r.lateralAt.normal.z.toFixed(2)})` : '-'}`,
     `height vs road +${r.maxRise.toFixed(2)} at ${fmt(r.riseAt)} / ${r.maxSink.toFixed(2)} at ${fmt(r.sinkAt)}${r.fellThrough ? ' FELL THROUGH' : ''}`,
     `off path ${r.maxOffPath.toFixed(1)} m at ${fmt(r.offPathAt)}`,
+    `worst wall hit on the ${r.lateralSection ?? "-"} section`,
   ].join('; ');
 }
 
@@ -163,7 +166,7 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
           touched ||= imp > 0 || m.numSolverContacts() > 0;
           const n = m.normal();
           const lat = imp * Math.hypot(n.x, n.z);
-          if (lat > r.maxLateralImpulse) r.lateralAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } };
+          if (lat > r.maxLateralImpulse) (r.lateralAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } }), (r.lateralSection = own === chassis[0] ? "front" : "rear");
           if (imp > r.maxImpulse) {
             r.maxImpulse = imp;
             r.contactAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } };
