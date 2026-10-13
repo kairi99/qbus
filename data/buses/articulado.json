@@ -21,7 +21,7 @@
     "mountHeight": -0.95,
     "frictionSlip": 2.2,
     "sideFrictionStiffness": 1.0,
-    "handbrakeFrictionSlip": 0.7
+    "handbrakeFrictionSlip": 0.4
   },
   "cockpit": { "seat": [3.6, 0.8, -0.5] },
   "drift": { "maxAngleDeg": 30, "gripRecovery": 2.5 },

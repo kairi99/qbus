@@ -277,7 +277,11 @@ export class BusPhysics {
     const rear = this.rear!;
     const p = this.preset;
     const b = handbrake ? Math.max(brake, p.handbrakeForce) : brake;
-    for (let i = 0; i < 2; i++) rear.vehicle.setWheelBrake(i, b * (p.articulated!.rearMass / p.mass));
+    for (let i = 0; i < 2; i++) {
+      rear.vehicle.setWheelBrake(i, b * (p.articulated!.rearMass / p.mass));
+      // The handbrake lets go of the trailing axle too, or it would hold the whole bus in line.
+      rear.vehicle.setWheelFrictionSlip(i, this.rearGrip);
+    }
     rear.vehicle.updateVehicle(dt);
     const lim = (p.articulated!.yawLimitDeg * Math.PI) / 180;
     const bend = this.bend;
