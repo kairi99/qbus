@@ -2,7 +2,7 @@
   "id": "articulado",
   "name": "Articulado BRT",
   "body": { "length": 18.4, "width": 2.55, "height": 3.2, "color": "#c62828", "stripe": "#f5f5f5", "roof": "#d9d9d9" },
-  "articulated": { "rearLength": 8, "gap": 0.8, "rearAxle": -1.6, "rearMass": 1700, "yawLimitDeg": 48, "pitchLimitDeg": 10, "bevel": 1.6 },
+  "articulated": { "rearLength": 8, "gap": 0.8, "rearAxle": -1.6, "rearMass": 1700, "yawLimitDeg": 48, "pitchLimitDeg": 10, "bevel": 1.6, "driftLock": 600, "driftYawRate": 1.6, "driftFrontGrip": 3 },
   "capacity": 90,
   "mass": 2400,
   "centerOfMassHeight": 0.3,
@@ -10,7 +10,7 @@
   "reverseForce": 5000,
   "reverseTopSpeedKmh": 25,
   "brakeForce": 160,
-  "handbrakeForce": 60,
+  "handbrakeForce": 30,
   "topSpeedKmh": 80,
   "steer": { "maxAngle": 0.5, "highSpeedAngle": 0.14, "speed": 3.0 },
   "wheels": {
@@ -21,7 +21,7 @@
     "mountHeight": -0.95,
     "frictionSlip": 2.2,
     "sideFrictionStiffness": 1.0,
-    "handbrakeFrictionSlip": 0.4
+    "handbrakeFrictionSlip": 0.25
   },
   "drift": { "maxAngleDeg": 30, "gripRecovery": 2.5 },
   "nitro": { "accel": 7, "topSpeedBonusKmh": 25 },

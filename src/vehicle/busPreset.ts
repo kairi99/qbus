@@ -26,6 +26,12 @@ export interface BusPreset {
     pitchLimitDeg: number;
     /** Chamfer under both ends of each section's box (m along the bus): approach and departure angles. */
     bevel?: number;
+    /** Turntable stiffness while the handbrake is held (0/absent: stays free): the bus drifts as one body. */
+    driftLock?: number;
+    /** Yaw rate (rad/s) a handbrake turn is eased toward, the arcade push that opens a drift. */
+    driftYawRate?: number;
+    /** While the handbrake is held the front tires grip this many times the rear ones (absent: unchanged). */
+    driftFrontGrip?: number;
   };
   /** Passengers that fit on board. */
   capacity: number;

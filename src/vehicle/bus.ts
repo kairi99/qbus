@@ -57,6 +57,7 @@ export class BusPhysics {
   /** Length of the front section (the whole vehicle for a rigid bus). */
   readonly frontLength: number;
   private steerAngle = 0;
+  private lockedBend: number | null = null;
   private rearGrip: number;
   /** Nitro fired on the last update. */
   boosting = false;
@@ -300,9 +301,12 @@ export class BusPhysics {
       ? p.wheels.handbrakeFrictionSlip
       : Math.min(p.wheels.frictionSlip, this.rearGrip + p.drift.gripRecovery * dt);
     for (const i of REAR) this.vehicle.setWheelFrictionSlip(i, this.rearGrip);
+    const fg = p.articulated?.driftFrontGrip;
+    if (fg) for (const i of FRONT) this.vehicle.setWheelFrictionSlip(i, input.handbrake ? Math.min(p.wheels.frictionSlip, this.rearGrip * fg) : p.wheels.frictionSlip);
 
     this.vehicle.updateVehicle(dt);
     if (this.rear) this.updateRear(brake, !!input.handbrake, dt);
+    this.driftAssist(input, speed, dt);
     this.limitDriftAngle(dt);
     this.boost(!!input.boost, speed, dt);
   }
@@ -311,6 +315,7 @@ export class BusPhysics {
   private updateRear(brake: number, handbrake: boolean, dt: number): void {
     const rear = this.rear!;
     const p = this.preset;
+    const art = p.articulated!;
     const b = handbrake ? Math.max(brake, p.handbrakeForce) : brake;
     for (let i = 0; i < 2; i++) {
       rear.vehicle.setWheelBrake(i, b * (p.articulated!.rearMass / p.mass));
@@ -320,8 +325,36 @@ export class BusPhysics {
     rear.vehicle.updateVehicle(dt);
     const lim = (p.articulated!.yawLimitDeg * Math.PI) / 180;
     const bend = this.bend;
+    // Handbrake: the turntable freezes at the bend it had, so the whole bus swings out as one
+    // body (a hinged tail would just fold) and a drift builds a real slip angle.
+    if (handbrake && art.driftLock) {
+      this.lockedBend ??= Math.max(-lim, Math.min(lim, bend));
+      motor(rear.joint, RAPIER.JointAxis.AngY, this.lockedBend, art.driftLock, TURNTABLE_DAMPING);
+      return;
+    }
+    this.lockedBend = null;
     if (Math.abs(bend) > lim) motor(rear.joint, RAPIER.JointAxis.AngY, Math.sign(bend) * lim, TURNTABLE_STIFFNESS, TURNTABLE_DAMPING);
     else motor(rear.joint, RAPIER.JointAxis.AngY, 0, 0, TURNTABLE_FREE_DAMPING);
+  }
+
+  /**
+   * Arcade assist for an articulated bus: its long wheelbase keeps the nose on the front tires'
+   * line, so the handbrake alone never opens a slip angle. While it's held and the wheel is turned,
+   * both sections are eased toward a yaw rate (the rear grip is already low, so the velocity lags).
+   */
+  private driftAssist(input: DriveInput, speed: number, dt: number): void {
+    const rate = this.preset.articulated?.driftYawRate;
+    if (!rate || !input.handbrake || Math.abs(speed) < 5 || !input.steer) return;
+    // The push fades out as the slide nears the drift limit, so it opens a drift but never a spin.
+    const fade = 1 - Math.abs(this.slipAngle) / (this.preset.drift.maxAngleDeg * (Math.PI / 180));
+    // (past the limit it turns negative and pulls the bus back toward it)
+    const fadeC = Math.max(-1, fade);
+    const k = Math.min(1, 12 * dt);
+    const target = -input.steer * rate * Math.sign(speed) * fadeC;
+    for (const b of this.bodies) {
+      const w = b.angvel();
+      b.setAngvel({ x: w.x, y: w.y + (target - w.y) * k, z: w.z }, true);
+    }
   }
 
   /** Nitro: a straight shove along the chassis (not through the tires, so it can't just spin them). */
@@ -379,6 +412,7 @@ export class BusPhysics {
     place(this.body, L / 2 - this.frontLength / 2);
     if (this.rear) place(this.rear.body, -(L / 2 - this.rear.length / 2));
     this.steerAngle = 0;
+    this.lockedBend = null;
     this.rearGrip = this.preset.wheels.frictionSlip;
     this.boosting = false;
   }

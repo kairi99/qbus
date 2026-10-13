@@ -115,8 +115,7 @@ function setup() {
     for (const throttle of [0, 1]) {
       it(`kicks the tail out to a visible drift without spinning (throttle ${throttle})`, () => {
         const { bus, maxSlip } = driftFrom60(throttle);
-        // An 18 m articulated bus mostly folds at the turntable instead of sliding.
-        expect(maxSlip).toBeGreaterThan(preset.articulated ? 3 : 25);
+        expect(maxSlip).toBeGreaterThan(25);
         expect(maxSlip).toBeLessThan(55);
         expect(bus.speed).toBeGreaterThan(3); // still rolling forward, not spun around
       });
@@ -308,6 +307,25 @@ describe('articulated bus', () => {
     expect(bus.body.translation().x).toBeGreaterThan(90);
     expect(minUp).toBeGreaterThan(0.95);
     expect(airborne).toBe(0);
+  });
+
+  it('a handbrake drift scores: front-section slip over 20 degrees for a second, no jack-knife, recovers', () => {
+    const { bus, run } = setup();
+    run(idle, 1);
+    run({ ...idle, throttle: 1 }, 5);
+    expect(bus.speed * 3.6).toBeGreaterThan(40);
+    let above = 0;
+    let maxBend = 0;
+    run({ throttle: 1, steer: 1, handbrake: true }, 2, () => {
+      if (Math.abs(bus.slipAngle) > (20 * Math.PI) / 180) above += PHYSICS_STEP;
+      maxBend = Math.max(maxBend, Math.abs(bus.bend));
+    });
+    expect(above).toBeGreaterThanOrEqual(1);
+    expect(deg(maxBend)).toBeLessThan(art.yawLimitDeg);
+    run({ throttle: 1, steer: 0, handbrake: false }, 3);
+    expect(Math.abs(bus.slipAngle)).toBeLessThan(0.15);
+    expect(Math.abs(deg(bus.bend))).toBeLessThan(5);
+    expect(bus.speed).toBeGreaterThan(5);
   });
 
   it('reset puts both sections upright and in line, centered on the spawn', () => {
