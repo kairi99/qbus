@@ -13,6 +13,8 @@ function fakeBus(heading = 0.6): BusPhysics {
     body: { translation: () => ({ x: 10, y: 2, z: -5 }), rotation: () => ({ x: q.x, y: q.y, z: q.z, w: q.w }) },
     heading,
     speed: 12,
+    position: () => ({ x: 10, y: 2, z: -5 }),
+    frontLength: popular.body.length,
     preset: popular,
   } as unknown as BusPhysics;
 }

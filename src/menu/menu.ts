@@ -368,21 +368,37 @@ const AE86_ART = `
 function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset[]): string {
   const { color, stripe, roof } = p.body;
   // Side view scaled to the bus's real length, so the buseta looks small and the coach long.
-  const w = 70 + p.body.length * 11;
-  return `
-    <button class="mn-card mn-bus" role="radio" aria-checked="${checked}" data-bus="${p.id}">
-      <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">${
-        p.kind === 'car'
-          ? AE86_ART
-          : `
-        <g transform="translate(${(220 - w) / 2},8)">
+  const art = p.articulated;
+  // The articulated bus is squeezed to fit the card: two sections and a bellows.
+  const w = art ? 200 : 70 + p.body.length * 11;
+  const joint = art ? ((p.body.length - art.rearLength - art.gap / 2) / p.body.length) * w : 0;
+  const body = art
+    ? `
+          <rect x="0" y="0" width="${w}" height="10" rx="4" fill="${roof}"/>
+          <rect x="0" y="6" width="${w}" height="48" rx="6" fill="${color}"/>
+          <rect x="${w - joint + 2 - 6}" y="6" width="12" height="48" fill="#202225"/>
+          <rect x="${w - 34}" y="12" width="30" height="30" rx="2" fill="#1c2a38"/>
+          <rect x="8" y="14" width="${w - joint - 46}" height="16" rx="2" fill="#1c2a38"/>
+          <rect x="${w - joint + 14}" y="14" width="${joint - 60}" height="16" rx="2" fill="#1c2a38"/>
+          <rect x="0" y="36" width="${w}" height="6" fill="${stripe}"/>
+          <circle cx="${w * 0.2}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.2}" cy="56" r="3.5" fill="#bbb"/>
+          <circle cx="${w * 0.62}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.62}" cy="56" r="3.5" fill="#bbb"/>
+          <circle cx="${w * 0.93}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.93}" cy="56" r="3.5" fill="#bbb"/>`
+    : `
           <rect x="0" y="0" width="${w}" height="10" rx="4" fill="${roof}"/>
           <rect x="0" y="6" width="${w}" height="48" rx="6" fill="${color}"/>
           <rect x="10" y="14" width="${w - 34}" height="16" rx="2" fill="#1c2a38"/>
           <rect x="${w - 20}" y="12" width="16" height="30" rx="2" fill="#1c2a38"/>
           <rect x="0" y="36" width="${w}" height="6" fill="${stripe}"/>
           <circle cx="${w * 0.2}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.2}" cy="56" r="3.5" fill="#bbb"/>
-          <circle cx="${w * 0.8}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.8}" cy="56" r="3.5" fill="#bbb"/>
+          <circle cx="${w * 0.8}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.8}" cy="56" r="3.5" fill="#bbb"/>`;
+  return `
+    <button class="mn-card mn-bus" role="radio" aria-checked="${checked}" data-bus="${p.id}">
+      <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">${
+        p.kind === 'car'
+          ? AE86_ART
+          : `
+        <g transform="translate(${(220 - w) / 2},8)">${body}
         </g>`
       }
       </svg>

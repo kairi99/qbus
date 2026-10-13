@@ -2,11 +2,13 @@
 
 /** Drive-through (physics). */
 export const DRIVE = {
-  /** Vehicles and cruise speeds (km/h): a heavy bus slow and fast, the shortest bus, the car. */
+  /** Vehicles and cruise speeds (km/h): a heavy bus slow and fast, the shortest bus, the 18 m articulated bus, the car. */
   RUNS: [
     ['interparroquial', 35],
     ['interparroquial', 70],
     ['buseta', 60],
+    ['articulado', 35],
+    ['articulado', 60],
     ['ae86', 90],
   ] as const,
   /** Extra seconds over length / (cruise / 2). */

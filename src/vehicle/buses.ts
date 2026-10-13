@@ -3,12 +3,14 @@ import popular from '../../data/buses/popular.json';
 import interparroquial from '../../data/buses/interparroquial.json';
 import buseta from '../../data/buses/buseta.json';
 import ae86 from '../../data/buses/ae86.json';
+import articulado from '../../data/buses/articulado.json';
 
 /** Selectable buses, in menu order, with a one-line pitch each. */
 export const BUSES: { preset: BusPreset; blurb: string }[] = [
   { preset: popular as BusPreset, blurb: 'El de toda la vida: ni muy rápido ni muy lento' },
   { preset: interparroquial as BusPreset, blurb: 'Grandote y veloz, pero le cuesta arrancar' },
   { preset: buseta as BusPreset, blurb: 'Chiquita y ágil, derrapa en cualquier esquina' },
+  { preset: articulado as BusPreset, blurb: 'El del corredor: 18 metros que se doblan en la curva, con puertas a ambos lados' },
 ];
 
 /** Cars: free roam only (a car carries no passengers on a route). */
