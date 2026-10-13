@@ -10,7 +10,7 @@ export const BUSES: { preset: BusPreset; blurb: string }[] = [
   { preset: popular as BusPreset, blurb: 'El de toda la vida: ni muy rápido ni muy lento' },
   { preset: interparroquial as BusPreset, blurb: 'Grandote y veloz, pero le cuesta arrancar' },
   { preset: buseta as BusPreset, blurb: 'Chiquita y ágil, derrapa en cualquier esquina' },
-  { preset: articulado as BusPreset, blurb: 'El biarticulado del corredor: 18 metros que se doblan en la curva, con puertas a los dos lados' },
+  { preset: articulado as BusPreset, blurb: 'El del corredor: 18 metros que se doblan en la curva, con puertas a ambos lados' },
 ];
 
 /** Cars: free roam only (a car carries no passengers on a route). */
