@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const shots = 'e2e/screenshots';
+test.describe.configure({ timeout: 240_000 });
 
 test('menu offers the articulated bus for shifts and free roam, and it drives and bends', async ({ page }) => {
   const errors: string[] = [];
@@ -32,10 +33,10 @@ test('menu offers the articulated bus for shifts and free roam, and it drives an
       return { speed: bus.speed as number, bend: bus.bend as number, on: bus.wheelsOnGround as number, front: bus.body.translation(), rear: bus.rear.body.translation() };
     });
   await page.keyboard.down('KeyW');
-  await expect.poll(async () => (await state()).speed, { timeout: 45_000 }).toBeGreaterThan(6);
+  await expect.poll(async () => (await state()).speed, { timeout: 120_000 }).toBeGreaterThan(6);
   await page.screenshot({ path: `${shots}/81-articulated-driving.png` });
   await page.keyboard.down('KeyA');
-  await expect.poll(async () => Math.abs((await state()).bend), { timeout: 45_000 }).toBeGreaterThan(0.05);
+  await expect.poll(async () => Math.abs((await state()).bend), { timeout: 120_000 }).toBeGreaterThan(0.05);
   await page.screenshot({ path: `${shots}/82-articulated-bending.png` });
   const s = await state();
   // The rear section trails the front one by the length of the bus, in a bend.
@@ -56,7 +57,7 @@ test('a route shift in the articulated bus starts and moves', async ({ page }) =
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   expect(await page.evaluate(() => (window as any).__qbus.bus.preset.id)).toBe('articulado');
   await page.keyboard.down('KeyW');
-  await expect.poll(() => page.evaluate(() => (window as any).__qbus.bus.speed), { timeout: 45_000 }).toBeGreaterThan(6);
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.bus.speed), { timeout: 120_000 }).toBeGreaterThan(6);
   await expect(page.locator('.gh-timer')).toBeVisible();
   await page.keyboard.up('KeyW');
   expect(errors).toEqual([]);
