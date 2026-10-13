@@ -20,7 +20,7 @@ import { vehicleClearance } from './physics/clearance';
 import { Hud } from './ui/hud';
 import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
-import { busById } from './vehicle/buses';
+import { BRT_BUS, busById } from './vehicle/buses';
 import { routesFor } from './gameplay/routes';
 import { loadSettings, saveSettings } from './menu/settings';
 import { RadioToast } from './ui/radioToast';
@@ -80,10 +80,11 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
 
   // Free roam (?mode=free) has no route; a route shift is always driven in a bus.
   const free = params.get('mode') === 'free';
-  const picked = busById(params.get('bus') ?? settings.bus);
-  const preset = free || picked.kind !== 'car' ? picked : busById('popular');
   const routes = free ? [] : routesFor(city);
   const route = free ? null : (routes.find((r) => r.id === params.get('route')) ?? routes[0]);
+  // A link without ?bus= to a Trolebús/Ecovía route takes the articulated bus, like the menu.
+  const picked = busById(params.get('bus') ?? (route?.system ? BRT_BUS : settings.bus));
+  const preset = free || picked.kind !== 'car' ? picked : busById('popular');
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const fits = vehicleClearance(world, preset.body);
@@ -125,7 +126,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   };
 
   // How to play, every time a shift or free roam starts (unless turned off, or ?tutorial=0).
-  const tutorial = new Tutorial(hudRoot, free, session.stars);
+  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system);
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
   if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
 

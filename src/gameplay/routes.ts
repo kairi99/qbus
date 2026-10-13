@@ -3,7 +3,7 @@ import { forward, groundHeightAt, stopZone } from '../world/cityData';
 import { distToPolyline } from '../world/geom';
 import type { RouteStop } from './routeGame';
 import { type RoadGraph, buildRoadGraph } from '../world/roadGraph';
-import { type GraphSpot, Navigator } from './navigation';
+import { BRT_GENERAL_COST, type GraphSpot, Navigator } from './navigation';
 import { type RoadPose, snapToRoad } from '../world/roadSnap';
 
 /** A route the player can pick: an ordered loop of stop ids. */
@@ -55,9 +55,15 @@ export function routesFor(city: CityData, graph: RoadGraph = buildRoadGraph(city
 
 function realLine(city: CityData, l: import('../world/osm/lines').BusLine, legal: LegalLegs): RouteDef | null {
   const byId = new Map(city.stops.map((s) => [s.id, s]));
-  const stops = legal.prune(l.stops.map((id) => byId.get(id)!).filter(Boolean));
+  let stops = legal.prune(l.stops.map((id) => byId.get(id)!).filter(Boolean));
   if (stops.length < MIN_CORRIDOR_STOPS) return null;
   const system = l.system;
+  // The shift starts at the first stop: on a BRT line, one served from a busway lane (the bus
+  // starts on the busway), not the terminal's curb beside it.
+  if (system) {
+    const first = stops.findIndex((s) => legal.onBusway(s));
+    if (first > 0) stops = [...stops.slice(first), ...stops.slice(0, first)];
+  }
   const also = l.alsoServedBy.length ? ` · también ${l.alsoServedBy.slice(0, 2).join(', ')}${l.alsoServedBy.length > 2 ? '…' : ''}` : '';
   return {
     id: `linea-${l.ref.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
@@ -89,15 +95,21 @@ class LegalLegs {
 
   constructor(
     private city: CityData,
-    graph: RoadGraph,
+    private graph: RoadGraph,
   ) {
     this.nav = new Navigator(graph);
-    this.brt = new Navigator(graph, 'brt');
+    this.brt = new Navigator(graph, 'brt', BRT_GENERAL_COST);
   }
 
   /** Stops the bus can actually reach, on a lane going its way. */
   usable(s: Stop): boolean {
     return !!this.spot(s);
+  }
+
+  /** The stop is served from a busway lane. */
+  onBusway(s: Stop): boolean {
+    const spot = this.spot(s);
+    return !!spot && this.graph.edges[spot.edge].access === 'brt';
   }
 
   length(a: Stop, b: Stop): number {
@@ -106,7 +118,7 @@ class LegalLegs {
     if (d === undefined) {
       const sa = this.spot(a);
       const sb = this.spot(b);
-      d = sa && sb ? (a.system || b.system ? this.brt : this.nav).distanceTo(sa, sb) : Infinity;
+      d = sa && sb ? (a.system || b.system ? this.brt.pathMeters(sa, sb) : this.nav.distanceTo(sa, sb)) : Infinity;
       this.cache.set(key, d);
     }
     return d;
@@ -166,16 +178,17 @@ const LEAD_IN = 70;
  * back along legal traffic flow, facing it (clear of ramps and humps).
  */
 export function startPose(city: CityData, graph: RoadGraph, route: RouteDef): RoadPose {
-  const nav = new Navigator(graph, route.system ? 'brt' : 'general');
+  const vehicle = route.system ? 'brt' : 'general';
+  const nav = new Navigator(graph, vehicle, BRT_GENERAL_COST);
   const first = routeStops(city, route)[0];
   const spot = locateStop(nav, city, first.zone, first.stop.heading);
   if (!spot) {
     const f = forward(first.stop.heading);
     const back = { x: first.zone.x - f.x * LEAD_IN, z: first.zone.z - f.z * LEAD_IN };
-    return snapToRoad(city, back, first.stop.heading, groundHeightAt(city, back));
+    return snapToRoad(city, back, first.stop.heading, groundHeightAt(city, back), { vehicle });
   }
   const { pos, heading, y } = nav.pose(nav.behind(spot, LEAD_IN));
-  return snapToRoad(city, pos, heading, y ?? groundHeightAt(city, pos));
+  return snapToRoad(city, pos, heading, y ?? groundHeightAt(city, pos), { vehicle });
 }
 
 /** Where a free drive starts: in the curb lane of a street near the middle of the zone. */
@@ -196,7 +209,7 @@ export function freeStartPose(city: CityData, graph: RoadGraph): RoadPose {
 
 /** The streets a route drives along, one polyline per leg, following traffic rules. */
 export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = buildRoadGraph(city)): Vec2[][] {
-  const nav = new Navigator(graph, route.system ? 'brt' : 'general');
+  const nav = new Navigator(graph, route.system ? 'brt' : 'general', BRT_GENERAL_COST);
   const stops = routeStops(city, route);
   const spots = stops.map((s) => locateStop(nav, city, s.zone, s.stop.heading));
   return stops.map((s, i) => {
@@ -210,14 +223,14 @@ export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = b
 
 /** Legal driving distance into each stop from the one before it (`legs[0]`: from the last stop). */
 export function routeLegs(city: CityData, route: RouteDef, graph: RoadGraph): number[] {
-  const nav = new Navigator(graph, route.system ? 'brt' : 'general');
+  const nav = new Navigator(graph, route.system ? 'brt' : 'general', BRT_GENERAL_COST);
   const stops = routeStops(city, route);
   const spots = stops.map((s) => locateStop(nav, city, s.zone, s.stop.heading));
   return stops.map((s, i) => {
     const j = (i + stops.length - 1) % stops.length;
     const a = spots[j];
     const b = spots[i];
-    const d = a && b ? nav.distanceTo(a, b) : Infinity;
+    const d = a && b ? (route.system ? nav.pathMeters(a, b) : nav.distanceTo(a, b)) : Infinity;
     // Unreachable (shouldn't happen on a pruned route): the straight line, with a grid detour.
     return isFinite(d) ? d : Math.hypot(s.zone.x - stops[j].zone.x, s.zone.z - stops[j].zone.z) * 1.3;
   });

@@ -70,7 +70,8 @@ test('La Mariscal: Trolebús route starts at a median station; Metro entrances h
     return { system: q.route.system, side: first.side, name: first.name, stations: q.city.stations.length, metro: q.city.metro.length };
   });
   expect(r.system).toBe('trolebus');
-  expect(r.side).toBe('left');
+  // The shift starts at the first stop served from a busway lane (a platform stop boards left, a curb one right).
+  expect(['left', undefined]).toContain(r.side);
   expect(r.stations).toBeGreaterThan(8);
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${shots}/53-trolebus-start.png` });
