@@ -130,10 +130,13 @@ function run(route: RouteDef, prof: Profile, seed: number) {
     }
     // Rolls through the stop just under the speed passengers can get on at.
     const vStop = STOP_SPEED * 0.8;
-    target = Math.min(target, Math.sqrt(vStop * vStop + 2 * prof.brake * Math.max(0, toStop - 3)));
+    // A long bus brakes for the stop earlier: its middle has to be in the zone, its inertia is bigger.
+    target = Math.min(target, Math.sqrt(vStop * vStop + 2 * prof.brake * Math.max(0, toStop - (bus.rear ? 9 : 3))));
     // Pure pursuit along the legal path.
     const look = Math.max(7, Math.abs(speed) * 0.7);
-    const aim = dStop < look || !path ? zone : nav.guidePoint(path, here, look);
+    // (a long bus has passed the zone once the zone is behind its nose: keep to the path, don't swing back at it)
+    const zoneAhead = !bus.rear || (zone.x - pn.x) * Math.cos(bus.heading) - (zone.z - pn.z) * Math.sin(bus.heading) > 0;
+    const aim = (dStop < look && zoneAhead) || !path ? zone : nav.guidePoint(path, here, look);
     const err = angle(Math.atan2(-(aim.z - pn.z), aim.x - pn.x) - bus.heading);
     let throttle = speed < target - 0.5 ? 1 : speed > target + 0.5 ? -1 : 0.2;
     let steer = Math.max(-1, Math.min(1, -err * 2.5));
