@@ -23,18 +23,26 @@ import { TRAFFIC } from './thresholds';
 // higher by the westbound up-ramp (#401) at the Puente del Guambra joint, was also seen here as a
 // sunk car on e516, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
 // no car happens to be there. The bug is still open; it's tracked by G2.)
-// LATENT DICE-DEPENDENT FAILURES (W2, busway import): with the busways imported the general road
-// graph is the same, but edge ids and counts shift, so the seeded traffic rolls different dice,
-// and seeds 1/2 now meet cars that stall at merges in three cuts. The same stalls show up on the
-// pre-busway city with other seeds (3/4 fail 'sin nombre @(-876,-220)' on master's data), so these are
-// not caused by busway traffic (no ordinary car ever enters a busway edge: tests/busways.test.ts).
-// Not fixed here: tracked as known failures; delete an entry when the merge logic is fixed.
-const LATENT = 'Dice-dependent stall/overlap at a merge (also reproduced on the pre-busway city with other seeds); not a busway effect';
+// Seed-dependent stalls (QBUS_SEEDS=n runs one seed; default 1,2). Failures per single seed, checks
+// 'stuck / overlap / height', master city+code vs the busway branch (W2), seeds 1-6 and master only 7-14:
+//   master: 1 ok, 2 ok, 3 sin nombre(-876,-220) stuck+overlap, 4 ok, 5 ok, 6 12 de Octubre passage
+//           (known key), 7 sin nombre(-820,774) height, 8 ok, 9 sin nombre(-876,-220) stuck, 10 ok,
+//           11 12 de Octubre stuck, 12 sin nombre(-876,-220) stuck, 13 ok, 14 ok
+//   branch (margin 4 busways): every seed 1-6 fails something: 10 de Agosto (-172,-870) in 2,3,5,
+//           José Riofrío in 2,4,5,6, sin nombre(-876,-220) in 1,4, Patria bridge overlap in 4.
+// The geometry of those cuts is identical to master's (roads within 100 m unchanged, no busway enters a
+// structure: clipBusways), no ordinary car ever enters a busway; the graph's edge ids/lengths shift, so
+// the dice differ. The 10 de Agosto stall is a car stopped on the e564 ramp 0.6 m sunk (the known
+// 'lips [e564→e564]' bug in geometry.slow) that master's dice never put a car on in seeds 1-14.
+// 'sin nombre @(-876,-220)' stuck reproduces on master (seeds 3, 9, 12). The 10 de Agosto entries do NOT
+// reproduce on master with any seed 1-14; they are kept as known because they trace to the existing lip.
+const LATENT_MASTER = 'Reproduces on master with other seeds (3, 9, 12): dice-dependent stall in this cut';
+const LATENT_LIP = 'Car stops on the e564 ramp 0.6 m sunk, the known lip (geometry.slow [e564→e564]); master dice never meet it in seeds 1-14';
 known({
-  'no car stuck in cut Av. 10 de Agosto @(-172,-870)': LATENT,
-  'no cars overlap in cut Av. 10 de Agosto @(-172,-870)': LATENT,
-  'no car stuck in cut José Riofrío @(-867,851)': LATENT,
-  'no car stuck in cut sin nombre @(-876,-220)': LATENT,
+  'no car stuck in cut sin nombre @(-876,-220)': LATENT_MASTER,
+  'no car stuck in cut Av. 10 de Agosto @(-172,-870)': LATENT_LIP,
+  'no cars overlap in cut Av. 10 de Agosto @(-172,-870)': LATENT_LIP,
+  "traffic rides at the road's height in cut Av. 10 de Agosto @(-172,-870)": LATENT_LIP,
 });
 
 const LIST = 8;
@@ -156,7 +164,7 @@ function checkOverlaps(sim: TrafficSim, bodies: TrafficBodies, on: Set<number>, 
       const [pa, pb] = [bodies.bodies[ca.id].translation(), bodies.bodies[cb.id].translation()];
       if (Math.abs(pa.y - pb.y) > 2 || Math.hypot(pa.x - pb.x, pa.z - pb.z) > 12) continue; // other level, or far
       const box = (c: typeof ca) => ({ x: c.pos.x, z: c.pos.z, h: c.heading, l: c.kind.length, w: c.kind.width });
-      if (overlap(box(ca), box(cb))) r.overlaps.push(`seed ${seed} cars ${ca.id} (e${ca.edge}) and ${cb.id} (e${cb.edge}) at ${fmt(ca.pos)} t ${t.toFixed(1)} s`);
+      if (overlap(box(ca), box(cb))) r.overlaps.push(`seed ${seed} cars ${ca.id} (e${ca.edge}) and ${cb.id} (e${cb.edge}) at ${fmt(ca.pos)} t ${t.toFixed(1)} s | ${[ca, cb].map((c) => `s${c.s.toFixed(1)} v${c.speed.toFixed(1)} held${c.held} wait${c.wait.toFixed(0)} res${c.reserved} next${c.next} turn${!!c.turn}`).join(' / ')}`);
     }
 }
 

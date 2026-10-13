@@ -169,7 +169,7 @@ function nearestPoint(poly: Vec2[], p: Vec2): Vec2 {
 }
 
 /** A busway keeps this far (from its edge) clear of a bridge, underpass or ramp's asphalt. */
-const STRUCTURE_MARGIN = 4;
+const STRUCTURE_MARGIN = 12;
 /** Pieces of a clipped busway shorter than this are dropped. */
 const MIN_PIECE = 12;
 

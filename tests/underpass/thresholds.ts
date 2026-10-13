@@ -28,7 +28,7 @@ export const DRIVE = {
 export const TRAFFIC = {
   CARS: 40,
   SECONDS: 40,
-  SEEDS: [1, 2],
+  SEEDS: (process.env.QBUS_SEEDS ?? '1,2').split(',').map(Number),
   /** A car slower than 0.3 m/s on a lifted edge longer than this is stuck in the structure. */
   STUCK_S: 20,
   /** Body bottom vs the physical road under it (raycast), for driving cars on the structure (m). */
