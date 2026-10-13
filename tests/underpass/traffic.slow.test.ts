@@ -21,9 +21,22 @@ import { TRAFFIC } from './thresholds';
 // first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
 // (G2 in drive.slow.test.ts, Av. Patria eastbound's down-ramp deck (#358) overlapped 0.2–0.35 m
 // higher by the westbound up-ramp (#401) at the Puente del Guambra joint, was also seen here as a
-// sunk car on e517, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
+// sunk car on e516, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
 // no car happens to be there. The bug is still open; it's tracked by G2.)
-known({});
+// Seed-dependent stalls (QBUS_SEEDS=n runs one seed; default 1,2). Failing checks per single seed,
+// master city+code (seeds 1-14) vs the busway branch (seeds 1-6, measured before the structure clip was
+// widened to 12 m):
+//   master: 3 sin nombre(-876,-220) stuck+overlap, 6 12 de Octubre passage, 7 sin nombre(-820,774) height,
+//           9 and 12 sin nombre(-876,-220) stuck, 11 12 de Octubre stuck; 1,2,4,5,8,10,13,14 clean
+//   branch: 10 de Agosto (-172,-870) in 2,3,5, José Riofrío in 2,4,5,6, sin nombre(-876,-220) in 1,4,
+//           Patria bridge overlap in 4
+// The branch's geometry at those structures equals master's and no ordinary car enters a busway; edge
+// ids/lengths shift, so the dice differ. 'sin nombre @(-876,-220)' stuck reproduces on master (seeds 3, 9,
+// 12), so it stays known. The 10 de Agosto and José Riofrío failures do NOT reproduce on master with any
+// seed 1-14; with the final data (busways kept 12 m from structures) they no longer fail at seeds 1/2.
+known({
+  'no car stuck in cut sin nombre @(-876,-220)': 'Reproduces on master with other seeds (3, 9, 12): dice-dependent stall in this cut',
+});
 
 const LIST = 8;
 const base = cityAndCatalog();
@@ -144,7 +157,7 @@ function checkOverlaps(sim: TrafficSim, bodies: TrafficBodies, on: Set<number>, 
       const [pa, pb] = [bodies.bodies[ca.id].translation(), bodies.bodies[cb.id].translation()];
       if (Math.abs(pa.y - pb.y) > 2 || Math.hypot(pa.x - pb.x, pa.z - pb.z) > 12) continue; // other level, or far
       const box = (c: typeof ca) => ({ x: c.pos.x, z: c.pos.z, h: c.heading, l: c.kind.length, w: c.kind.width });
-      if (overlap(box(ca), box(cb))) r.overlaps.push(`seed ${seed} cars ${ca.id} (e${ca.edge}) and ${cb.id} (e${cb.edge}) at ${fmt(ca.pos)} t ${t.toFixed(1)} s`);
+      if (overlap(box(ca), box(cb))) r.overlaps.push(`seed ${seed} cars ${ca.id} (e${ca.edge}) and ${cb.id} (e${cb.edge}) at ${fmt(ca.pos)} t ${t.toFixed(1)} s | ${[ca, cb].map((c) => `s${c.s.toFixed(1)} v${c.speed.toFixed(1)} held${c.held} wait${c.wait.toFixed(0)} res${c.reserved} next${c.next} turn${!!c.turn}`).join(' / ')}`);
     }
 }
 

@@ -5,7 +5,7 @@ import type { Building, CityData, Feature, Stop, Vec2 } from './cityData';
 import { SIDEWALK_HEIGHT, forward, groundHeightAt, right, terrainAt } from './cityData';
 import { bbox, pointInPolygon } from './geom';
 import { ChunkedMeshBuilder, ChunkedUVQuadBuilder, MeshBuilder, extrude, vertexColorMaterial, IDENTITY, withinRange } from './meshBuilder';
-import { type Path, type RoadGraph, buildRoadGraph, dirAt, edgeY, laneOffset, makePath, pointAt, projectOnPath } from './roadGraph';
+import { type LaneEdge, type Path, type RoadGraph, buildRoadGraph, dirAt, edgeY, laneOffset, makePath, pointAt, projectOnPath } from './roadGraph';
 import type { Terrain } from './terrain';
 import { PropSystem } from './props';
 import { addMonument } from './monuments';
@@ -26,6 +26,11 @@ import { TrafficLights } from '../gameplay/trafficLights';
 // Draw order on the ground is enforced with polygon offsets, not height gaps, so layers stay
 // put at any distance: terrain < sidewalk < asphalt < paint.
 const ASPHALT = '#4d5057';
+/** Busway pavement: red-brown concrete, like the real Trolebús lanes. */
+const BUSWAY = '#8c4b3d';
+const BUSWAY_EDGE = '#d9d4c7';
+/** Busway pavement rides this far above the streets' asphalt (m). */
+const BUSWAY_LIFT = 0.015;
 const MARK_WHITE = '#eceae0';
 const MARK_YELLOW = '#e8c230';
 const SIDEWALK_TOP = '#c9c5bb';
@@ -91,7 +96,27 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     const road = city.roads[i];
     return (p: Vec2) => surfaceY(city, profileAt(prof, projectOnRoad(road, p).s), p, hUp(p));
   };
-  city.roads.forEach((road, i) => ribbon(asphalt, makePath(road.points), -road.width / 2, road.width / 2, roadHeight(i), Y.asphalt, ASPHALT));
+  // Busway pavement is the asphalt layer too (merged tiles, no new draw calls), a hair above the
+  // streets' so where it lies against a carriageway (OSM draws it right there) it wins cleanly. Where
+  // its centerline is on a street's asphalt (the busway and a carriageway really overlap in the data)
+  // it isn't painted: red paint never covers lanes ordinary traffic drives.
+  const generalIndex = new RoadIndex(city.roads.filter((r) => !r.access));
+  const onStreet = (p: Vec2) => generalIndex.clearance(p) < -0.5;
+  city.roads.forEach((road, i) => {
+    if (!road.access) return ribbon(asphalt, makePath(road.points), -road.width / 2, road.width / 2, roadHeight(i), Y.asphalt, ASPHALT);
+    const full = makePath(road.points);
+    let run: Vec2[] = [];
+    const flush = () => {
+      if (run.length >= 2) ribbon(asphalt, makePath(run), -road.width / 2, road.width / 2, roadHeight(i), Y.asphalt + BUSWAY_LIFT, BUSWAY);
+      run = [];
+    };
+    for (let d = 0; d <= full.len + 1e-6; d += 2) {
+      const p = pointAt(full, Math.min(d, full.len));
+      if (onStreet(p)) flush();
+      else run.push(p);
+    }
+    flush();
+  });
   // Real cities have no block slabs: sidewalks run along the roads, clipped wherever they'd
   // cover asphalt or a junction (divided avenues put carriageways side by side).
   const sections = sidewalkSections(city, graph);
@@ -102,11 +127,12 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     }
   // Junction paving drapes over the ground, raised or sunk by the junction's lift where it's
   // really up on a deck or down in a cut (not where one of its roads is just starting a ramp).
-  for (const n of graph.nodes) if (n.hull) asphalt.fan(n.hull, (p) => hUp(p) + (Math.abs(n.lift) >= 1 ? n.lift : 0) + Y.asphalt, ASPHALT, DRAPE);
+  for (const n of graph.nodes)
+    if (n.hull) asphalt.fan(n.hull, (p) => hUp(p) + (Math.abs(n.lift) >= 1 ? n.lift : 0) + Y.asphalt, n.access === 'brt' ? BUSWAY : ASPHALT, DRAPE);
   // Where two pieces of a bridge or underpass meet at an angle, their ribbons leave a wedge open
   // on the outside of the bend: pave it (at street level the terrain under it hides the gap).
   for (const n of graph.nodes) if (!n.hull && n.y !== null && Math.abs(n.lift) >= 0.3) asphalt.fan(nodeArea(graph, n.id), () => n.y! + Y.asphalt, ASPHALT, DRAPE);
-  addMarkings(paint, graph, (p) => hUp(p) + Y.paint);
+  addMarkings(paint, graph, (p) => hUp(p) + Y.paint, onStreet);
 
   const fixed = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
   const collide = (desc: RAPIER.ColliderDesc | null) => desc && world.createCollider(desc.setFriction(0.8), fixed);
@@ -430,10 +456,14 @@ function strip(
 }
 
 /** Lane lines and center lines along every road piece, zebra crossings where it meets a junction. */
-function addMarkings(mb: QuadSink, graph: RoadGraph, ground: (p: Vec2) => number): void {
+function addMarkings(mb: QuadSink, graph: RoadGraph, ground: (p: Vec2) => number, onStreet: (p: Vec2) => boolean): void {
   for (const e of graph.edges) {
     if (e.reverse >= 0 && e.reverse < e.id) continue; // draw each piece once
     const path = e.center;
+    if (e.access === 'brt') {
+      busMarkings(mb, e, ground, onStreet);
+      continue;
+    }
     // On a ramp, bridge or underpass the paint follows the road's own surface.
     const y = e.y ? (p: Vec2) => edgeY(e, projectOnPath(path, p).s)! + Y.paint : ground;
     const lines: { off: number; color: string; dash: boolean }[] = [];
@@ -469,6 +499,78 @@ function addMarkings(mb: QuadSink, graph: RoadGraph, ground: (p: Vec2) => number
         mb.drapedQuad({ x: p.x - d.z * o, z: p.z + d.x * o }, d, 3, 0.6, y, MARK_WHITE);
       }
     }
+  }
+}
+
+/** One pixel of a busway's lettering, meters. */
+const LETTER_PX = 0.3;
+/** Space between busway legends along a lane, meters. */
+const LEGEND_EVERY = 90;
+
+/** 5x7 block letters for "SOLO BUS" (a row is a string, '#' paints). */
+const GLYPHS: Record<string, string[]> = {
+  S: ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+  O: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+  L: ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
+  B: ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
+  U: ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+};
+const LEGEND = 'SOLO BUS';
+
+/**
+ * A busway's paint: white edge lines (the curb strips either side are solid white, painted flush:
+ * nothing to hit, nothing to collide with), a dashed line between the two lanes of a two-way
+ * one, and "SOLO BUS" in block letters down each lane, reading from where a bus comes. All paint
+ * quads in the merged ground tiles: no extra meshes.
+ */
+function busMarkings(mb: QuadSink, e: LaneEdge, ground: (p: Vec2) => number, onStreet: (p: Vec2) => boolean): void {
+  const path = e.center;
+  const y = e.y ? (p: Vec2) => edgeY(e, projectOnPath(path, p).s)! + Y.paint : ground;
+  const edge = 0.14;
+  for (const side of [-1, 1]) {
+    const off = side * (e.roadWidth / 2 - 0.3);
+    for (let s = 1; s + 3 < path.len - 1; s += 3) {
+      const d = dirAt(path, s + 1.5);
+      const p = pointAt(path, s + 1.5);
+      if (!onStreet(p)) mb.drapedQuad({ x: p.x - d.z * off, z: p.z + d.x * off }, d, 3.05, edge * 2, y, BUSWAY_EDGE);
+    }
+  }
+  if (e.reverse >= 0)
+    for (let s = 2; s + 3 < path.len - 2; s += 6) {
+      const d = dirAt(path, s + 1.5);
+      const p = pointAt(path, s + 1.5);
+      if (!onStreet(p)) mb.drapedQuad(p, d, 3, 0.15, y, MARK_YELLOW);
+    }
+  // Legends along the lane the edge drives (the right lane of a two-way busway: lane 0).
+  const letters = [...LEGEND];
+  const advance = 6 * LETTER_PX;
+  const total = letters.length * advance;
+  if (path.len < total + 14) return;
+  const lane = e.reverse >= 0 ? e.roadWidth / 4 : 0;
+  for (let at = 12 + total; at + 6 < path.len; at += LEGEND_EVERY) {
+    // The first letter is the farthest ahead (text on the road reads away from the driver).
+    letters.forEach((ch, k) => {
+      const glyph = GLYPHS[ch];
+      if (!glyph) return;
+      const top = at - k * advance;
+      for (let row = 0; row < 7; row++) {
+        const s = top - (row + 0.5) * LETTER_PX;
+        const d = dirAt(path, s);
+        const p = pointAt(path, s);
+        if (onStreet(p)) continue;
+        for (let col = 0; col < 5; ) {
+          if (glyph[row][col] !== '#') {
+            col++;
+            continue;
+          }
+          let end = col;
+          while (end + 1 < 5 && glyph[row][end + 1] === '#') end++;
+          const mid = lane + ((col + end) / 2 - 2) * LETTER_PX;
+          mb.drapedQuad({ x: p.x - d.z * mid, z: p.z + d.x * mid }, d, LETTER_PX, (end - col + 1) * LETTER_PX, y, BUSWAY_EDGE);
+          col = end + 1;
+        }
+      }
+    });
   }
 }
 

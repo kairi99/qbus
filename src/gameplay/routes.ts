@@ -82,6 +82,8 @@ const MAX_DETOUR = (straight: number) => straight * 2.5 + 400;
 /** Legal driving distances between stops (following one-way streets), cached. */
 class LegalLegs {
   private nav: Navigator;
+  /** Rapid-transit stops are served by BRT buses: they may use busways. */
+  private brt: Navigator;
   private spots = new Map<string, GraphSpot | null>();
   private cache = new Map<string, number>();
 
@@ -90,6 +92,7 @@ class LegalLegs {
     graph: RoadGraph,
   ) {
     this.nav = new Navigator(graph);
+    this.brt = new Navigator(graph, 'brt');
   }
 
   /** Stops the bus can actually reach, on a lane going its way. */
@@ -103,7 +106,7 @@ class LegalLegs {
     if (d === undefined) {
       const sa = this.spot(a);
       const sb = this.spot(b);
-      d = sa && sb ? this.nav.distanceTo(sa, sb) : Infinity;
+      d = sa && sb ? (a.system || b.system ? this.brt : this.nav).distanceTo(sa, sb) : Infinity;
       this.cache.set(key, d);
     }
     return d;
@@ -130,7 +133,7 @@ class LegalLegs {
   }
 
   private spot(s: Stop): GraphSpot | null {
-    if (!this.spots.has(s.id)) this.spots.set(s.id, locateStop(this.nav, this.city, zone(s), s.heading));
+    if (!this.spots.has(s.id)) this.spots.set(s.id, locateStop(s.system ? this.brt : this.nav, this.city, zone(s), s.heading));
     return this.spots.get(s.id)!;
   }
 }
@@ -163,7 +166,7 @@ const LEAD_IN = 70;
  * back along legal traffic flow, facing it (clear of ramps and humps).
  */
 export function startPose(city: CityData, graph: RoadGraph, route: RouteDef): RoadPose {
-  const nav = new Navigator(graph);
+  const nav = new Navigator(graph, route.system ? 'brt' : 'general');
   const first = routeStops(city, route)[0];
   const spot = locateStop(nav, city, first.zone, first.stop.heading);
   if (!spot) {
@@ -193,7 +196,7 @@ export function freeStartPose(city: CityData, graph: RoadGraph): RoadPose {
 
 /** The streets a route drives along, one polyline per leg, following traffic rules. */
 export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = buildRoadGraph(city)): Vec2[][] {
-  const nav = new Navigator(graph);
+  const nav = new Navigator(graph, route.system ? 'brt' : 'general');
   const stops = routeStops(city, route);
   const spots = stops.map((s) => locateStop(nav, city, s.zone, s.stop.heading));
   return stops.map((s, i) => {
@@ -207,7 +210,7 @@ export function routePaths(city: CityData, route: RouteDef, graph: RoadGraph = b
 
 /** Legal driving distance into each stop from the one before it (`legs[0]`: from the last stop). */
 export function routeLegs(city: CityData, route: RouteDef, graph: RoadGraph): number[] {
-  const nav = new Navigator(graph);
+  const nav = new Navigator(graph, route.system ? 'brt' : 'general');
   const stops = routeStops(city, route);
   const spots = stops.map((s) => locateStop(nav, city, s.zone, s.stop.heading));
   return stops.map((s, i) => {

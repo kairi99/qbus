@@ -119,6 +119,7 @@ export class PedestrianSim {
     // (other roads at junctions, the far carriageway of divided avenues).
     for (const e of graph.edges) {
       if (e.reverse >= 0 && e.reverse < e.id) continue; // one pair per piece
+      if (e.access === 'brt') continue; // nobody walks along a busway
       for (const side of [1, -1]) {
         const line = offsetPath(e.center, side * (e.roadWidth / 2 + walkOffset));
         let run: Vec2[] = [];

@@ -161,7 +161,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       if (action === 'reset') {
         const t = bus.position();
         // A road at the level the bus is on, on a spot where it fits (clear of walls and roofs).
-        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length });
+        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length, vehicle: route?.system ? 'brt' : 'general' });
         bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
         // Cars aren't static world, so the spot can still hold one: send them elsewhere.
         session.trafficBodies.clearSpot({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading }, preset.body.length, preset.body.width);

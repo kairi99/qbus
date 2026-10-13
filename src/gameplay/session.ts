@@ -123,7 +123,7 @@ export class GameSession {
     this.marker = new StopMarker(d.scene, d.city);
     this.arrow = new NavArrow(d.scene);
     this.hud = new GameHud(d.hudRoot, d.route?.name ?? 'Paseo libre', !d.route);
-    this.nav = new Navigator(d.graph);
+    this.nav = new Navigator(d.graph, d.route?.system ? 'brt' : 'general');
     this.minimap = new MiniMap(d.hudRoot, d.city);
     this.start0 = d.route ? startPose(d.city, d.graph, d.route) : freeStartPose(d.city, d.graph);
     if (d.route) this.stars = starThresholds(routeStops(d.city, d.route), routeLegs(d.city, d.route, d.graph), this.start0.pos);

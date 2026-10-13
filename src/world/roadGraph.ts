@@ -2,6 +2,14 @@ import type { CityData, Road, Vec2 } from './cityData';
 import { segmentIntersection } from './geom';
 import { profileAt, projectOnRoad, roadProfiles } from './elevation';
 
+/** Who may drive an edge: ordinary vehicles (`general`) or also articulated BRT buses on busways (`brt`). */
+export type AccessClass = 'general' | 'brt';
+
+/** Can a vehicle of class `cls` drive `e`? The one place that says it: `general` = `drivable`, `brt` = `brtDrivable`. */
+export function edgeAllows(e: Pick<LaneEdge, 'drivable' | 'brtDrivable'>, cls: AccessClass = 'general'): boolean {
+  return cls === 'brt' ? e.brtDrivable : e.drivable;
+}
+
 export interface GraphNode {
   id: number;
   pos: Vec2;
@@ -19,6 +27,8 @@ export interface GraphNode {
   y: number | null;
   /** Height off the ground there (0 on the ground). */
   lift: number;
+  /** `'brt'` when every road meeting here is a busway; a node shared with a general road is `'general'`. */
+  access: AccessClass;
 }
 
 /** A polyline with cumulative distances. */
@@ -55,8 +65,20 @@ export interface LaneEdge {
   piece: number;
   road: string;
   oneway: boolean;
-  /** Part of the strongly connected core: a car can always drive on from here. */
+  /**
+   * Part of the strongly connected core of the GENERAL network (busway edges never are): a car
+   * can always drive on from here. Computed without the busways, so they can neither disconnect
+   * nor swallow the streets.
+   */
   drivable: boolean;
+  /** `'brt'` on a segregated busway (`Road.access`), `'general'` otherwise. */
+  access: AccessClass;
+  /**
+   * Part of the strongly connected core when busways are counted too: what a BRT vehicle may
+   * drive (busway edges, and the general edges that join them). Every `drivable` edge is
+   * `brtDrivable` too, unless the busways broke it (they can't: they only add edges).
+   */
+  brtDrivable: boolean;
   /** Index of the road in `city.roads` this edge runs along. */
   roadIndex: number;
   /**
@@ -76,6 +98,8 @@ export interface RoadGraph {
 const MERGE = 1;
 /** Roads whose surfaces are this far apart vertically pass over each other rather than meet. */
 const LEVEL_GAP = 2;
+/** A busway only meets roads this close to its own (street) level. */
+const BUSWAY_LEVEL = 0.5;
 const CELL = 40;
 const MIN_EDGE = 3;
 /** Trims never exceed this; intersections never grow wider than MAX_CLUSTER. */
@@ -149,7 +173,10 @@ export function buildRoadGraph(city: CityData): RoadGraph {
           const ob = o.points[j + 1];
           const ot = Math.hypot(hit.x - oa.x, hit.z - oa.z) / (Math.hypot(ob.x - oa.x, ob.z - oa.z) || 1);
           const lift = liftOn(r, i, t);
-          if (Math.abs(lift - liftOn(o, j, ot)) >= LEVEL_GAP) continue; // one passes over the other
+          const gap = Math.abs(lift - liftOn(o, j, ot));
+          if (gap >= LEVEL_GAP) continue; // one passes over the other
+          // Busways lie on the ground: they don't join a ramp that's already off it.
+          if (gap > BUSWAY_LEVEL && (r.access || o.access)) continue;
           cuts.push({ i, t, node: nodeAt(hit, Math.max(r.width, o.width) / 2, lift), pos: hit });
         }
     }
@@ -250,7 +277,7 @@ export function buildRoadGraph(city: CityData): RoadGraph {
       const pos = { x: ms.reduce((s, m) => s + raw[m].pos.x, 0) / ms.length, z: ms.reduce((s, m) => s + raw[m].pos.z, 0) / ms.length };
       const k = kind.get(c);
       id = nodes.length;
-      nodes.push({ id, pos, out: [], in: [], junction: k === 'junction', corner: k === 'corner', hull: null, y: null, lift: 0 });
+      nodes.push({ id, pos, out: [], in: [], junction: k === 'junction', corner: k === 'corner', hull: null, y: null, lift: 0, access: 'general' });
       clusterId.set(c, id);
     }
     return id;
@@ -290,6 +317,8 @@ export function buildRoadGraph(city: CityData): RoadGraph {
         road: r.name,
         oneway: !!r.oneway,
         drivable: false,
+        access: r.access ?? 'general',
+        brtDrivable: false,
         roadIndex: p.road,
         y: null,
         lift: null,
@@ -345,6 +374,7 @@ export function buildRoadGraph(city: CityData): RoadGraph {
     for (const id of n.out) add(edges[id].a, edges[id].dir, edges[id].roadWidth);
     n.hull = convexHull(pts);
   }
+  for (const n of nodes) n.access = [...n.in, ...n.out].length && [...n.in, ...n.out].every((id) => edges[id].access === 'brt') ? 'brt' : 'general';
   markDrivable(nodes, edges, city.playArea);
   return { nodes, edges };
 }
@@ -530,15 +560,28 @@ function cellsOf(a: Vec2, b: Vec2): string[] {
  * are the junctions just inside it.
  */
 function markDrivable(nodes: GraphNode[], edges: LaneEdge[], playArea?: { min: Vec2; max: Vec2 }): void {
+  // Ordinary vehicles: the network without busways. BRT vehicles: all of it.
+  const general = strongCore(nodes, edges, playArea, (e) => e.access !== 'brt');
+  const brt = strongCore(nodes, edges, playArea, () => true);
+  for (const e of edges) {
+    e.drivable = e.access !== 'brt' && general(e);
+    e.brtDrivable = brt(e);
+  }
+}
+
+/** Edge test for membership of the largest strongly connected core of the edges `use` accepts. */
+function strongCore(nodes: GraphNode[], edges: LaneEdge[], playArea: { min: Vec2; max: Vec2 } | undefined, use: (e: LaneEdge) => boolean): (e: LaneEdge) => boolean {
   const inArea = (p: Vec2) => !playArea || (p.x >= playArea.min.x && p.x <= playArea.max.x && p.z >= playArea.min.z && p.z <= playArea.max.z);
   const closedNode = nodes.map((n) => !inArea(n.pos) || !!n.hull?.some((p) => !inArea(p)));
   const open = (e: LaneEdge) => !closedNode[e.from] && !closedNode[e.to] && e.center.pts.every(inArea);
   const portal = nodes.length;
-  const out = nodes.map((n) => n.out.filter((id) => open(edges[id])).map((id) => edges[id].to));
+  const out = nodes.map((n) => n.out.filter((id) => use(edges[id]) && open(edges[id])).map((id) => edges[id].to));
+  const ins = nodes.map((n) => n.in.filter((id) => use(edges[id])));
+  const outs = nodes.map((n) => n.out.filter((id) => use(edges[id])));
   // Exits lead off the map, or into the roadworks at the play area's edge; entries come back.
   // (Dead ends inside the map count too: OSM has streets that just stop.)
-  const exit = (n: GraphNode) => !closedNode[n.id] && ((n.in.length > 0 && !n.out.length) || n.out.some((id) => !open(edges[id])));
-  const entry = (n: GraphNode) => !closedNode[n.id] && ((n.out.length > 0 && !n.in.length) || n.in.some((id) => !open(edges[id])));
+  const exit = (n: GraphNode) => !closedNode[n.id] && ((ins[n.id].length > 0 && !outs[n.id].length) || outs[n.id].some((id) => !open(edges[id])));
+  const entry = (n: GraphNode) => !closedNode[n.id] && ((outs[n.id].length > 0 && !ins[n.id].length) || ins[n.id].some((id) => !open(edges[id])));
   out.push(nodes.filter(entry).map((n) => n.id));
   for (const n of nodes) if (exit(n)) out[n.id].push(portal);
   const count = nodes.length + 1;
@@ -586,7 +629,7 @@ function markDrivable(nodes: GraphNode[], edges: LaneEdge[], playArea?: { min: V
   const size = new Array(comps).fill(0);
   for (const c of comp) size[c]++;
   const biggest = size.indexOf(Math.max(...size));
-  for (const e of edges) e.drivable = open(e) && comp[e.from] === biggest && comp[e.to] === biggest;
+  return (e) => use(e) && open(e) && comp[e.from] === biggest && comp[e.to] === biggest;
 }
 
 export type { Road };

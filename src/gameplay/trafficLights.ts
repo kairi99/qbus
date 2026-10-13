@@ -99,11 +99,22 @@ export class TrafficLights {
     const groups = new Map<number, { edge: number; axis: Vec2 }[][]>();
     for (const id of [...lit].sort((a, b) => a - b)) {
       const phases: { edge: number; axis: Vec2 }[][] = [];
-      for (const e of graph.nodes[id].in) {
+      const incoming = graph.nodes[id].in;
+      for (const e of incoming) {
+        if (graph.edges[e].access === 'brt') continue;
         const axis = axisOf(graph.edges[e].endDir);
         const same = phases.find((p) => dot(p[0].axis, axis) > Math.cos(2 * SAME_AXIS));
         if (same) same.push({ edge: e, axis });
         else phases.push([{ edge: e, axis }]);
+      }
+      // A busway approach never makes a phase of its own: it goes with the avenue it runs along
+      // (the nearest axis), so the busway adds no time to the cycle. One with no avenue beside it is unlit.
+      for (const e of incoming) {
+        if (graph.edges[e].access !== 'brt') continue;
+        const axis = axisOf(graph.edges[e].endDir);
+        let best: (typeof phases)[number] | null = null;
+        for (const p of phases) if (dot(p[0].axis, axis) > (best ? dot(best[0].axis, axis) : 0.3)) best = p;
+        best?.push({ edge: e, axis });
       }
       // A light that never stops anyone else is no light: everyone comes from one direction.
       if (phases.length >= 2) groups.set(id, phases);
