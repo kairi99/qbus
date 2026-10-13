@@ -6,6 +6,25 @@ export interface BusPreset {
   /** A car (free roam only) rather than a bus. Default: bus. */
   kind?: 'bus' | 'car';
   body: { length: number; width: number; height: number; color: string; stripe: string; roof: string };
+  /**
+   * An articulated bus: two sections joined at a turntable. `body.length` is the whole vehicle;
+   * `mass`, `wheels` (front axle and the driven middle axle) and `cockpit` describe the front
+   * section, which is `body.length - rearLength - gap` long. The rear section carries one
+   * trailing, unsteered axle. Left out = one rigid body.
+   */
+  articulated?: {
+    /** Length of the rear section (m). */
+    rearLength: number;
+    /** Distance between the sections where the bellows and turntable are (m); the hitch is its middle. */
+    gap: number;
+    /** Rear axle position in rear-section coordinates (x, forward; negative = behind its center). */
+    rearAxle: number;
+    rearMass: number;
+    /** Largest bend between the sections (degrees): past it the turntable pushes back. */
+    yawLimitDeg: number;
+    /** Largest nod between the sections (degrees), for humps and ramps. */
+    pitchLimitDeg: number;
+  };
   /** Passengers that fit on board. */
   capacity: number;
   mass: number;
