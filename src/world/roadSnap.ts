@@ -37,6 +37,8 @@ export interface SnapOptions {
   clear?: (pose: RoadPose) => boolean;
   /** Vehicle length, for the pitch (m). */
   length?: number;
+  /** Who is being reset: `'brt'` may land on a busway, `'general'` (the default) never does. */
+  vehicle?: 'general' | 'brt';
 }
 
 interface Candidate {
@@ -106,6 +108,7 @@ export function snapToRoad(city: CityData, p: Vec2, heading: number, y?: number,
   const ends = roadEnds(city);
   const found: Candidate[] = [];
   for (const [ri, r] of city.roads.entries()) {
+    if (r.access && options.vehicle !== 'brt') continue;
     const prof = profiles[ri];
     const { total, m0, m1 } = ends[ri];
     let cum = 0;

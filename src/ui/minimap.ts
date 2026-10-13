@@ -121,7 +121,7 @@ export class MiniMap {
     for (const pass of [0, 1]) {
       for (const r of this.city.roads) {
         // Outline pass, then fill: gives streets a crisp edge.
-        c.strokeStyle = pass === 0 ? '#b9b0a0' : r.kind === 'avenue' ? '#ffffff' : '#fbf8f1';
+        c.strokeStyle = pass === 0 ? '#b9b0a0' : r.access ? '#e4b8a8' : r.kind === 'avenue' ? '#ffffff' : '#fbf8f1';
         c.lineWidth = r.width + (pass === 0 ? 3 : 0);
         c.beginPath();
         r.points.forEach((p, i) => (i ? c.lineTo(p.x, p.z) : c.moveTo(p.x, p.z)));

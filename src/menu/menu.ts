@@ -446,6 +446,7 @@ function drawMap(canvas: HTMLCanvasElement, city: CityData, route: RouteDef, leg
   ctx.strokeStyle = '#b8b0a0';
   ctx.lineCap = 'round';
   for (const r of city.roads) {
+    ctx.strokeStyle = r.access ? '#d9a898' : '#b8b0a0';
     ctx.lineWidth = Math.max(1, r.width * k * 0.8);
     ctx.beginPath();
     r.points.forEach((p, i) => (i ? ctx.lineTo(X(p.x), Z(p.z)) : ctx.moveTo(X(p.x), Z(p.z))));
