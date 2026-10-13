@@ -110,11 +110,12 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
       ride = p.y - surfaceAlong(city, graph, route, p).y;
     }
     for (let t = 0; t < budget; t += PHYSICS_STEP) {
+      // A long articulated bus looks 4 m further ahead: from the front section its tail would cut bends too close.
       const p = bus.body.translation();
       const here = { x: p.x, z: p.z };
       const v = bus.speed;
       // Aim ahead on the path; slow for curves ahead.
-      const look = Math.max(8, Math.abs(v) * 0.8);
+      const look = Math.max(8, Math.abs(v) * 0.8) + (bus.rear ? 4 : 0);
       const aim = nav.guidePoint(path, here, look);
       const a1 = nav.guidePoint(path, here, 12);
       const a2 = nav.guidePoint(path, here, 32);

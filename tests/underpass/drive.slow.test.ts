@@ -17,15 +17,10 @@ const A1 = 'Av. 10 de Agosto cut (south edge), e276: AE86 at 87 km/h hits a wall
 const Q1 = '12 de Octubre N→S turn through its tunnel onto Queseras (e585→e524): the link is still ~1 m down in its cut where it reaches node 257\'s paved area (UP-007; leveling it there needs a 16% climb right out of the crossing, a V the bus high-centers on), so the interparroquial high-centers turning out at (-68.5, 723.5); buseta and AE86 hit a wall at (-103.0, 761.4) / (-127.6, 776.2) on 12 de Octubre (e277) running along the ramp\'s cut';
 const Q2 = '12 de Octubre S→N link to Av. Patria (e588→e160): interparroquial (12.5 m) jams on the bend near the top against the low retaining wall at (-16.6, 747.6) between the ramp and Ladrón de Guevara alongside (1.1 m of ground between the two asphalts: no room to widen the cut); shorter vehicles pass';
 const S2 = 'Cut at (-820, 774) (sin nombre e681→e195): on the sharp OSM kink at (-829.2, 773.8) the interparroquial\'s front corner hits the outer tunnel wall at (-835.7, 774.4) (Δv 8.6 m/s) and stalls; the cut is already widened there (BEND_SWEEP)';
-const P1 = 'Av. Patria bridge, e167→e517: the articulated bus at 60 km/h cuts the inside of the left bend where the deck meets its down-ramp and its front-left corner hits a railing hull at (-644.8, 31.3, 319.0) (Δv 16 m/s, bounces back); at 35 km/h it passes. The autopilot aims 13 m ahead of the front section\'s center and cuts bends like a short bus would';
-const Q1A = 'The 18.4 m articulated bus on the same 12 de Octubre N→S turn as Q1: it reaches the wall / low retaining step at (-103, 762) and falls through the cut floor at (-102.9, 765.3) (35 km/h) or jams there (60 km/h)';
-const S2A = 'The articulated bus on the same cut kink as S2: its front corner hits the outer tunnel wall at (-830, 773) (Δv 1.1 m/s at 35 km/h, 6.8–9 m/s at 60)';
+const Q1A = 'The 18.4 m articulated bus on the same 12 de Octubre N→S turn as Q1 (traced): at (-101, 761) the front section\'s chassis comes to rest on top of the convex wall hull (shape 9, contact normals (0.11, 0.99, 0.07), contact points y 21.3–21.6 = the road level) beside the ramp, the same hull the buseta hits at (-103, 761.4); 3 wheels on the road, stuck 35 s; the autopilot\'s reversing then walks the front off the hull top, and the "fell through" flag is the front dropping beside the lane at (-103.3, 764.6) (surface along the route is not the ground there), not through solid ground: no body went through any collider'; 
 known({
-  'drive bridge Av. Patria @(-658,290): Av. Patria [e167→e517] | articulado @ 60 km/h': P1,
   'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524] | articulado @ 35 km/h': Q1A,
   'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524] | articulado @ 60 km/h': Q1A,
-  'drive cut sin nombre @(-820,774): sin nombre [e681→e195] | articulado @ 35 km/h': S2A,
-  'drive cut sin nombre @(-820,774): sin nombre [e681→e195] | articulado @ 60 km/h': S2A,
   'drive bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e895] | ae86 @ 90 km/h': G2,
   'drive cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276] | ae86 @ 90 km/h': A1,
   'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e524] | interparroquial @ 35 km/h': Q1,
