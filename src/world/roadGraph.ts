@@ -98,6 +98,8 @@ export interface RoadGraph {
 const MERGE = 1;
 /** Roads whose surfaces are this far apart vertically pass over each other rather than meet. */
 const LEVEL_GAP = 2;
+/** A busway only meets roads this close to its own (street) level. */
+const BUSWAY_LEVEL = 0.5;
 const CELL = 40;
 const MIN_EDGE = 3;
 /** Trims never exceed this; intersections never grow wider than MAX_CLUSTER. */
@@ -171,7 +173,10 @@ export function buildRoadGraph(city: CityData): RoadGraph {
           const ob = o.points[j + 1];
           const ot = Math.hypot(hit.x - oa.x, hit.z - oa.z) / (Math.hypot(ob.x - oa.x, ob.z - oa.z) || 1);
           const lift = liftOn(r, i, t);
-          if (Math.abs(lift - liftOn(o, j, ot)) >= LEVEL_GAP) continue; // one passes over the other
+          const gap = Math.abs(lift - liftOn(o, j, ot));
+          if (gap >= LEVEL_GAP) continue; // one passes over the other
+          // Busways lie on the ground: they don't join a ramp that's already off it.
+          if (gap > BUSWAY_LEVEL && (r.access || o.access)) continue;
           cuts.push({ i, t, node: nodeAt(hit, Math.max(r.width, o.width) / 2, lift), pos: hit });
         }
     }

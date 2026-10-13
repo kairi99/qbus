@@ -21,7 +21,7 @@ import { TRAFFIC } from './thresholds';
 // first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
 // (G2 in drive.slow.test.ts, Av. Patria eastbound's down-ramp deck (#358) overlapped 0.2–0.35 m
 // higher by the westbound up-ramp (#401) at the Puente del Guambra joint, was also seen here as a
-// sunk car on e517, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
+// sunk car on e516, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
 // no car happens to be there. The bug is still open; it's tracked by G2.)
 known({});
 

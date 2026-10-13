@@ -1,5 +1,6 @@
 import type { Road, Vec2 } from '../cityData';
 import { distToPolyline } from '../geom';
+import { liftAlong, projectOnRoad } from '../elevation';
 
 /**
  * Segregated BRT busways (Trolebús, Ecovía, Metrobus lanes), imported as roads with
@@ -165,6 +166,50 @@ function nearestPoint(poly: Vec2[], p: Vec2): Vec2 {
     if (d < bestD) (bestD = d), (best = q);
   }
   return best;
+}
+
+/** A busway keeps this far (from its edge) clear of a bridge, underpass or ramp's asphalt. */
+const STRUCTURE_MARGIN = 4;
+/** Pieces of a clipped busway shorter than this are dropped. */
+const MIN_PIECE = 12;
+
+/**
+ * Busways run on the ground and the grade solver leaves them out, so where one would lie over or
+ * beside a bridge, underpass or ramp (a street-level road above a cut, or alongside its walls) the
+ * stretch is not imported: the structures stay exactly what they are without busways (their roofs,
+ * walls and ramps were solved for the street network alone). Returns the busways cut into the
+ * pieces that remain; cut ends are plain dead ends (no junction), whole busways away from any
+ * structure come back untouched (same object).
+ */
+export function clipBusways(busways: Road[], roads: Road[]): Road[] {
+  const lifted = roads.filter((r) => !r.access && r.lift?.some((l) => Math.abs(l) > 0.3));
+  const near = (p: Vec2, hw: number) =>
+    lifted.some((o) => {
+      if (distToPolyline(p, o.points) >= o.width / 2 + hw + STRUCTURE_MARGIN) return false;
+      const { s } = projectOnRoad(o, p);
+      return Math.abs(liftAlong(o, s)) > 0.3;
+    });
+  const out: Road[] = [];
+  for (const road of busways) {
+    const { pts, pin, cum } = resampled(road, busways.concat(roads));
+    const bad = pts.map((p) => near(p, road.width / 2));
+    if (!bad.some(Boolean)) {
+      out.push(road);
+      continue;
+    }
+    let from = -1;
+    const flush = (to: number) => {
+      if (from >= 0 && cum[to] - cum[from] >= MIN_PIECE) out.push({ ...road, points: pts.slice(from, to + 1) });
+      from = -1;
+    };
+    pts.forEach((_, i) => {
+      if (bad[i]) flush(i - 1);
+      else if (from < 0) from = i;
+    });
+    flush(pts.length - 1);
+    void pin;
+  }
+  return out;
 }
 
 /** True when `p` is on a busway's asphalt. */

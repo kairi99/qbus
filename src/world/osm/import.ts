@@ -7,7 +7,7 @@ import { buildRoadGraph, dirAt, edgeAllows, projectOnPath } from '../roadGraph';
 import { importLines } from './lines';
 import { importStations, widenMedians } from './stations';
 import { importCampuses } from './campus';
-import { BUSWAY_NAME, buswayWidth, clearBusways, generalRoads, isBusway } from './busways';
+import { BUSWAY_NAME, buswayWidth, clearBusways, clipBusways, generalRoads, isBusway } from './busways';
 import { CLEARANCE, type Level, separateGrades } from './grades';
 import { liftAlong, projectOnRoad } from '../elevation';
 
@@ -149,7 +149,9 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   // cost a crossing (no room left for a ramp: the roads would meet at grade) isn't kept, and
   // past the play area's edge (nobody drives there) nothing is reshaped.
   const playBox = { playArea: { min: { x: bounds.min.x + EDGE_INSET, z: bounds.min.z + EDGE_INSET }, max: { x: bounds.max.x - EDGE_INSET, z: bounds.max.z - EDGE_INSET } } };
-  // Busways stay at street level and take no part in solving the grades (they only meet roads there).
+  // Busways stay at street level and take no part in solving the grades: the structures (and every
+  // ramp) are exactly what they are without them. The road graph never joins a busway to a road
+  // that's off the ground there (a street crossing over an underpass's ramp).
   const busways = flat.filter((r) => r.access);
   const flatGeneral = generalRoads(flat);
   let { roads, crossings } = separateGrades(flatGeneral);
@@ -169,7 +171,7 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
       ({ roads, crossings } = next);
     }
   }
-  roads = [...roads, ...busways];
+  roads = [...roads, ...clipBusways(busways, roads)];
   for (const c of crossings)
     if (c.gap < CLEARANCE * 0.8) console.warn(`grade crossing squeezed to ${c.gap.toFixed(1)} m: ${roads[c.upper].name} over ${roads[c.lower].name}`);
   // Junction areas are paved (the game draws them as asphalt): nothing may stand on them.
