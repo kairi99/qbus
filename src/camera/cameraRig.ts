@@ -35,6 +35,7 @@ export class CameraRig {
   /** Middle of the whole vehicle (the chase camera's pivot), and the front section's center (the driver's seat is in it). */
   private busPos = new THREE.Vector3();
   private framePos = new THREE.Vector3();
+  private scratch = { x: 0, y: 0, z: 0 };
   private busQuat = new THREE.Quaternion();
   private flatFwd = new THREE.Vector3();
   private tmp = new THREE.Vector3();
@@ -75,7 +76,7 @@ export class CameraRig {
     }
     const t = bus.body.translation();
     const q = bus.body.rotation();
-    const c = bus.position();
+    const c = bus.position(this.scratch);
     this.busPos.set(c.x, c.y, c.z);
     this.framePos.set(t.x, t.y, t.z);
     // A teleport (reset, restart) snaps the camera instead of gliding through buildings.

@@ -135,6 +135,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   renderer.info.autoReset = false;
   if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
+  const scratchPos = { x: 0, y: 0, z: 0 };
   let acc = 0;
   let last = performance.now();
   let flippedFor = 0;
@@ -218,7 +219,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       paused ? 0 : dt,
     );
     radio.update(audio.context, paused);
-    const t = bus.position();
+    const t = bus.position(scratchPos);
     hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, nearestRoad(city, { x: t.x, z: t.z })?.name ?? '');
     // Backdrop first (sky, far hills, landmarks) through a matching long-range camera, then the city.
     farCamera.position.copy(camera.position);

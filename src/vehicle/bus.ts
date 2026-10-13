@@ -163,11 +163,15 @@ export class BusPhysics {
 
   /**
    * Middle of the whole vehicle (nose to tail): the point stops, traffic and the R reset treat
-   * as "the bus". For a rigid bus it's the body's center. A new object each call.
+   * as "the bus". For a rigid bus it's the body's center. Written into `out` (per-frame callers
+   * pass a scratch object; omitted, a new one).
    */
-  position(): V3 {
+  position(out: V3 = { x: 0, y: 0, z: 0 }): V3 {
     const t = this.body.translation();
-    const c = { x: t.x, y: t.y, z: t.z };
+    const c = out;
+    c.x = t.x;
+    c.y = t.y;
+    c.z = t.z;
     if (!this.rear) return c;
     const r = this.rear.body.translation();
     const f = this.forwardOf(this.body.rotation(), this.frontLength / 2);
@@ -188,11 +192,14 @@ export class BusPhysics {
     return out;
   }
 
-  /** The middle of the front bumper, at chassis height (a new object each call). */
-  nose(): V3 {
+  /** The middle of the front bumper, at chassis height (into `out`, or a new object). */
+  nose(out: V3 = { x: 0, y: 0, z: 0 }): V3 {
     const t = this.body.translation();
     const f = this.forwardOf(this.body.rotation(), this.frontLength / 2);
-    return { x: t.x + f.x, y: t.y + f.y, z: t.z + f.z };
+    out.x = t.x + f.x;
+    out.y = t.y + f.y;
+    out.z = t.z + f.z;
+    return out;
   }
 
   /** The body's +X axis scaled by `k` (shared object). */
