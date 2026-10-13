@@ -41,7 +41,7 @@ known({
     "8 found: lip 0.06 m at (-2.1, 705.1, y 16.03); lip 0.15 m at (-2.1, 705.1, y 16.03)",
   "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): sin nombre [e588→e160]":
     "8 found: lip 0.06 m at (-127.7, 792.8, y 22.39); lip 0.09 m at (-127.2, 792.6, y 22.43)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): Av. 12 de Octubre [e589→e240]":
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): Av. 12 de Octubre [e589→e241]":
     "10 found: surface off the graph height by 0.43 m on e589 Av. 12 de Octubre lane 1 at (-115.3, 776.9, y 20.57); lip 0.06 m at (-128.2, 789.3, y 22.50)",
   "road surface has no lips, holes or height mismatches cut José Riofrío @(-867,851): sin nombre [e297→e297]":
     "2 found: lip 0.13 m at (-788.8, 830.0, y 25.88); lip 0.12 m at (-788.4, 829.8, y 25.76)",
