@@ -10,15 +10,16 @@ import { BusPhysics } from '../src/vehicle/bus';
 import type { BusPreset } from '../src/vehicle/busPreset';
 import { forward } from '../src/world/cityData';
 import popular from '../data/buses/popular.json';
+import { busById } from '../src/vehicle/buses';
 
 const city = generateCity({ seed: 42 });
 const graph = buildRoadGraph(city);
 
-function setup(count: number, seed = 1) {
+function setup(count: number, seed = 1, preset: BusPreset = popular as BusPreset) {
   const world = createWorld();
   addGround(world, 1200);
   buildCity(city, world, new THREE.Scene());
-  const bus = new BusPhysics(world, popular as BusPreset, { x: 1e3, y: 0, z: 1e3, heading: 0 });
+  const bus = new BusPhysics(world, preset, { x: 1e3, y: 0, z: 1e3, heading: 0 });
   const sim = new TrafficSim(graph, city, { seed, count });
   const bodies = new TrafficBodies(world, sim);
   const step = (throttle = 0) => {
@@ -27,7 +28,7 @@ function setup(count: number, seed = 1) {
     bodies.steer(PHYSICS_STEP);
     bus.update({ throttle, steer: 0, handbrake: false }, PHYSICS_STEP);
     world.step();
-    return bodies.afterStep(PHYSICS_STEP, bus.body.collider(0), { x: t.x, z: t.z });
+    return bodies.afterStep(PHYSICS_STEP, bus.colliders, { x: t.x, z: t.z });
   };
   return { world, bus, sim, bodies, step };
 }
@@ -68,6 +69,20 @@ describe('TrafficBodies', () => {
     expect(car.state).toBe('driving');
     const b = bus.body.translation();
     expect(Math.hypot(car.pos.x - b.x, car.pos.z - b.z)).toBeGreaterThan(80);
+  });
+
+  it('a car touching only the rear section of the articulated bus is knocked loose too', () => {
+    const { sim, bus, step } = setup(1, 5, busById('articulado'));
+    const car = sim.cars[0];
+    const e = graph.edges[car.edge];
+    const f = forward(e.heading);
+    // The rear section's center on the car (the whole vehicle is centered a few meters ahead of it).
+    const rearShift = bus.preset.body.length / 2 - bus.preset.articulated!.rearLength / 2;
+    bus.reset({ x: car.pos.x + f.x * rearShift, y: 0, z: car.pos.z + f.z * rearShift, heading: e.heading });
+    let hit = false;
+    for (let t = 0; t < 0.5 && !hit; t += PHYSICS_STEP) hit = step(0).length > 0;
+    expect(hit).toBe(true);
+    expect(car.state).toBe('free');
   });
 
   it('snaps a body to its car when the sim relocates it', () => {
