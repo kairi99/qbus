@@ -1,14 +1,24 @@
 import { expect, test } from '@playwright/test';
 
-// Software WebGL is always slow, so with ?adaptive=1 the renderer must step its resolution down.
-test('adaptive quality lowers the resolution when the frame rate stays low', async ({ page }) => {
+// The stepping rules are unit-tested (tests/adaptiveQuality.test.ts); this checks the wiring. Under
+// software WebGL the frame rate depends on the machine's load (GPU-bound when quiet: fewer pixels
+// help and it steps down; CPU-bound or under a frame a second when busy: it tries one step and
+// undoes it, or skips the frames as stalls), so the test accepts any of those and checks that
+// whatever level it is at is the canvas's resolution.
+test('adaptive quality is fed frames and applies its level to the canvas', async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto('/?tutorial=0&play=1&city=mariscal&adaptive=1');
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 120_000 });
   const full = await page.evaluate(() => document.querySelector<HTMLCanvasElement>('#game')!.width);
-  await expect.poll(() => page.evaluate(() => (window as any).__qbus.quality.level), { timeout: 180_000, intervals: [2000] }).toBeGreaterThan(0);
-  const lower = await page.evaluate(() => document.querySelector<HTMLCanvasElement>('#game')!.width);
-  expect(lower).toBeLessThan(full);
+  const state = () => page.evaluate(() => {
+    const q = (window as any).__qbus.quality;
+    return { level: q.level as number, disabled: q.disabled as boolean, settle: q.settle as number, width: document.querySelector<HTMLCanvasElement>('#game')!.width };
+  });
+  // Fed: its settle timer runs down (it starts at 5 s), or it already stepped.
+  await expect.poll(async () => { const q = await state(); return q.level > 0 || q.disabled || q.settle < 4.5; }, { timeout: 180_000, intervals: [2000] }).toBe(true);
+  const q = await state();
+  if (q.level > 0) expect(q.width).toBeLessThan(full);
+  else expect(q.width).toBe(full);
 });
 
 test('automation keeps full resolution by default', async ({ page }) => {
