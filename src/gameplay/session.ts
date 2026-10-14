@@ -114,6 +114,9 @@ export class GameSession {
   private fpsLowFor = 0;
   private fpsHighFor = 0;
   private sinceRecycle = 0;
+  private obstacleBuf: Obstacle[] = [];
+  private busObstacle: Obstacle = { id: 'bus', pos: { x: 0, z: 0 }, heading: 0, length: 0, width: 0, lift: 0 };
+  private pedObstacles = new Map<number, Obstacle>();
 
   constructor(private d: SessionDeps) {
     this.passengers = new PassengersView(d.scene, d.city);
@@ -210,12 +213,27 @@ export class GameSession {
       this.traffic.recycle({ pos: busPos, heading: bus.heading });
       this.peds.recycle({ pos: busPos, heading: bus.heading });
     }
-    const obstacles: Obstacle[] = [
-      // The bus at its level (in an underpass it doesn't hold up the street over it), people on the street.
-      { id: 'bus', pos: busPos, heading: bus.heading, length: bus.preset.body.length, width: bus.preset.body.width, lift: bus.roadHeight() - terrainAt(this.d.city, busPos) },
-      ...this.trafficBodies.obstacles(),
-      ...this.peds.peds.filter((p) => p.onRoad).map((p) => ({ id: `ped${p.id}`, pos: p.pos, heading: p.heading, length: 0.8, width: 0.8, lift: 0 })),
-    ];
+    // Reused every step (this runs 60 times a second): the bus, wrecks, then people on the street.
+    const obstacles = this.obstacleBuf;
+    obstacles.length = 0;
+    const busObs = this.busObstacle;
+    // The bus at its level (in an underpass it doesn't hold up the street over it).
+    busObs.pos.x = busPos.x;
+    busObs.pos.z = busPos.z;
+    busObs.heading = bus.heading;
+    busObs.length = bus.preset.body.length;
+    busObs.width = bus.preset.body.width;
+    busObs.lift = bus.roadHeight() - terrainAt(this.d.city, busPos);
+    obstacles.push(busObs);
+    for (const w of this.trafficBodies.obstacles()) obstacles.push(w);
+    for (const p of this.peds.peds) {
+      if (!p.onRoad) continue;
+      let o = this.pedObstacles.get(p.id);
+      if (!o) this.pedObstacles.set(p.id, (o = { id: `ped${p.id}`, pos: p.pos, heading: p.heading, length: 0.8, width: 0.8, lift: 0 }));
+      o.pos = p.pos;
+      o.heading = p.heading;
+      obstacles.push(o);
+    }
     for (const e of this.traffic.step(dt, obstacles)) {
       const d = Math.hypot(e.pos.x - t.x, e.pos.z - t.z);
       if (d > HEARING) continue;

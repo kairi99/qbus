@@ -144,6 +144,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   let acc = 0;
   let last = performance.now();
   let flippedFor = 0;
+  let street = '';
+  let streetClock = Infinity;
   let fps = 60;
   let wasBoosting = false;
 
@@ -235,7 +237,13 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     );
     radio.update(audio.context, paused);
     const t = bus.body.translation();
-    hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, nearestRoad(city, { x: t.x, z: t.z })?.name ?? '');
+    // The street name changes slowly: look it up a few times a second, not every frame.
+    streetClock += dt;
+    if (streetClock >= 0.25) {
+      streetClock = 0;
+      street = nearestRoad(city, { x: t.x, z: t.z })?.name ?? '';
+    }
+    hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, street);
     // Backdrop first (sky, far hills, landmarks) through a matching long-range camera, then the city.
     farCamera.position.copy(camera.position);
     farCamera.quaternion.copy(camera.quaternion);
