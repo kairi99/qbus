@@ -945,13 +945,36 @@ function terrainPatch(
     }
   }
   world.createCollider(RAPIER.ColliderDesc.trimesh(tris.positions(), tris.indices()).setFriction(1), fixed);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.computeVertexNormals();
-  const mesh = new THREE.Mesh(g);
-  mesh.name = 'trenchPatch';
-  return [mesh];
+  return splitIntoTiles(pos, col, PATCH_TILE).map((g) => {
+    const mesh = new THREE.Mesh(g);
+    mesh.name = 'trenchPatch';
+    return mesh;
+  });
+}
+
+/** Patch meshes are this big (m): the patch is spread over the whole city, so tiles can be frustum-culled. */
+const PATCH_TILE = 120;
+
+/** Splits a non-indexed triangle list (positions + colors) into one geometry per tile of its triangles' centers. */
+function splitIntoTiles(pos: number[], col: number[], size: number): THREE.BufferGeometry[] {
+  const tiles = new Map<string, { pos: number[]; col: number[] }>();
+  for (let i = 0; i < pos.length; i += 9) {
+    const key = `${Math.floor((pos[i] + pos[i + 3] + pos[i + 6]) / 3 / size)},${Math.floor((pos[i + 2] + pos[i + 5] + pos[i + 8]) / 3 / size)}`;
+    let t = tiles.get(key);
+    if (!t) tiles.set(key, (t = { pos: [], col: [] }));
+    for (let k = i; k < i + 9; k++) {
+      t.pos.push(pos[k]);
+      t.col.push(col[k]);
+    }
+  }
+  return [...tiles.values()].map((t) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(t.pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(t.col, 3));
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    return g;
+  });
 }
 
 interface Sec {

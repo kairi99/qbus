@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AdaptiveQuality, scaleAt } from './core/adaptiveQuality';
 import { initRapier, createWorld, addGround, PHYSICS_STEP } from './physics/world';
 import { staticObstacles } from './physics/cameraObstacles';
 import { Input } from './core/input';
@@ -43,7 +44,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   // Phones have tiny, very dense screens and weak GPUs: one pixel per CSS pixel is plenty.
   const touch = isTouchDevice();
-  renderer.setPixelRatio(Math.min(devicePixelRatio, touch ? 1 : 1.5));
+  const maxRatio = Math.min(devicePixelRatio, touch ? 1 : 1.5);
+  renderer.setPixelRatio(maxRatio);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -131,15 +133,21 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
 
   performance.mark('qbus:session');
+  // Weak GPUs: render fewer pixels (and smaller shadows) while the frame rate stays low. Automation
+  // (Playwright's software GL is always slow) keeps full quality unless ?adaptive=1.
+  const adaptive = params.get('adaptive') === '1' || (params.get('adaptive') !== '0' && !navigator.webdriver);
+  const quality = new AdaptiveQuality();
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { quality, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   const scratchPos = { x: 0, y: 0, z: 0 };
   let acc = 0;
   let last = performance.now();
   let flippedFor = 0;
+  let street = '';
+  let streetClock = Infinity;
   let fps = 60;
   let wasBoosting = false;
 
@@ -152,6 +160,16 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     last = now;
     if (raw > 0) fps += (1 / raw - fps) * 0.05;
     session.adaptTraffic(fps, dt);
+    // Skip frames after a stall (tab switch, loading): they say nothing about the GPU.
+    if (adaptive && raw > 0 && raw < 1 && quality.update(fps, raw)) {
+      renderer.setPixelRatio(maxRatio * scaleAt(quality.level));
+      resize();
+      if (quality.shadowsLow && sun.shadow.mapSize.x > 1024) {
+        sun.shadow.mapSize.set(1024, 1024);
+        sun.shadow.map?.dispose();
+        sun.shadow.map = null;
+      }
+    }
 
     for (const action of input.consumeActions()) {
       if (tutorial.open) {
@@ -221,7 +239,13 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     );
     radio.update(audio.context, paused);
     const t = bus.position(scratchPos);
-    hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, nearestRoad(city, { x: t.x, z: t.z })?.name ?? '');
+    // The street name changes slowly: look it up a few times a second, not every frame.
+    streetClock += dt;
+    if (streetClock >= 0.25) {
+      streetClock = 0;
+      street = nearestRoad(city, { x: t.x, z: t.z })?.name ?? '';
+    }
+    hud.update(dt, bus.speed, rig.mode, flippedFor > 1.5, street);
     // Backdrop first (sky, far hills, landmarks) through a matching long-range camera, then the city.
     farCamera.position.copy(camera.position);
     farCamera.quaternion.copy(camera.quaternion);
