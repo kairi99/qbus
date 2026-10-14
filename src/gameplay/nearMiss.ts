@@ -16,8 +16,10 @@ const COOLDOWN = 2;
 export class NearMissDetector {
   private recent = new Map<number, number>();
   private clock = 0;
-  private offsets: number[];
+  /** Ray origins along each section of the bus: its body and x offsets in its chassis space. */
+  private sections: { body: RAPIER.RigidBody; offsets: number[] }[];
   private rayY: number;
+  private own: Set<number>;
 
   constructor(
     private world: RAPIER.World,
@@ -25,32 +27,36 @@ export class NearMissDetector {
     /** Which colliders count (traffic, not scenery). Defaults to anything. */
     private counts: (c: RAPIER.Collider) => boolean = () => true,
   ) {
-    const L = bus.preset.body.length;
-    this.offsets = [L / 2 - 1, 0, -L / 2 + 1];
+    const spans = bus.sections().map((s) => s.length);
+    this.sections = bus.bodies.map((body, i) => ({ body, offsets: [spans[i] / 2 - 1, 0, -spans[i] / 2 + 1] }));
     this.rayY = -bus.preset.body.height / 2 + 0.6;
+    this.own = new Set(bus.colliders.map((c) => c.handle));
   }
 
   update(dt: number): number {
     this.clock += dt;
     if (Math.abs(this.bus.speed) < MIN_SPEED) return 0;
-    const t = this.bus.body.translation();
-    const q = this.bus.body.rotation();
     const halfW = this.bus.preset.body.width / 2;
+    const filter = (c: RAPIER.Collider) => !this.own.has(c.handle) && this.counts(c);
     let count = 0;
-    for (const side of [-1, 1]) {
-      const dir = rotate(q, { x: 0, y: 0, z: side });
-      for (const x of this.offsets) {
-        // About 1.2 m off the ground: low enough to catch cars, high enough to skip curbs.
-        const o = rotate(q, { x, y: this.rayY, z: side * (halfW + 0.02) });
-        const origin = { x: t.x + o.x, y: t.y + o.y, z: t.z + o.z };
-        const hit = this.world.castRay(new RAPIER.Ray(origin, dir), REACH, true, undefined, undefined, undefined, this.bus.body, this.counts);
-        if (!hit || hit.timeOfImpact < SCRAPE) continue;
-        // The ground while leaning (or on a slope): anything near the bottom of the bus.
-        if (origin.y + dir.y * hit.timeOfImpact < t.y - this.bus.preset.body.height / 2 + 0.3) continue;
-        const last = this.recent.get(hit.collider.handle);
-        if (last !== undefined && this.clock - last < COOLDOWN) continue;
-        this.recent.set(hit.collider.handle, this.clock);
-        count++;
+    for (const { body, offsets } of this.sections) {
+      const t = body.translation();
+      const q = body.rotation();
+      for (const side of [-1, 1]) {
+        const dir = rotate(q, { x: 0, y: 0, z: side });
+        for (const x of offsets) {
+          // About 1.2 m off the ground: low enough to catch cars, high enough to skip curbs.
+          const o = rotate(q, { x, y: this.rayY, z: side * (halfW + 0.02) });
+          const origin = { x: t.x + o.x, y: t.y + o.y, z: t.z + o.z };
+          const hit = this.world.castRay(new RAPIER.Ray(origin, dir), REACH, true, undefined, undefined, undefined, undefined, filter);
+          if (!hit || hit.timeOfImpact < SCRAPE) continue;
+          // The ground while leaning (or on a slope): anything near the bottom of the bus.
+          if (origin.y + dir.y * hit.timeOfImpact < t.y - this.bus.preset.body.height / 2 + 0.3) continue;
+          const last = this.recent.get(hit.collider.handle);
+          if (last !== undefined && this.clock - last < COOLDOWN) continue;
+          this.recent.set(hit.collider.handle, this.clock);
+          count++;
+        }
       }
     }
     return count;

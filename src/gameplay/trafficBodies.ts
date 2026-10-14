@@ -131,17 +131,20 @@ export class TrafficBodies {
 
   /**
    * After world.step: release cars the bus touched or that got pushed off course, and bring
-   * settled wrecks back into traffic. Returns ids of cars the bus just hit.
+   * settled wrecks back into traffic. Returns ids of cars the bus just hit. `busCollider` is
+   * every chassis collider of the bus (an articulated one has two).
    */
-  afterStep(dt: number, busCollider: RAPIER.Collider, busPos: Vec2): number[] {
+  afterStep(dt: number, busCollider: RAPIER.Collider | RAPIER.Collider[], busPos: Vec2): number[] {
     const hit = new Set<number>();
-    this.world.contactPairsWith(busCollider, (other) => {
-      const i = this.byHandle.get(other.handle);
-      if (i === undefined || this.sim.cars[i].state !== 'driving') return;
-      this.world.contactPair(busCollider, other, (m) => {
-        if (m.numContacts() > 0) hit.add(i);
+    for (const own of Array.isArray(busCollider) ? busCollider : [busCollider]) {
+      this.world.contactPairsWith(own, (other) => {
+        const i = this.byHandle.get(other.handle);
+        if (i === undefined || this.sim.cars[i].state !== 'driving') return;
+        this.world.contactPair(own, other, (m) => {
+          if (m.numContacts() > 0) hit.add(i);
+        });
       });
-    });
+    }
     this.sim.cars.forEach((c, i) => {
       const b = this.bodies[i];
       if (c.state === 'driving') {

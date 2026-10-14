@@ -21,7 +21,7 @@ import { vehicleClearance } from './physics/clearance';
 import { Hud } from './ui/hud';
 import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
-import { busById } from './vehicle/buses';
+import { BRT_BUS, busById } from './vehicle/buses';
 import { routesFor } from './gameplay/routes';
 import { loadSettings, saveSettings } from './menu/settings';
 import { RadioToast } from './ui/radioToast';
@@ -82,10 +82,11 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
 
   // Free roam (?mode=free) has no route; a route shift is always driven in a bus.
   const free = params.get('mode') === 'free';
-  const picked = busById(params.get('bus') ?? settings.bus);
-  const preset = free || picked.kind !== 'car' ? picked : busById('popular');
   const routes = free ? [] : routesFor(city);
   const route = free ? null : (routes.find((r) => r.id === params.get('route')) ?? routes[0]);
+  // A link without ?bus= to a Trolebús/Ecovía route takes the articulated bus, like the menu.
+  const picked = busById(params.get('bus') ?? (route?.system ? BRT_BUS : settings.bus));
+  const preset = free || picked.kind !== 'car' ? picked : busById('popular');
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const fits = vehicleClearance(world, preset.body);
@@ -127,7 +128,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   };
 
   // How to play, every time a shift or free roam starts (unless turned off, or ?tutorial=0).
-  const tutorial = new Tutorial(hudRoot, free, session.stars);
+  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system);
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
   if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
 
@@ -141,6 +142,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   renderer.info.autoReset = false;
   if (import.meta.env.DEV) (window as any).__qbus = { quality, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
+  const scratchPos = { x: 0, y: 0, z: 0 };
   let acc = 0;
   let last = performance.now();
   let flippedFor = 0;
@@ -176,9 +178,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       }
       if (action === 'camera') rig.toggle();
       if (action === 'reset') {
-        const t = bus.body.translation();
+        const t = bus.position();
         // A road at the level the bus is on, on a spot where it fits (clear of walls and roofs).
-        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length });
+        const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length, vehicle: route?.system ? 'brt' : 'general' });
         bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
         // Cars aren't static world, so the spot can still hold one: send them elsewhere.
         session.trafficBodies.clearSpot({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading }, preset.body.length, preset.body.width);
@@ -236,7 +238,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       paused ? 0 : dt,
     );
     radio.update(audio.context, paused);
-    const t = bus.body.translation();
+    const t = bus.position(scratchPos);
     // The street name changes slowly: look it up a few times a second, not every frame.
     streetClock += dt;
     if (streetClock >= 0.25) {

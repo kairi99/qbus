@@ -36,6 +36,8 @@ export interface DriveResult {
   maxLateralImpulse: number;
   contactAt: { pos: Vec2; y: number; normal: { x: number; y: number; z: number } } | null;
   lateralAt: { pos: Vec2; y: number; normal: { x: number; y: number; z: number } } | null;
+  /** Which section of the vehicle took the biggest sideways hit (an articulated bus has two). */
+  lateralSection?: "front" | "rear";
   /** Vehicle mass (to turn impulses into a speed change). */
   mass: number;
   /** Chassis height minus road height, relative to its ride height at the start (m). */
@@ -75,6 +77,7 @@ export function describe(r: DriveResult): string {
     `body contacts ${r.bodyContacts} steps, max impulse ${r.maxImpulse.toFixed(0)} at ${fmt(r.contactAt?.pos ?? null)} y=${r.contactAt?.y.toFixed(2) ?? '-'}, lateral ${r.maxLateralImpulse.toFixed(0)} (Δv ${(r.maxLateralImpulse / r.mass).toFixed(2)} m/s) at ${fmt(r.lateralAt?.pos ?? null)} y=${r.lateralAt?.y.toFixed(2) ?? '-'} n=${r.lateralAt ? `(${r.lateralAt.normal.x.toFixed(2)}, ${r.lateralAt.normal.y.toFixed(2)}, ${r.lateralAt.normal.z.toFixed(2)})` : '-'}`,
     `height vs road +${r.maxRise.toFixed(2)} at ${fmt(r.riseAt)} / ${r.maxSink.toFixed(2)} at ${fmt(r.sinkAt)}${r.fellThrough ? ' FELL THROUGH' : ''}`,
     `off path ${r.maxOffPath.toFixed(1)} m at ${fmt(r.offPathAt)}`,
+    `worst wall hit on the ${r.lateralSection ?? "-"} section`,
   ].join('; ');
 }
 
@@ -87,13 +90,13 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
   const startY = edgeY(first, s0) ?? groundHeightAt(city, start);
   const head = nav.pose({ edge: first.id, s: s0 }).heading;
   const bus = new BusPhysics(world, preset, { x: start.x, y: startY, z: start.z, heading: head });
-  const chassis = bus.body.collider(0);
+  const chassis = bus.colliders;
   const goal = path.points[path.points.length - 1];
   const cruise = opts.kmh / 3.6;
   const budget = path.length / (cruise / 2) + (opts.slack ?? 10);
   const r: DriveResult = {
     reached: false, time: 0, budget, stuck: 0, stuckAt: null, airborne: 0, airAt: null, bodyContacts: 0, maxImpulse: 0, maxLateralImpulse: 0,
-    contactAt: null, lateralAt: null, mass: preset.mass, maxRise: 0, maxSink: 0, riseAt: null, sinkAt: null, fellThrough: false, maxOffPath: 0, offPathAt: null, topKmh: 0,
+    contactAt: null, lateralAt: null, mass: preset.mass + (preset.articulated?.rearMass ?? 0), maxRise: 0, maxSink: 0, riseAt: null, sinkAt: null, fellThrough: false, maxOffPath: 0, offPathAt: null, topKmh: 0,
   };
   const passageEdges = opts.passage ? new Set(route.slice(opts.passage.from, opts.passage.to)) : null;
   let ride: number | null = null;
@@ -110,11 +113,12 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
       ride = p.y - surfaceAlong(city, graph, route, p).y;
     }
     for (let t = 0; t < budget; t += PHYSICS_STEP) {
+      // A long articulated bus looks 4 m further ahead: from the front section its tail would cut bends too close.
       const p = bus.body.translation();
       const here = { x: p.x, z: p.z };
       const v = bus.speed;
       // Aim ahead on the path; slow for curves ahead.
-      const look = Math.max(8, Math.abs(v) * 0.8);
+      const look = Math.max(8, Math.abs(v) * 0.8) + (bus.rear ? 4 : 0);
       const aim = nav.guidePoint(path, here, look);
       const a1 = nav.guidePoint(path, here, 12);
       const a2 = nav.guidePoint(path, here, 32);
@@ -153,15 +157,16 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
       if (air > r.airborne) (r.airborne = air), (r.airAt = pos);
 
       let touched = false;
-      world.contactPairsWith(chassis, (other) => {
-        world.contactPair(chassis, other, (m) => {
+      for (const own of chassis)
+      world.contactPairsWith(own, (other) => {
+        world.contactPair(own, other, (m) => {
           if (m.numContacts() === 0) return;
           let imp = 0;
           for (let i = 0; i < m.numContacts(); i++) imp += m.contactImpulse(i);
           touched ||= imp > 0 || m.numSolverContacts() > 0;
           const n = m.normal();
           const lat = imp * Math.hypot(n.x, n.z);
-          if (lat > r.maxLateralImpulse) r.lateralAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } };
+          if (lat > r.maxLateralImpulse) (r.lateralAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } }), (r.lateralSection = own === chassis[0] ? "front" : "rear");
           if (imp > r.maxImpulse) {
             r.maxImpulse = imp;
             r.contactAt = { pos, y: q.y, normal: { x: n.x, y: n.y, z: n.z } };
@@ -180,7 +185,8 @@ export function driveRoute(world: RAPIER_T.World, city: CityData, graph: RoadGra
     }
   } finally {
     world.removeVehicleController(bus.vehicle);
-    world.removeRigidBody(bus.body);
+    if (bus.rear) world.removeVehicleController(bus.rear.vehicle);
+    for (const b of bus.bodies) world.removeRigidBody(b);
   }
   return r;
 }

@@ -948,6 +948,13 @@ body {
   color: #6a675e;
 }
 
+/* BRT routes: the bus that suits the busway. */
+.mn-placard-tip {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1c6d8c;
+}
+
 /* The route's star targets. */
 .mn-placard-goal {
   font-size: 13px;

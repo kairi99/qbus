@@ -15,7 +15,7 @@ import { buildCity } from '../src/world/cityBuilder';
 import { type CityData, groundHeightAt, terrainAt, type Vec2 } from '../src/world/cityData';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { generateCity } from '../src/world/procCity';
-import { Navigator, type NavPath } from '../src/gameplay/navigation';
+import { BRT_GENERAL_COST, Navigator, type NavPath } from '../src/gameplay/navigation';
 import { type RouteDef, routeLegs, routeStops, routesFor, startPose } from '../src/gameplay/routes';
 import { RouteGame, STOP_SPEED } from '../src/gameplay/routeGame';
 import { TrickScorer } from '../src/gameplay/scoring';
@@ -24,12 +24,13 @@ import { Missions, pickMissions, type MissionEvent } from '../src/gameplay/missi
 import { starThresholds } from '../src/gameplay/stars';
 import { RedLightRunner, TrafficLights } from '../src/gameplay/trafficLights';
 
-const popular = JSON.parse(readFileSync('data/buses/popular.json', 'utf8')) as BusPreset;
+// BUS=<preset id> drives another bus (default popular); the star targets are pinned to popular.
+const popular = JSON.parse(readFileSync(`data/buses/${process.env.BUS ?? 'popular'}.json`, 'utf8')) as BusPreset;
 const zone = process.argv[5] ?? 'mariscal';
 const city: CityData = zone === 'grid' ? generateCity({ seed: 42 }) : JSON.parse(readFileSync(`data/cities/${zone}.json`, 'utf8'));
 if (city.terrain) city.terrain.scale = 1;
 const graph = buildRoadGraph(city);
-const nav = new Navigator(graph);
+const navs = { general: new Navigator(graph), brt: new Navigator(graph, 'brt', BRT_GENERAL_COST) };
 const lights = new TrafficLights(graph, city.signals ?? []);
 
 interface Profile {
@@ -52,6 +53,7 @@ const PROFILES: Record<string, Profile> = {
 const angle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 function run(route: RouteDef, prof: Profile, seed: number) {
+  const nav = route.system ? navs.brt : navs.general;
   const world = createWorld();
   buildCity(city, world, new THREE.Scene(), graph);
   const stops = routeStops(city, route);
@@ -84,8 +86,10 @@ function run(route: RouteDef, prof: Profile, seed: number) {
   let active = -1;
   while (!game.over && r.secs < 900) {
     r.secs += PHYSICS_STEP;
-    const p = bus.body.translation();
-    const here = { x: p.x, z: p.z };
+    const p = bus.position();
+    // An articulated bus steers by its nose (the front axle leads the path), stops by its middle.
+    const pn = bus.rear ? bus.nose() : p;
+    const here = { x: pn.x, z: pn.z };
     const zone = game.activeStop.zone;
     replan += PHYSICS_STEP;
     if (active !== game.activeIndex || replan > 0.5) {
@@ -127,11 +131,14 @@ function run(route: RouteDef, prof: Profile, seed: number) {
     }
     // Rolls through the stop just under the speed passengers can get on at.
     const vStop = STOP_SPEED * 0.8;
-    target = Math.min(target, Math.sqrt(vStop * vStop + 2 * prof.brake * Math.max(0, toStop - 3)));
+    // A long bus brakes for the stop earlier: its middle has to be in the zone, its inertia is bigger.
+    target = Math.min(target, Math.sqrt(vStop * vStop + 2 * prof.brake * Math.max(0, toStop - (bus.rear ? 9 : 3))));
     // Pure pursuit along the legal path.
     const look = Math.max(7, Math.abs(speed) * 0.7);
-    const aim = dStop < look || !path ? zone : nav.guidePoint(path, here, look);
-    const err = angle(Math.atan2(-(aim.z - p.z), aim.x - p.x) - bus.heading);
+    // (a long bus has passed the zone once the zone is behind its nose: keep to the path, don't swing back at it)
+    const zoneAhead = !bus.rear || (zone.x - pn.x) * Math.cos(bus.heading) - (zone.z - pn.z) * Math.sin(bus.heading) > 0;
+    const aim = (dStop < look && zoneAhead) || !path ? zone : nav.guidePoint(path, here, look);
+    const err = angle(Math.atan2(-(aim.z - pn.z), aim.x - pn.x) - bus.heading);
     let throttle = speed < target - 0.5 ? 1 : speed > target + 0.5 ? -1 : 0.2;
     let steer = Math.max(-1, Math.min(1, -err * 2.5));
     // Stuck against something: back up a bit.
@@ -149,13 +156,12 @@ function run(route: RouteDef, prof: Profile, seed: number) {
       handbrake = hb > 0.1;
     }
     const boost = prof.nitro && reverse <= 0 && Math.abs(err) < 0.1 && target > speed + 3 && nitro.ready;
+    if (process.env.TRACE && Math.abs(r.secs % 3) < PHYSICS_STEP) console.log(r.secs.toFixed(0), 'pos', here.x.toFixed(0), here.z.toFixed(0), 'v', speed.toFixed(1), 'tgt', target.toFixed(1), 'dStop', dStop.toFixed(0), 'bend', ((bus.bend * 180) / Math.PI).toFixed(0), 'err', err.toFixed(2), 'thr', throttle, 'stuck', stuck.toFixed(1));
     bus.update({ throttle, steer, handbrake, boost: nitro.step(boost, PHYSICS_STEP) }, PHYSICS_STEP);
     world.step();
     if (nitro.active && !wasBoost) feed({ type: 'nitro' });
     wasBoost = nitro.active;
-    const b = bus.body.translation();
-    const half = popular.body.length / 2;
-    const front = { x: b.x + Math.cos(bus.heading) * half, z: b.z - Math.sin(bus.heading) * half };
+    const front = bus.nose();
     // The lights' clock: the shift's (traffic starts with the session, a second before the bus moves).
     const reds = runner.update(front, bus.heading, bus.roadHeight() - terrainAt(city, front), r.secs + 1).length;
     r.reds += reds;
@@ -171,7 +177,7 @@ function run(route: RouteDef, prof: Profile, seed: number) {
       r.trick += t.cents;
       feed({ type: 'trick', kind: t.kind, cents: t.cents, duration: t.duration, chain: scorer.chain });
     }
-    const q = bus.body.translation();
+    const q = bus.position();
     for (const e of game.update(PHYSICS_STEP, { pos: { x: q.x, z: q.z }, speed: bus.speed })) {
       if (e.type === 'fare') {
         r.fare += e.cents;

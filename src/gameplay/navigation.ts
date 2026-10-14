@@ -1,5 +1,5 @@
 import type { Vec2 } from '../world/cityData';
-import { type LaneEdge, type RoadGraph, dirAt, edgeLift, edgeY, lanePoint, projectOnPath } from '../world/roadGraph';
+import { type AccessClass, type LaneEdge, type RoadGraph, dirAt, edgeAllows, edgeLift, edgeY, lanePoint, projectOnPath } from '../world/roadGraph';
 
 /** A spot on the lane graph: an edge and a distance along it. */
 export interface GraphSpot {
@@ -19,6 +19,9 @@ export interface NavPath {
 /** Path points whose lift is this far from the bus's are on another level (over or under it). */
 const LEVEL_SEP = 2;
 
+/** BRT guidance weighs general-street meters this much, so a route follows the busway whenever there is one. */
+export const BRT_GENERAL_COST = 3;
+
 const SEARCH = 40;
 /**
  * Meters of sideways distance one meter of height mismatch is worth in `locate`: near a ramp's
@@ -32,7 +35,26 @@ const POINT_STEP = 6;
  * streets the right way (like a GPS) instead of straight at the target.
  */
 export class Navigator {
-  constructor(private graph: RoadGraph) {}
+  /**
+   * `vehicle` is who is being guided: `'general'` (the default, everything the game did before
+   * busways) never uses a busway edge; `'brt'` may use busways and the general edges. For a BRT
+   * vehicle, `generalCost` multiplies the length of general edges in the search (> 1 makes
+   * routes prefer the busway when there is one; 1 = plain shortest path).
+   */
+  constructor(
+    private graph: RoadGraph,
+    private vehicle: AccessClass = 'general',
+    private generalCost = 1,
+  ) {}
+
+  private allows(e: LaneEdge): boolean {
+    return edgeAllows(e, this.vehicle);
+  }
+
+  /** Search cost of driving along `e` (its length, scaled for general edges when a BRT vehicle prefers busways). */
+  private cost(e: LaneEdge, meters = e.len): number {
+    return this.vehicle === 'brt' && e.access !== 'brt' ? meters * this.generalCost : meters;
+  }
 
   /**
    * Nearest drivable edge to `p` whose direction agrees with `heading`; if none is close,
@@ -46,7 +68,7 @@ export class Navigator {
     let best: (GraphSpot & { d: number }) | null = null;
     let any: (GraphSpot & { d: number }) | null = null;
     for (const e of this.graph.edges) {
-      if (!e.drivable) continue;
+      if (!this.allows(e)) continue;
       const proj = projectOnPath(e.center, p);
       const { s } = proj;
       let d = proj.d;
@@ -83,6 +105,11 @@ export class Navigator {
     return d === undefined ? Infinity : d + to.s;
   }
 
+  /** Real meters of the path `route` would take (unlike `distanceTo`, not scaled by `generalCost`). */
+  pathMeters(from: GraphSpot, to: GraphSpot): number {
+    return this.route(from, to)?.length ?? Infinity;
+  }
+
   /** Distances from `from` to the start of every reachable edge. */
   distances(from: GraphSpot): Map<number, number> {
     return this.search(from, -1).dist;
@@ -101,13 +128,13 @@ export class Navigator {
       heap.push(d, id);
     };
     const start = edges[from.edge];
-    for (const id of this.graph.nodes[start.to].out) if (edges[id].drivable) relax(id, start.len - from.s + gap(from.edge, id), from.edge);
+    for (const id of this.graph.nodes[start.to].out) if (this.allows(edges[id])) relax(id, this.cost(start, start.len - from.s) + gap(from.edge, id), from.edge);
     while (heap.size) {
       const [d, id] = heap.pop();
       if (d > (dist.get(id) ?? Infinity)) continue;
       if (id === stopAt) break;
       const e = edges[id];
-      for (const nx of this.graph.nodes[e.to].out) if (edges[nx].drivable) relax(nx, d + e.len + gap(id, nx), id);
+      for (const nx of this.graph.nodes[e.to].out) if (this.allows(edges[nx])) relax(nx, d + this.cost(e) + gap(id, nx), id);
     }
     return { dist, prev };
   }
@@ -129,7 +156,7 @@ export class Navigator {
       let prev: LaneEdge | null = null;
       for (const id of this.graph.nodes[e.from].in) {
         const p = edges[id];
-        if (!p.drivable || p.id === e.reverse) continue;
+        if (!this.allows(p) || p.id === e.reverse) continue;
         if (!prev || straightness(p, e) > straightness(prev, e)) prev = p;
       }
       if (!prev || (straightness(prev, e) < 0.7 && run - margin >= minRun)) break;

@@ -29,7 +29,7 @@ describe.each([
   const sim = (seed: number, count: number) => new PedestrianSim(city, graph, { seed, count, lights });
 
   it('cross at traffic lights only while the cars crossing their way have a red', { timeout: 60_000 }, () => {
-    const s = sim(6, 150);
+    const s = sim(7, 150);
     let waits = 0;
     let crossings = 0;
     const was = s.peds.map((p) => p.mode);

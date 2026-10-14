@@ -1,5 +1,5 @@
 import type { BusPreset } from '../vehicle/busPreset';
-import { BUSES, VEHICLES, busStats } from '../vehicle/buses';
+import { BRT_BUS, BUSES, VEHICLES, busStats } from '../vehicle/buses';
 import { ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose } from '../gameplay/routes';
@@ -25,6 +25,24 @@ export function playUrl(s: Selection): string {
   return `?${new URLSearchParams({ play: '1', city: s.zone, bus: s.bus, route: s.route })}`;
 }
 
+/** Which bus the menu has selected, and whether the player chose it themselves. */
+export interface BusChoice {
+  bus: string;
+  /** The bus the menu swapped out when it picked the articulated one for a BRT route. */
+  restore: string | null;
+  /** The player picked a bus by hand while on a BRT route: leave it alone on BRT routes. */
+  manual: boolean;
+}
+
+/**
+ * Picking a Trolebús/Ecovía route selects the articulated bus (unless the player chose another
+ * bus for BRT routes); going back to an ordinary route puts back the bus it replaced.
+ */
+export function busForRoute(c: BusChoice, brt: boolean): BusChoice {
+  if (brt) return c.manual || c.bus === BRT_BUS ? c : { bus: BRT_BUS, restore: c.bus, manual: false };
+  return { bus: c.restore ?? c.bus, restore: null, manual: false };
+}
+
 const MODES = [
   { id: 'route', name: 'Turno', blurb: 'Una ruta con paradas, pasajeros, reloj y plata' },
   { id: 'free', name: 'Paseo libre', blurb: 'Recorra la ciudad a su gusto, sin paradas ni reloj' },
@@ -42,9 +60,12 @@ export class Menu {
   private settings: Settings;
   private cities = new Map<string, Promise<CityData>>();
   private sounds: MenuSounds;
+  private busChoice: BusChoice;
+  private routeDefs = new Map<string, RouteDef>();
 
   constructor(host: HTMLElement) {
     this.settings = loadSettings();
+    this.busChoice = { bus: this.settings.bus, restore: null, manual: false };
     this.root = document.createElement('div');
     this.root.className = 'mn';
     host.appendChild(this.root);
@@ -198,6 +219,7 @@ export class Menu {
     row.querySelectorAll<HTMLElement>('[data-bus]').forEach((el) =>
       el.addEventListener('click', () => {
         this.pick('bus', el.dataset.bus!);
+        this.busChoice = { bus: el.dataset.bus!, restore: null, manual: this.isBrt(this.settings.route) };
         this.mark('[data-bus]', el);
       }),
     );
@@ -283,6 +305,7 @@ export class Menu {
     if (this.settings.zone !== zone || !box.isConnected) return; // switched zone meanwhile
     const graph = buildRoadGraph(city);
     const routes = routesFor(city, graph);
+    this.routeDefs = new Map(routes.map((r) => [r.id, r]));
     const draw = (id: string) => {
       const route = routes.find((r) => r.id === id)!;
       drawMap(this.root.querySelector('canvas')!, city, route, routePaths(city, route, graph));
@@ -298,6 +321,7 @@ export class Menu {
       el.addEventListener('click', () => {
         this.pick('route', el.dataset.route!);
         this.mark('[data-route]', el);
+        this.chooseBusFor(el.dataset.route!);
         draw(el.dataset.route!);
       }),
     );
@@ -307,6 +331,19 @@ export class Menu {
   }
 
   // ---- helpers ---------------------------------------------------------------
+
+  private isBrt(routeId: string): boolean {
+    return !!this.routeDefs.get(routeId)?.system;
+  }
+
+  /** A BRT route selects the articulated bus (see `busForRoute`); the cards follow. */
+  private chooseBusFor(routeId: string): void {
+    this.busChoice = busForRoute({ ...this.busChoice, bus: this.settings.bus }, this.isBrt(routeId));
+    if (this.busChoice.bus === this.settings.bus) return;
+    this.pick('bus', this.busChoice.bus);
+    const card = this.root.querySelector<HTMLElement>(`[data-bus="${this.busChoice.bus}"]`);
+    if (card) this.mark('[data-bus]', card);
+  }
 
   private pick<K extends keyof Selection>(k: K, v: Settings[K]): void {
     this.settings[k] = v;
@@ -368,21 +405,37 @@ const AE86_ART = `
 function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset[]): string {
   const { color, stripe, roof } = p.body;
   // Side view scaled to the bus's real length, so the buseta looks small and the coach long.
-  const w = 70 + p.body.length * 11;
-  return `
-    <button class="mn-card mn-bus" role="radio" aria-checked="${checked}" data-bus="${p.id}">
-      <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">${
-        p.kind === 'car'
-          ? AE86_ART
-          : `
-        <g transform="translate(${(220 - w) / 2},8)">
+  const art = p.articulated;
+  // The articulated bus is squeezed to fit the card: two sections and a bellows.
+  const w = art ? 200 : 70 + p.body.length * 11;
+  const joint = art ? ((p.body.length - art.rearLength - art.gap / 2) / p.body.length) * w : 0;
+  const body = art
+    ? `
+          <rect x="0" y="0" width="${w}" height="10" rx="4" fill="${roof}"/>
+          <rect x="0" y="6" width="${w}" height="48" rx="6" fill="${color}"/>
+          <rect x="${w - joint + 2 - 6}" y="6" width="12" height="48" fill="#202225"/>
+          <rect x="${w - 34}" y="12" width="30" height="30" rx="2" fill="#1c2a38"/>
+          <rect x="8" y="14" width="${w - joint - 46}" height="16" rx="2" fill="#1c2a38"/>
+          <rect x="${w - joint + 14}" y="14" width="${joint - 60}" height="16" rx="2" fill="#1c2a38"/>
+          <rect x="0" y="36" width="${w}" height="6" fill="${stripe}"/>
+          <circle cx="${w * 0.2}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.2}" cy="56" r="3.5" fill="#bbb"/>
+          <circle cx="${w * 0.62}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.62}" cy="56" r="3.5" fill="#bbb"/>
+          <circle cx="${w * 0.93}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.93}" cy="56" r="3.5" fill="#bbb"/>`
+    : `
           <rect x="0" y="0" width="${w}" height="10" rx="4" fill="${roof}"/>
           <rect x="0" y="6" width="${w}" height="48" rx="6" fill="${color}"/>
           <rect x="10" y="14" width="${w - 34}" height="16" rx="2" fill="#1c2a38"/>
           <rect x="${w - 20}" y="12" width="16" height="30" rx="2" fill="#1c2a38"/>
           <rect x="0" y="36" width="${w}" height="6" fill="${stripe}"/>
           <circle cx="${w * 0.2}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.2}" cy="56" r="3.5" fill="#bbb"/>
-          <circle cx="${w * 0.8}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.8}" cy="56" r="3.5" fill="#bbb"/>
+          <circle cx="${w * 0.8}" cy="56" r="9" fill="#1b1b1b"/><circle cx="${w * 0.8}" cy="56" r="3.5" fill="#bbb"/>`;
+  return `
+    <button class="mn-card mn-bus" role="radio" aria-checked="${checked}" data-bus="${p.id}">
+      <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">${
+        p.kind === 'car'
+          ? AE86_ART
+          : `
+        <g transform="translate(${(220 - w) / 2},8)">${body}
         </g>`
       }
       </svg>
@@ -419,6 +472,7 @@ function placard(r: RouteDef, names: Map<string, string>, checked: boolean, targ
       </span>
       <span class="mn-placard-stops">${list.join(' · ')}</span>
       <span class="mn-placard-meta">${r.stops.length} paradas · ${(r.lengthM / 1000).toFixed(1)} km · ${r.blurb}</span>
+      ${r.system ? '<span class="mn-placard-tip">Carril exclusivo · Recomendado: Articulado</span>' : ''}
       <span class="mn-placard-goal" title="Plata para ganar cada estrella">${targetsText(targets)}</span>
     </button>`;
 }
@@ -446,6 +500,7 @@ function drawMap(canvas: HTMLCanvasElement, city: CityData, route: RouteDef, leg
   ctx.strokeStyle = '#b8b0a0';
   ctx.lineCap = 'round';
   for (const r of city.roads) {
+    ctx.strokeStyle = r.access ? '#d9a898' : '#b8b0a0';
     ctx.lineWidth = Math.max(1, r.width * k * 0.8);
     ctx.beginPath();
     r.points.forEach((p, i) => (i ? ctx.lineTo(X(p.x), Z(p.z)) : ctx.moveTo(X(p.x), Z(p.z))));

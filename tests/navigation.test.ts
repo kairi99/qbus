@@ -38,6 +38,8 @@ describe.each([
   it('builds routes whose every leg can be driven legally without silly detours', () => {
     for (const r of routes) {
       const stops = routeStops(city, r);
+      // Rapid-transit routes are driven by BRT vehicles: they may use busways.
+      const nav = new Navigator(graph, r.system ? 'brt' : 'general');
       for (let i = 0; i < stops.length; i++) {
         const a = stops[i];
         const b = stops[(i + 1) % stops.length];

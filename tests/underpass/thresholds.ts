@@ -2,11 +2,13 @@
 
 /** Drive-through (physics). */
 export const DRIVE = {
-  /** Vehicles and cruise speeds (km/h): a heavy bus slow and fast, the shortest bus, the car. */
+  /** Vehicles and cruise speeds (km/h): a heavy bus slow and fast, the shortest bus, the 18 m articulated bus, the car. */
   RUNS: [
     ['interparroquial', 35],
     ['interparroquial', 70],
     ['buseta', 60],
+    ['articulado', 35],
+    ['articulado', 60],
     ['ae86', 90],
   ] as const,
   /** Extra seconds over length / (cruise / 2). */
@@ -28,7 +30,7 @@ export const DRIVE = {
 export const TRAFFIC = {
   CARS: 40,
   SECONDS: 40,
-  SEEDS: [1, 2],
+  SEEDS: (process.env.QBUS_SEEDS ?? '1,2').split(',').map(Number),
   /** A car slower than 0.3 m/s on a lifted edge longer than this is stuck in the structure. */
   STUCK_S: 20,
   /** Body bottom vs the physical road under it (raycast), for driving cars on the structure (m). */

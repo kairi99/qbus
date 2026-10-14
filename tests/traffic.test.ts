@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateCity } from '../src/world/procCity';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { TrafficLights } from '../src/gameplay/trafficLights';
-import { TrafficSim, CAR_KINDS, RECYCLE_RADIUS, SPAWN_BEHIND_DIST, SPAWN_HIDDEN_DIST, type Obstacle, type TrafficEvent } from '../src/gameplay/traffic';
+import { TrafficSim, BRT_KIND, brtBusCount, CAR_KINDS, RECYCLE_RADIUS, SPAWN_BEHIND_DIST, SPAWN_HIDDEN_DIST, type Obstacle, type TrafficEvent } from '../src/gameplay/traffic';
 import { distToPolyline, pointInPolygon } from '../src/world/geom';
 import { forward, right, type Vec2 } from '../src/world/cityData';
 
@@ -245,4 +245,42 @@ describe('TrafficSim on La Mariscal (real map, one-way streets)', () => {
     expect(recycled).toBe(0);
     expect(waited).toBeGreaterThan(0);
   }, 60_000);
+
+  // The generated grid has no busway, so La Mariscal is the only city with busway buses.
+  it.each([1, 2, 3])('keeps busway buses on busways and ordinary cars clear of them (seed %i)', (seed) => {
+    const stations = real.stops.filter((x) => x.system);
+    const focus = { pos: stations[0].pos, heading: 0 };
+    const sim = new TrafficSim(g, real, { seed, count: 60, brt: brtBusCount(g), lights: realLights });
+    sim.recycle(focus, true);
+    const buses = sim.cars.filter((c) => c.kind === BRT_KIND);
+    expect(buses.length).toBeGreaterThan(0);
+    let touching = 0;
+    let off = 0;
+    let moving = 0;
+    let noseToNose = 0;
+    const facing = new Map<number, number>();
+    for (let t = 0; t < 180; t += DT) {
+      sim.step(DT, []);
+      // Visit the stations in turn, as the player's bus would, so the buses recycle around it.
+      if (Math.round(t / DT) % (20 * 30) === 0) focus.pos = stations[(Math.floor(t / 20) * 3 + seed) % stations.length].pos;
+      if (Math.round(t / DT) % 15 === 0) sim.recycle(focus);
+      for (const b of buses) {
+        if (b.state !== 'driving') continue;
+        if (!b.turn && g.edges[b.edge].access !== 'brt') off++;
+        if (b.speed > 1) moving++;
+        // Two busway buses meeting in opposite lanes (or at a junction) never wait on each other
+        // (a step's stale blocker aside: only a standoff lasting a second counts).
+        const o = b.blocker?.startsWith('car') ? sim.cars[+b.blocker.slice(3)] : null;
+        const f = o?.kind === BRT_KIND && b.speed < 0.1 && Math.cos(b.heading - o.heading) < -0.5 ? (facing.get(b.id) ?? 0) + DT : 0;
+        facing.set(b.id, f);
+        if (f > 1) noseToNose++;
+        for (const c of sim.cars) if (c.kind !== BRT_KIND && c.state === 'driving' && overlaps(pose(sim, b.id), pose(sim, c.id))) touching++;
+      }
+    }
+    expect(off).toBe(0);
+    expect(touching).toBe(0);
+    expect(noseToNose).toBe(0);
+    expect(moving).toBeGreaterThan(0);
+    for (const c of sim.cars) if (c.kind !== BRT_KIND && c.state === 'driving' && !c.turn) expect(g.edges[c.edge].access).toBe('general');
+  }, 90_000);
 });
