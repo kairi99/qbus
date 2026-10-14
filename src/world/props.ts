@@ -52,6 +52,14 @@ function fruitStandSpec(): KindSpec {
   return { geometry: mb.build(), collider: () => RAPIER.ColliderDesc.cuboid(1, h, 0.55), halfHeight: h, mass: 40 };
 }
 
+interface Group {
+  mesh: THREE.InstancedMesh;
+  bodies: RAPIER.RigidBody[];
+  origins: THREE.Vector3[];
+  knocked: boolean[];
+  dirty: boolean;
+}
+
 /** Props are drawn in tiles this big (m), so the shadow pass only redraws the ones near the bus. */
 const TILE = 600;
 
@@ -60,13 +68,13 @@ const TILE = 600;
  * bus hits one; each kind renders as one InstancedMesh per tile of the city.
  */
 export class PropSystem {
-  private groups: { mesh: THREE.InstancedMesh; bodies: RAPIER.RigidBody[]; origins: THREE.Vector3[]; knocked: boolean[] }[] = [];
+  private groups: Group[] = [];
   private m = new THREE.Matrix4();
   private p = new THREE.Vector3();
   private q = new THREE.Quaternion();
   private one = new THREE.Vector3(1, 1, 1);
 
-  constructor(world: RAPIER.World, scene: THREE.Scene, city: CityData) {
+  constructor(private world: RAPIER.World, scene: THREE.Scene, city: CityData) {
     const specs: Record<PropKind, KindSpec> = { cone: coneSpec(), trashcan: trashcanSpec(), fruitStand: fruitStandSpec() };
     const material = vertexColorMaterial();
     for (const kind of Object.keys(specs) as PropKind[]) {
@@ -94,7 +102,9 @@ export class PropSystem {
         const mesh = new THREE.InstancedMesh(spec.geometry, material, bodies.length);
         mesh.castShadow = true;
         const origins = bodies.map((b) => new THREE.Vector3().copy(b.translation()));
-        this.groups.push({ mesh, bodies, origins, knocked: bodies.map(() => false) });
+        const g: Group = { mesh, bodies, origins, knocked: bodies.map(() => false), dirty: false };
+        bodies.forEach((b, i) => this.slotOf.set(b.handle, { g, i }));
+        this.groups.push(g);
         scene.add(mesh);
       }
     }
@@ -107,37 +117,58 @@ export class PropSystem {
 
   /** Number of props that have been shoved off their spot since the last call. */
   consumeKnocked(): number {
-    let n = 0;
-    for (const g of this.groups) {
-      g.bodies.forEach((b, i) => {
-        if (g.knocked[i] || b.isSleeping()) return;
-        const t = b.translation();
-        const o = g.origins[i];
-        if (Math.hypot(t.x - o.x, t.y - o.y, t.z - o.z) > 0.4) {
-          g.knocked[i] = true;
-          n++;
-        }
-      });
-    }
-    return n;
+    this.knockedNow = 0;
+    // Only awake bodies can have moved: Rapier lists them, so the ~2000 sleeping props cost nothing.
+    this.world.forEachActiveRigidBody(this.checkKnocked);
+    return this.knockedNow;
   }
 
   /** Copies awake bodies into instance matrices (all of them when `force`). */
   sync(force = false): void {
-    for (const { mesh, bodies } of this.groups) {
-      let dirty = false;
-      bodies.forEach((b, i) => {
-        if (!force && b.isSleeping()) return;
-        const tr = b.translation();
-        const r = b.rotation();
-        this.m.compose(this.p.set(tr.x, tr.y, tr.z), this.q.set(r.x, r.y, r.z, r.w), this.one);
-        mesh.setMatrixAt(i, this.m);
-        dirty = true;
-      });
-      if (!dirty) continue;
-      mesh.instanceMatrix.needsUpdate = true;
-      // Culling uses the instances' bounds: keep them around a prop that flew off.
-      mesh.computeBoundingSphere();
+    if (force) {
+      for (const g of this.groups) {
+        g.bodies.forEach((b, i) => this.place(g, i, b));
+        this.finish(g);
+      }
+      return;
     }
+    this.world.forEachActiveRigidBody(this.syncActive);
+    for (const g of this.groups) {
+      if (!g.dirty) continue;
+      g.dirty = false;
+      this.finish(g);
+    }
+  }
+
+  private knockedNow = 0;
+  private slotOf = new Map<number, { g: Group; i: number }>();
+  private checkKnocked = (b: RAPIER.RigidBody): void => {
+    const slot = this.slotOf.get(b.handle);
+    if (!slot || slot.g.knocked[slot.i]) return;
+    const t = b.translation();
+    const o = slot.g.origins[slot.i];
+    if (Math.hypot(t.x - o.x, t.y - o.y, t.z - o.z) > 0.4) {
+      slot.g.knocked[slot.i] = true;
+      this.knockedNow++;
+    }
+  };
+  private syncActive = (b: RAPIER.RigidBody): void => {
+    const slot = this.slotOf.get(b.handle);
+    if (!slot) return;
+    this.place(slot.g, slot.i, b);
+    slot.g.dirty = true;
+  };
+
+  private place(g: Group, i: number, b: RAPIER.RigidBody): void {
+    const tr = b.translation();
+    const r = b.rotation();
+    this.m.compose(this.p.set(tr.x, tr.y, tr.z), this.q.set(r.x, r.y, r.z, r.w), this.one);
+    g.mesh.setMatrixAt(i, this.m);
+  }
+
+  private finish(g: Group): void {
+    g.mesh.instanceMatrix.needsUpdate = true;
+    // Culling uses the instances' bounds: keep them around a prop that flew off.
+    g.mesh.computeBoundingSphere();
   }
 }
