@@ -161,7 +161,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     if (raw > 0) fps += (1 / raw - fps) * 0.05;
     session.adaptTraffic(fps, dt);
     // Skip frames after a stall (tab switch, loading): they say nothing about the GPU.
-    if (adaptive && raw > 0 && raw < 0.25 && quality.update(fps, raw)) {
+    if (adaptive && raw > 0 && raw < 1 && quality.update(fps, raw)) {
       renderer.setPixelRatio(maxRatio * scaleAt(quality.level));
       resize();
       if (quality.shadowsLow && sun.shadow.mapSize.x > 1024) {
