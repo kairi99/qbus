@@ -257,6 +257,8 @@ describe('TrafficSim on La Mariscal (real map, one-way streets)', () => {
     let touching = 0;
     let off = 0;
     let moving = 0;
+    let noseToNose = 0;
+    const facing = new Map<number, number>();
     for (let t = 0; t < 180; t += DT) {
       sim.step(DT, []);
       // Visit the stations in turn, as the player's bus would, so the buses recycle around it.
@@ -266,11 +268,18 @@ describe('TrafficSim on La Mariscal (real map, one-way streets)', () => {
         if (b.state !== 'driving') continue;
         if (!b.turn && g.edges[b.edge].access !== 'brt') off++;
         if (b.speed > 1) moving++;
+        // Two busway buses meeting in opposite lanes (or at a junction) never wait on each other
+        // (a step's stale blocker aside: only a standoff lasting a second counts).
+        const o = b.blocker?.startsWith('car') ? sim.cars[+b.blocker.slice(3)] : null;
+        const f = o?.kind === BRT_KIND && b.speed < 0.1 && Math.cos(b.heading - o.heading) < -0.5 ? (facing.get(b.id) ?? 0) + DT : 0;
+        facing.set(b.id, f);
+        if (f > 1) noseToNose++;
         for (const c of sim.cars) if (c.kind !== BRT_KIND && c.state === 'driving' && overlaps(pose(sim, b.id), pose(sim, c.id))) touching++;
       }
     }
     expect(off).toBe(0);
     expect(touching).toBe(0);
+    expect(noseToNose).toBe(0);
     expect(moving).toBeGreaterThan(0);
     for (const c of sim.cars) if (c.kind !== BRT_KIND && c.state === 'driving' && !c.turn) expect(g.edges[c.edge].access).toBe('general');
   }, 90_000);

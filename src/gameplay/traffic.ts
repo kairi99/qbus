@@ -327,6 +327,10 @@ export class TrafficSim {
       if (standoff && car.id < other.id) continue;
       const of = forward(o.heading);
       const or = right(o.heading);
+      // Busway buses only go straight on, each in its own direction's lane: an oncoming one is in
+      // the other lane, never in the way (its box, widened by the clearance cars keep from it,
+      // would reach over the lane line and leave both buses waiting nose to nose).
+      if (car.kind === BRT_KIND && other?.kind === BRT_KIND && dot(forward(car.heading), of) < -0.5) continue;
       if (car.kind === BRT_KIND && other && other.kind !== BRT_KIND) {
         // An 18 m bus has a body behind its center that its forward path never covers: with
         // someone already alongside it (a street running beside the busway), wait for them to clear.
@@ -530,8 +534,12 @@ export class TrafficSim {
     // One stream at a time: only cars from the same incoming edge share a junction, and never
     // two from different lanes merging into the same exit lane. A car that claimed its turn
     // and then got a red light gives it up until its green.
-    if (pri && pri.car !== car.id && pri.edge !== e.id && (this.lights?.state(pri.edge, this.time) ?? 'green') === 'green') return false;
-    for (const o of this.occupants.get(e.to)?.values() ?? []) {
+    const brt = car.kind === BRT_KIND;
+    if (pri && pri.car !== car.id && pri.edge !== e.id && !(brt && this.straight(e.id, car.next) && this.parallel(e.id, pri.edge)) && (this.lights?.state(pri.edge, this.time) ?? 'green') === 'green') return false;
+    for (const [id, o] of this.occupants.get(e.to) ?? []) {
+      // A busway bus going straight shares the junction with straight movements alongside it
+      // (the avenue's lanes beside the busway, the oncoming bus): their paths never cross.
+      if ((brt || this.cars[id >= TAIL ? id - TAIL : id]?.kind === BRT_KIND) && this.straight(e.id, car.next) && this.straight(o.from, o.next) && this.parallel(e.id, o.from)) continue;
       if (o.from !== e.id) return false;
       if (o.lane !== car.lane && o.next === car.next && o.nextLane === car.nextLane) return false;
     }
@@ -550,6 +558,16 @@ export class TrafficSim {
     for (const o of external)
       if (Math.hypot(o.pos.x - exit.x, o.pos.z - exit.z) < o.length / 2 + 3 && (o.lift === undefined || Math.abs(o.lift - exitLift) <= LEVEL_SEP)) return false;
     return true;
+  }
+
+  /** Driving from edge `from` into `next` keeps (nearly) straight on. */
+  private straight(from: number, next: number): boolean {
+    return next >= 0 && dot(this.graph.edges[from].endDir, this.graph.edges[next].dir) > 0.9;
+  }
+
+  /** Two approaches run along the same axis (same way or opposite). */
+  private parallel(a: number, b: number): boolean {
+    return Math.abs(dot(this.graph.edges[a].endDir, this.graph.edges[b].endDir)) > 0.9;
   }
 
   private reserve(car: Car, node: number, fromEdge: number): void {
