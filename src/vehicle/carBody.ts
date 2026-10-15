@@ -132,7 +132,8 @@ export function carCockpit(preset: BusPreset): { parts: THREE.Object3D[]; wheelM
   parts.push(box(2.6, 0.04, W * 0.9, x1 - 2.5, floor + 0.12, 0, flat('#1d1d1f')));
   const wheelMount = new THREE.Group();
   wheelMount.position.set(x1 - 1.66, belt + 0.02, -w * 0.43);
-  wheelMount.rotation.z = -0.35;
-  wheelMount.rotation.y = Math.PI / 2;
+  // Face the driver, then rake back (about the cross axis: in the default XYZ order the rake
+  // would spin the wheel in its own plane, off center at rest).
+  wheelMount.rotation.set(0, Math.PI / 2, -0.35, 'ZYX');
   return { parts, wheelMount };
 }

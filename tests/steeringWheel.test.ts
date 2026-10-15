@@ -26,7 +26,8 @@ describe('steering wheel', () => {
   // Positive wheel steering turns the vehicle left (toward -z); seen from the seat the steering
   // wheel then turns counterclockwise, its top moving left.
   for (const id of ['popular', 'articulado', 'ae86'])
-    it(`${id}: turns counterclockwise to steer left`, () => {
+    it(`${id}: upright when straight, counterclockwise to steer left`, () => {
+      expect(Math.abs(wheelTopZ(id, 0))).toBeLessThan(0.01);
       expect(wheelTopZ(id, 0.3)).toBeLessThan(-0.05);
       expect(wheelTopZ(id, -0.3)).toBeGreaterThan(0.05);
     });

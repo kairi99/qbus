@@ -10,6 +10,30 @@ const flat = (color: THREE.ColorRepresentation) => new THREE.MeshLambertMaterial
  * space (+X forward). The exterior is hidden in cockpit view and replaced by a dashboard +
  * window frame so the camera can sit inside.
  */
+/**
+ * A steering wheel in its own XY plane (it turns about z): rim, hub, three spokes (left, right,
+ * down) and a yellow mark at the top. A bare ring's facets alias as it spins, so it can seem to
+ * turn the wrong way; the spokes and the mark show which way it turns.
+ */
+function steeringWheel(r: number): THREE.Group {
+  const dark = flat('#111');
+  const wheel = new THREE.Group();
+  wheel.add(new THREE.Mesh(new THREE.TorusGeometry(r, 0.03, 6, 16), dark));
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.28, r * 0.28, 0.05, 10), dark);
+  hub.rotation.x = Math.PI / 2;
+  wheel.add(hub);
+  for (const a of [0, Math.PI, -Math.PI / 2]) {
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(r, 0.035, 0.025), dark);
+    spoke.position.set((Math.cos(a) * r) / 2, (Math.sin(a) * r) / 2, 0);
+    spoke.rotation.z = a;
+    wheel.add(spoke);
+  }
+  const mark = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.07), flat('#f2c230'));
+  mark.position.set(0, r, 0);
+  wheel.add(mark);
+  return wheel;
+}
+
 export class BusModel {
   readonly root = new THREE.Group();
   private exterior = new THREE.Group();
@@ -52,7 +76,7 @@ export class BusModel {
     (this.rearGroup ?? this.exterior).add(this.flames);
 
     // Cockpit: dashboard, pillars, roof edge and steering wheel seen from the driver seat.
-    this.steeringWheel = new THREE.Mesh(new THREE.TorusGeometry(car ? 0.18 : 0.22, 0.03, 6, 16), flat('#111'));
+    this.steeringWheel = steeringWheel(car ? 0.18 : 0.22);
     if (car) {
       const { parts, wheelMount } = carCockpit(preset);
       wheelMount.add(this.steeringWheel);
@@ -208,8 +232,9 @@ export class BusModel {
     }
     const wheelMount = new THREE.Group();
     wheelMount.position.set(L / 2 - 0.9, 0.55, -W / 2 + 0.75);
-    wheelMount.rotation.z = -0.5;
-    wheelMount.rotation.y = Math.PI / 2;
+    // Face the driver, then rake back (about the cross axis: in the default XYZ order the rake
+    // would spin the wheel in its own plane, off center at rest).
+    wheelMount.rotation.set(0, Math.PI / 2, -0.5, 'ZYX');
     wheelMount.add(this.steeringWheel);
     this.cockpit.add(wheelMount);
   }
