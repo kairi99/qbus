@@ -1,7 +1,8 @@
 import { Rng } from '../core/rng';
 import type { CityData, Vec2 } from '../world/cityData';
 import { forward, right, stopZone } from '../world/cityData';
-import { type LaneEdge, type RoadGraph, edgeDir, edgeLift, laneOffset, lanePoint, projectOnPath } from '../world/roadGraph';
+import { type LaneEdge, type RoadGraph, edgeDir, edgeLift, laneOffset, lanePoint, pointAt, projectOnPath } from '../world/roadGraph';
+import { pointInPolygon } from '../world/geom';
 import type { TrafficLights } from './trafficLights';
 
 export interface CarKind {
@@ -105,6 +106,8 @@ export interface Car {
   dwell: number;
   /** Busway bus: the junction its tail is still crossing (kept reserved until it is clear). */
   tail: number | null;
+  /** Busway bus: a junction its busway runs through without meeting it, claimed until its tail is out (`Crossing`). */
+  crossing: Crossing | null;
   /** Busway bus: the station (edge and distance along it) it last stopped at, so it leaves it behind. */
   served: number;
   /** Bumped every time the car is placed somewhere new, so the physics body knows to snap. */
@@ -134,6 +137,26 @@ const AMBER_DECEL = 3.5;
 const EXIT_CLEAR = 9;
 /** Offset for the phantom junction claim a long bus's tail keeps (car ids stay below it). */
 const TAIL = 100000;
+/** Movements sharing a junction side by side keep their paths this far apart (bus and buseta half widths, a margin)... */
+const SIDE_CLEAR = 2.55 / 2 + 2.3 / 2 + 0.4;
+/** ...over this much of their way out of it. */
+const SIDE_REACH = 20;
+/** Occupant ids of busway buses running through a junction their busway doesn't meet (`Crossing`). */
+const PASS = 200000;
+
+/**
+ * A junction a busway edge runs through without meeting it (OSM draws the busway across a side
+ * street's junction with the avenue beside it, with no shared node): `s0`–`s1` along the edge is
+ * inside its paved area, heading `dir`. A busway bus claims it like any junction, so a car turning
+ * there never drives into the side of an 18 m bus.
+ */
+interface Crossing {
+  node: number;
+  edge: number;
+  s0: number;
+  s1: number;
+  dir: Vec2;
+}
 
 const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.z * b.z;
 const sameDir = (a: Vec2, b: Vec2) => dot(a, b) > 0.7;
@@ -151,7 +174,7 @@ export class TrafficSim {
   private lights: TrafficLights | null;
   private rng: Rng;
   /** Per junction: cars inside it, where each came from and where it's going. */
-  private occupants = new Map<number, Map<number, { from: number; lane: number; next: number; nextLane: number }>>();
+  private occupants = new Map<number, Map<number, { from: number; lane: number; next: number; nextLane: number; dir?: Vec2 }>>();
   private priority = new Map<number, { car: number; edge: number }>();
   private humps: number[][];
   /** Lanes ordinary cars spawn on / busway buses spawn on. */
@@ -159,6 +182,9 @@ export class TrafficSim {
   private brtEdges: LaneEdge[];
   /** Per edge, distances along it where a busway bus stops at a station (busway lanes only). */
   private stations: number[][];
+  private apartCache = new Map<string, boolean>();
+  /** Per edge, the junctions it runs through without meeting (busway lanes only). */
+  private crossings: Crossing[][];
   /** Where the bus was last seen; cars leaving the map re-enter out of its sight. */
   private focus: { pos: Vec2; heading: number } = { pos: { x: 0, z: 0 }, heading: 0 };
 
@@ -190,6 +216,7 @@ export class TrafficSim {
       }
     }
     for (const list of this.stations) list.sort((a, b) => a - b);
+    this.crossings = graph.edges.map((e) => (e.access === 'brt' ? crossingsOf(graph, e) : []));
     const kinds = Object.values(CAR_KINDS);
     const total = opts.count + (this.brtEdges.length ? (opts.brt ?? 0) : 0);
     for (let i = 0; i < total; i++) {
@@ -219,6 +246,7 @@ export class TrafficSim {
         held: false,
         dwell: 0,
         tail: null,
+        crossing: null,
         served: -1,
         generation: 0,
       };
@@ -393,6 +421,7 @@ export class TrafficSim {
       if (!exiting) vTarget = Math.min(vTarget, Math.sqrt(this.turnSpeed(car) ** 2 + 2 * DECEL * remaining));
       if (car.kind === BRT_KIND) {
         vTarget = Math.min(vTarget, this.station(car, e, dt));
+        vTarget = Math.min(vTarget, this.passThrough(car, e, dt));
         if (exiting) {
           // A busway that ends: stop with the nose at the end (18 m must not hang over the street
           // it meets) and, once out of sight, go back into service elsewhere.
@@ -537,9 +566,16 @@ export class TrafficSim {
     const brt = car.kind === BRT_KIND;
     if (pri && pri.car !== car.id && pri.edge !== e.id && !(brt && this.straight(e.id, car.next) && this.parallel(e.id, pri.edge)) && (this.lights?.state(pri.edge, this.time) ?? 'green') === 'green') return false;
     for (const [id, o] of this.occupants.get(e.to) ?? []) {
+      // A busway bus running through without meeting the junction: only straight movements
+      // alongside it share it.
+      if (id >= PASS) {
+        const x = this.cars[id - PASS]?.crossing;
+        if (x && this.straight(e.id, car.next) && Math.abs(dot(e.endDir, o.dir!)) > 0.9 && this.clearOf(car.next, car.nextLane, 0, SIDE_REACH, x.edge, 0)) continue;
+        return false;
+      }
       // A busway bus going straight shares the junction with straight movements alongside it
       // (the avenue's lanes beside the busway, the oncoming bus): their paths never cross.
-      if ((brt || this.cars[id >= TAIL ? id - TAIL : id]?.kind === BRT_KIND) && this.straight(e.id, car.next) && this.straight(o.from, o.next) && this.parallel(e.id, o.from)) continue;
+      if ((brt || this.cars[id >= TAIL ? id - TAIL : id]?.kind === BRT_KIND) && this.straight(e.id, car.next) && this.straight(o.from, o.next) && this.parallel(e.id, o.from) && this.clearOf(car.next, car.nextLane, 0, SIDE_REACH, o.next, o.nextLane)) continue;
       if (o.from !== e.id) return false;
       if (o.lane !== car.lane && o.next === car.next && o.nextLane === car.nextLane) return false;
     }
@@ -565,6 +601,26 @@ export class TrafficSim {
     return next >= 0 && dot(this.graph.edges[from].endDir, this.graph.edges[next].dir) > 0.9;
   }
 
+  /**
+   * Lane `la` of edge `a`, from `s0` to `s1` along it, keeps clear of lane `lb` of edge `b` by a
+   * busway bus's and a car's half widths: two straight movements alongside each other only share
+   * a junction if their paths really are apart (a busway leaving a junction a lane's width from
+   * the avenue beside it is not: an 18 m bus covers the avenue's near lane as it straightens out).
+   */
+  private clearOf(a: number, la: number, s0: number, s1: number, b: number, lb: number): boolean {
+    if (a < 0 || b < 0) return true;
+    const key = `${a}:${la}:${s0}:${s1}:${b}:${lb}`;
+    let v = this.apartCache.get(key);
+    if (v === undefined) {
+      const ea = this.graph.edges[a];
+      const pb = this.graph.edges[b].lanePaths[Math.min(lb, this.graph.edges[b].lanes - 1)];
+      v = true;
+      for (let s = s0; s <= Math.min(s1, ea.len) && v; s += 2) if (projectOnPath(pb, lanePoint(ea, s, la)).d < SIDE_CLEAR) v = false;
+      this.apartCache.set(key, v);
+    }
+    return v;
+  }
+
   /** Two approaches run along the same axis (same way or opposite). */
   private parallel(a: number, b: number): boolean {
     return Math.abs(dot(this.graph.edges[a].endDir, this.graph.edges[b].endDir)) > 0.9;
@@ -581,11 +637,48 @@ export class TrafficSim {
 
   private unreserve(car: Car): void {
     this.clearTail(car);
+    this.clearCrossing(car);
     if (car.reserved !== null) this.occupants.get(car.reserved)?.delete(car.id);
     if (car.reserved !== null && this.priority.get(car.reserved)?.car === car.id) this.priority.delete(car.reserved);
     for (const [node, p] of this.priority) if (p.car === car.id) this.priority.delete(node);
     car.reserved = null;
     car.turn = null;
+  }
+
+  /**
+   * Speed limit for a busway bus from the junctions its busway runs through without meeting
+   * (`Crossing`): it claims the next one ahead once nothing but straight traffic alongside is in
+   * it, and stops short of it until then; the claim lapses when its tail is out.
+   */
+  private passThrough(car: Car, e: LaneEdge, dt: number): number {
+    const half = car.kind.length / 2;
+    const x = car.crossing;
+    if (x && (x.edge !== e.id || car.s - half > x.s1 + 1)) this.clearCrossing(car);
+    if (car.crossing) return Infinity;
+    const front = car.s + half;
+    const next = this.crossings[e.id].find((c) => c.s1 > car.s - half);
+    if (!next || next.s0 - front > Math.max(8, (car.speed * car.speed) / (2 * BRT_DECEL) + 4)) return Infinity;
+    // Already in it (just placed, or it couldn't stop): claim it all the same.
+    const free =
+      front > next.s0 - 0.5 ||
+      [...(this.occupants.get(next.node) ?? [])].every(([id, o]) =>
+        id >= PASS ? Math.abs(dot(o.dir!, next.dir)) > 0.9 : this.straight(o.from, o.next) && Math.abs(dot(this.graph.edges[o.from].endDir, next.dir)) > 0.9 && this.clearOf(o.next, o.nextLane, 0, SIDE_REACH, e.id, car.lane),
+      );
+    if (!free) {
+      if (car.speed < 0.5) car.wait += dt;
+      return Math.sqrt(2 * BRT_DECEL * Math.max(0, next.s0 - front - 1));
+    }
+    let occ = this.occupants.get(next.node);
+    if (!occ) this.occupants.set(next.node, (occ = new Map()));
+    occ.set(PASS + car.id, { from: e.id, lane: car.lane, next: e.id, nextLane: car.lane, dir: next.dir });
+    car.crossing = next;
+    return Infinity;
+  }
+
+  private clearCrossing(car: Car): void {
+    if (!car.crossing) return;
+    this.occupants.get(car.crossing.node)?.delete(PASS + car.id);
+    car.crossing = null;
   }
 
   /** A busway bus's tail has left the junction (or the bus was moved): other streams may enter. */
@@ -794,4 +887,27 @@ function sampleCurve(turn: Turn, t: number): [Vec2, number] {
   const seg = turn.cum[i] - turn.cum[i - 1] || 1;
   const u = Math.min(1, Math.max(0, (t - turn.cum[i - 1]) / seg));
   return [{ x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u }, Math.atan2(-(b.z - a.z), b.x - a.x)];
+}
+
+/** The junctions a busway edge's lane runs through without meeting them (see `Crossing`). */
+function crossingsOf(graph: RoadGraph, e: LaneEdge): Crossing[] {
+  const out: Crossing[] = [];
+  const path = e.lanePaths[0];
+  const box = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
+  for (const p of path.pts) (box.x0 = Math.min(box.x0, p.x)), (box.x1 = Math.max(box.x1, p.x)), (box.z0 = Math.min(box.z0, p.z)), (box.z1 = Math.max(box.z1, p.z));
+  for (const n of graph.nodes) {
+    if (!n.junction || !n.hull || n.id === e.from || n.id === e.to) continue;
+    if (n.hull.every((q) => q.x < box.x0 - 1 || q.x > box.x1 + 1 || q.z < box.z0 - 1 || q.z > box.z1 + 1)) continue;
+    let s0 = -1;
+    let s1 = -1;
+    for (let s = 0; s <= path.len; s += 1)
+      if (pointInPolygon(pointAt(path, s), n.hull)) {
+        if (s0 < 0) s0 = s;
+        s1 = s;
+      }
+    // (Near the edge's ends the busway is in its own junctions' paved area.)
+    if (s0 < 0 || s0 < 12 || s1 > path.len - 12) continue;
+    out.push({ node: n.id, edge: e.id, s0, s1, dir: edgeDir(e, (s0 + s1) / 2) });
+  }
+  return out.sort((a, b) => a.s0 - b.s0);
 }

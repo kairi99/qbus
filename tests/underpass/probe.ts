@@ -52,9 +52,9 @@ export function surfaceBelow(world: RAPIER_T.World, p: Vec2, top: number, reach 
 }
 
 /** Distance to the first static hit along a horizontal ray, or null. */
-export function rayDistance(world: RAPIER_T.World, from: { x: number; y: number; z: number }, dir: Vec2, reach: number): { d: number; shape: number } | null {
-  const hit = world.castRay(new RAPIER.Ray(from, { x: dir.x, y: 0, z: dir.z }), reach, false, undefined, STATIC_ONLY);
-  return hit ? { d: hit.timeOfImpact, shape: hit.collider.shapeType() } : null;
+export function rayDistance(world: RAPIER_T.World, from: { x: number; y: number; z: number }, dir: Vec2, reach: number): { d: number; shape: number; ny: number } | null {
+  const hit = world.castRayAndGetNormal(new RAPIER.Ray(from, { x: dir.x, y: 0, z: dir.z }), reach, false, undefined, STATIC_ONLY);
+  return hit ? { d: hit.timeOfImpact, shape: hit.collider.shapeType(), ny: hit.normal.y } : null;
 }
 
 export const fmt = (p: { x: number; z: number; y?: number }) => `(${p.x.toFixed(1)}, ${p.z.toFixed(1)}${p.y !== undefined ? `, y ${p.y.toFixed(2)}` : ''})`;

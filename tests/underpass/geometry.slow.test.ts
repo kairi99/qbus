@@ -35,13 +35,13 @@ known({
     "1 found: surface off the graph height by 0.29 m on e276 Av. 10 de Agosto lane 2 at (-202.9, -792.2, y 20.40)",
   "road surface has no lips, holes or height mismatches cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564]":
     "3 found: surface off the graph height by 0.35 m on e564 Av. 10 de Agosto lane 0 at (-210.1, -805.0, y 21.32); surface off the graph height by -0.87 m on e564 Av. 10 de Agosto lane 2 at (-204.3, -800.1, y 21.40)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e523]":
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): sin nombre [e585→e523]":
     "6 found: lip 0.15 m at (-4.3, 700.4, y 16.01); lip 0.08 m at (-4.8, 700.6, y 15.86)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): Av. 12 de Octubre [e586→e156]":
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): Av. 12 de Octubre [e586→e156]":
     "8 found: lip 0.06 m at (-2.1, 705.1, y 16.03); lip 0.15 m at (-2.1, 705.1, y 16.03)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): sin nombre [e588→e160]":
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): sin nombre [e588→e160]":
     "8 found: lip 0.06 m at (-127.7, 792.8, y 22.39); lip 0.09 m at (-127.2, 792.6, y 22.43)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-43,733): Av. 12 de Octubre [e589→e241]":
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): Av. 12 de Octubre [e589→e241]":
     "10 found: surface off the graph height by 0.43 m on e589 Av. 12 de Octubre lane 1 at (-115.3, 776.9, y 20.57); lip 0.06 m at (-128.2, 789.3, y 22.50)",
   "road surface has no lips, holes or height mismatches cut José Riofrío @(-867,851): sin nombre [e297→e297]":
     "2 found: lip 0.13 m at (-788.8, 830.0, y 25.88); lip 0.12 m at (-788.4, 829.8, y 25.76)",
@@ -183,6 +183,9 @@ for (const st of structures.filter((x) => x.passages.length))
                   const o = { x: q.x, y: y + h, z: q.z };
                   const phys = rayDistance(built.world, o, { x: dx, z: dz }, GEOMETRY.SIDE_REACH);
                   if (phys && SMALL_SOLIDS.has(phys.shape)) continue;
+                  // A level ray grazing ground that rises to its height (a floor, not a wall) can
+                  // hit the collider and miss the drawn surface by millimeters: not a wall.
+                  if (phys && Math.abs(phys.ny) > 0.9) continue;
                   const drawn = soup.ray(o, { x: dx, y: 0, z: dz }, GEOMETRY.SIDE_REACH);
                   const where = `e${edge} lane ${k} s ${s.toFixed(0)} ${h} m up looking ${side} from ${fmt({ ...q, y })}`;
                   if (drawn !== null && (phys === null || phys.d > drawn + tol)) found.push(`drawn but not solid: ${where}: drawn at ${drawn.toFixed(2)} m, solid ${phys ? `${phys.d.toFixed(2)} m` : 'none'}`);

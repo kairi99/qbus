@@ -2,13 +2,14 @@ import { Rng } from '../../core/rng';
 import type { Building, CityData, Feature, Horizon, Prop, Road, Stop, TrafficSignal, Vec2 } from '../cityData';
 import { forward, inPlayArea, right, stopZone } from '../cityData';
 import { distToPolyline, pointInPolygon, polygonToPolylineDistance } from '../geom';
-import { type Terrain, smoothHeights } from '../terrain';
+import { type Terrain, smoothHeights, terrainHeight } from '../terrain';
 import { buildRoadGraph, dirAt, edgeAllows, projectOnPath } from '../roadGraph';
 import { importLines } from './lines';
 import { importStations, widenMedians } from './stations';
 import { importCampuses } from './campus';
 import { BUSWAY_NAME, buswayWidth, clearBusways, clipBusways, generalRoads, isBusway } from './busways';
 import { CLEARANCE, type Level, separateGrades } from './grades';
+import { clearCuts } from './cutClearance';
 import { liftAlong, projectOnRoad } from '../elevation';
 
 /** Subset of the Overpass JSON (`out geom;`) we use. */
@@ -171,6 +172,9 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
       ({ roads, crossings } = next);
     }
   }
+  // Streets alongside a cut make room for it (OSM draws a divided avenue's carriageways closer
+  // than our widths: a street hanging over the cut).
+  roads = clearCuts(roads, busways);
   roads = [...roads, ...clipBusways(busways, roads)];
   for (const c of crossings)
     if (c.gap < CLEARANCE * 0.8) console.warn(`grade crossing squeezed to ${c.gap.toFixed(1)} m: ${roads[c.upper].name} over ${roads[c.lower].name}`);
@@ -180,6 +184,9 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
     .map((n) => n.hull!);
   const onJunction = (p: Vec2) => hulls.some((h) => pointInPolygon(p, h));
   const { terrain, base } = buildTerrain(dem, proj.toLatLon, bounds, roads, opts);
+  // Ramps that still arrive below a junction (no room to level them) get the ground around
+  // their mouth lowered to meet them instead of a step and a trench inside the junction.
+  roads = dipMouths(terrain, roads, playBox);
   const far = extra.horizonDem;
   const horizon = far ? buildHorizon(far, proj.toLatLon, base) : undefined;
   const landmarks = far
@@ -342,6 +349,70 @@ function rampsIntoJunctions(roads: Road[]): Level[] {
     }
   }
   return out;
+}
+
+/** The ground around a ramp's mouth is lowered at full depth this far from it... */
+const DIP_FULL = 12;
+/** ...and eases back to the surrounding ground by this far (about 6% for a 1 m dip). */
+const DIP_REACH = 30;
+/** Deeper than the ramp at the paved area's edge, so the ramp meets the ground (and its walls end) a little before it. */
+const DIP_EXTRA = 0.5;
+
+/**
+ * Where a ramp out of an underpass still arrives below a street-level junction (the graph merges
+ * junctions and trims roads back further than the ramp had room to climb: 12 de Octubre's N→S
+ * link onto Queseras arrives a meter down, leveling it would cost a 16% V), the junction comes
+ * down to meet it, as a real street does at a tunnel mouth: the terrain around the mouth is
+ * lowered by the ramp's depth there (full within DIP_FULL, easing out by DIP_REACH), and every
+ * road with a lift profile nearby is compensated so its own height doesn't move (the ramp, a
+ * deck), except where that would now put a ramp above the lowered ground: there it follows the
+ * ground. Streets, sidewalks and the junction drape over the terrain, so they dip with it.
+ * Measured on the import's terrain (scale 1): with `?hills=` other than 1 the dip scales with
+ * the relief and the mouth is off by the difference.
+ */
+function dipMouths(t: Terrain, roads: Road[], playBox: Pick<CityData, 'playArea'>): Road[] {
+  const mouths: { at: Vec2; depth: number }[] = [];
+  for (const { road, area } of rampsIntoJunctions(roads)) {
+    const r = roads[road];
+    if (!r.lift) continue;
+    // Where the ramp enters the paved area, and how far down it is there.
+    let entry: { at: Vec2; depth: number } | null = null;
+    for (let i = 0; i < r.points.length; i++) {
+      const p = r.points[i];
+      if (!pointInPolygon(p, area) || !inPlayArea(playBox, p)) continue;
+      const depth = -r.lift[i];
+      if (depth > 0.3 && (!entry || depth > entry.depth)) entry = { at: p, depth: depth + DIP_EXTRA };
+    }
+    if (entry && !mouths.some((m) => Math.hypot(m.at.x - entry!.at.x, m.at.z - entry!.at.z) < DIP_FULL)) mouths.push(entry);
+  }
+  if (!mouths.length) return roads;
+  for (const m of mouths) console.warn(`ground lowered ${m.depth.toFixed(2)} m around a ramp's mouth at (${m.at.x.toFixed(0)}, ${m.at.z.toFixed(0)})`);
+  const dip = (p: Vec2) => {
+    let d = 0;
+    for (const m of mouths) {
+      const k = Math.max(0, Math.min(1, (DIP_REACH - Math.hypot(p.x - m.at.x, p.z - m.at.z)) / (DIP_REACH - DIP_FULL)));
+      d = Math.max(d, m.depth * k * k * (3 - 2 * k));
+    }
+    return d;
+  };
+  const before = { ...t, heights: t.heights.slice() };
+  for (let r = 0; r < t.rows; r++)
+    for (let c = 0; c < t.cols; c++) {
+      const d = dip({ x: t.minX + c * t.cell, z: t.minZ + r * t.cell });
+      if (d > 0) t.heights[r * t.cols + c] -= d;
+    }
+  return roads.map((r) => {
+    if (!r.lift) return r;
+    let changed = false;
+    const lift = r.lift.map((l, i) => {
+      const p = r.points[i];
+      const sunk = terrainHeight(before, p.x, p.z) - terrainHeight(t, p.x, p.z);
+      if (sunk < 0.005) return l;
+      changed = true;
+      return l > 0 ? round(l + sunk, 2) : Math.min(0, round(l + sunk, 2));
+    });
+    return changed ? { ...r, lift } : r;
+  });
 }
 
 function inFootprint(p: Vec2, c: Vec2, heading: number, halfL: number, halfW: number): boolean {

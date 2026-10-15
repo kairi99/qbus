@@ -131,7 +131,7 @@ export function clearBusways(roads: Road[]): Road[] {
 }
 
 /** A busway resampled every few meters; `pin` marks the points that must not move (ends, shared vertices), `toPin` the way-distance to the nearest one. */
-function resampled(road: Road, roads: Road[]): { pts: Vec2[]; pin: boolean[]; cum: number[]; toPin: number[] } {
+export function resampled(road: Road, roads: Road[]): { pts: Vec2[]; pin: boolean[]; cum: number[]; toPin: number[] } {
   const pinned = (p: Vec2) => roads.some((o) => o !== road && distToPolyline(p, o.points) < PIN);
   const pts: Vec2[] = [];
   const pin: boolean[] = [];
@@ -172,7 +172,7 @@ export function shiftBusway(road: Road, roads: Road[], at: Vec2, axis: Vec2, shi
   return { ...road, points: moved };
 }
 
-function nearestPoint(poly: Vec2[], p: Vec2): Vec2 {
+export function nearestPoint(poly: Vec2[], p: Vec2): Vec2 {
   let best = poly[0];
   let bestD = Infinity;
   for (let i = 0; i < poly.length - 1; i++) {

@@ -126,6 +126,15 @@ close to the buses' ground clearance): it now gets through the 10 de Agosto cut 
 stops under the Guambra deck overlap; what's left there is a railing graze on the Patria bridge at
 (-658.3, 279.8) at 89 km/h, and the 12 de Octubre wall it shares with the buseta.
 
+Streets alongside cuts and ramp mouths (2026-10-15, see `src/world/CLAUDE.md`): the 12 de Octubre
+N→S link onto Queseras (Q1) now gets every vehicle through (the junction dips to meet the link;
+its 1 m step at node 257 is gone), the street beside the main cut no longer hangs over it, and the
+El Ejido kink (S2) is a knock, not a stall. Left: the interparroquial still knocks the ground beside
+the link's last meter of cut once, at 35 and 70 km/h. Moving streets renumbers the graph's edges
+and can move a structure's center by a meter: rename the entries (map old to new by catalog
+order). The traffic suite's dice move with them: the (-876,-220) stall passes at seeds 1/2 now and
+an overlap of two lanes merging into node 172 (reproduced on the older city with seed 10) shows up instead.
+
 The harness measures a car's height against a junction at street level as the ground under it
 (`surfaceAlong`), and a route joint where both edges are on the ground at a street-level node
 isn't a step (a big junction's paving slopes with the ground).

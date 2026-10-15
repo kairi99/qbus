@@ -13,22 +13,17 @@ import { DRIVE } from './thresholds';
 // the collision fixes of 2026-10-07 (what's left). Delete an entry once its bug is fixed (the
 // it.fails turns red to tell you).
 const G2 = 'Puente del Guambra, southbound: since the AE86 rides higher (2026-10-15) it no longer stops dead under the overlapping ramp decks at (-620.3, 313.0), but at 89 km/h its side brushes the bridge railing hulls at (-658.3, 279.8) (0.9 m over the deck, 6 contact steps, Δv 15 m/s on the 520 kg car; the same with any ride height tried) and drives on to the far end';
-const Q1 = '12 de Octubre N→S turn through its tunnel onto Queseras (e585→e523): the link is still ~1 m down in its cut where it reaches node 257\'s paved area (UP-007; leveling it there needs a 16% climb right out of the crossing, a V the bus high-centers on), so the interparroquial high-centers turning out at (-68.5, 723.5); buseta and AE86 hit a wall at (-103.0, 761.4) / (-127.6, 776.2) on 12 de Octubre (e277) running along the ramp\'s cut';
+const Q1 = '12 de Octubre N→S turn through its tunnel onto Queseras (e585→e523), interparroquial: since the junction dips to meet the link\'s mouth (2026-10-15) everyone gets through, but the 12.5 m bus starts the turn while still in the ramp\'s last meter of cut and its front corner knocks the ground beside it at (-63.7, 715.0) once (Δv ~5.6 m/s), then drives on';
+const C1A = 'Cut at (-652, 321) (sin nombre e197→e199), articulated bus at 60 km/h: the REAR section (traced: lateral hit on the rear collider) grazes the cut wall at (-665.6, 331.7) on the bend, Δv 1.18 m/s against the 1.0 threshold: a genuine off-tracking sweep of an 18.4 m bus on a cut that widens at most 2 m (BEND_SWEEP). Order- and dice-dependent (1.08 to 1.18; it passed once on 2026-10-15)';
 const Q2 = '12 de Octubre S→N link to Av. Patria (e588→e160): interparroquial (12.5 m) jams on the bend near the top against the low retaining wall at (-16.6, 747.6) between the ramp and Ladrón de Guevara alongside (1.1 m of ground between the two asphalts: no room to widen the cut); shorter vehicles pass';
-const S2 = 'Cut at (-820, 774) (sin nombre e682→e195): on the sharp OSM kink at (-829.2, 773.8) the interparroquial\'s front corner hits the outer tunnel wall at (-835.7, 774.4) (Δv 8.6 m/s) and stalls; the cut is already widened there (BEND_SWEEP)';
-const Q1A = 'The 18.4 m articulated bus on the same 12 de Octubre N→S turn as Q1 (traced): at (-101, 761) the front section\'s chassis comes to rest on top of the convex wall hull (shape 9, contact normals (0.11, 0.99, 0.07), contact points y 21.3–21.6 = the road level) beside the ramp, the same hull the buseta hits at (-103, 761.4); 3 wheels on the road, stuck 35 s; the autopilot\'s reversing then walks the front off the hull top, and the "fell through" flag is the front dropping beside the lane at (-103.3, 764.6) (surface along the route is not the ground there), not through solid ground: no body went through any collider'; 
-const C1A = 'Cut at (-652, 321) (sin nombre e197→e199), articulated bus at 60 km/h: the REAR section (traced: lateral hit on the rear collider) grazes the cut wall at (-665.6, 331.7) on the bend, Δv 1.08 m/s against the 1.0 threshold: a genuine off-tracking sweep of an 18.4 m bus on a cut that widens at most 2 m (BEND_SWEEP), not a leftover body (driveRoute removes both vehicle controllers and both bodies, and the joint goes with them). It is order-dependent only in that tiny solver differences decide a 1.08 vs under-1.0 graze: run alone (-t "652,321") it passes';
+const S2 = 'Cut at (-820, 774) (sin nombre e682→e195): on the sharp OSM kink at (-829.2, 773.8) the interparroquial\'s front corner hits the outer tunnel wall at (-827.7, 771.0) (Δv 4.6–6.4 m/s); since the streets alongside the cut give it room (clearCuts, 2026-10-15) it no longer stalls there and drives on';
 known({
-  'drive cut sin nombre @(-652,321): sin nombre [e197→e199] | articulado @ 60 km/h': C1A,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e523] | articulado @ 35 km/h': Q1A,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e523] | articulado @ 60 km/h': Q1A,
   'drive bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e899] | ae86 @ 90 km/h': G2,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e523] | interparroquial @ 35 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e523] | interparroquial @ 70 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e523] | buseta @ 60 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e585→e523] | ae86 @ 90 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e588→e160] | interparroquial @ 35 km/h': Q2,
-  'drive cut Av. 12 de Octubre @(-43,733): sin nombre [e588→e160] | interparroquial @ 70 km/h': Q2,
+  'drive cut sin nombre @(-652,321): sin nombre [e197→e199] | articulado @ 60 km/h': C1A,
+  'drive cut Av. 12 de Octubre @(-42,733): sin nombre [e585→e523] | interparroquial @ 35 km/h': Q1,
+  'drive cut Av. 12 de Octubre @(-42,733): sin nombre [e585→e523] | interparroquial @ 70 km/h': Q1,
+  'drive cut Av. 12 de Octubre @(-42,733): sin nombre [e588→e160] | interparroquial @ 35 km/h': Q2,
+  'drive cut Av. 12 de Octubre @(-42,733): sin nombre [e588→e160] | interparroquial @ 70 km/h': Q2,
   'drive cut sin nombre @(-820,774): sin nombre [e682→e195] | interparroquial @ 35 km/h': S2,
   'drive cut sin nombre @(-820,774): sin nombre [e682→e195] | interparroquial @ 70 km/h': S2,
 });
