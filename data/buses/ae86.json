@@ -50,8 +50,8 @@
     ]
   },
   "suspension": {
-    "restLength": 0.3,
-    "maxTravel": 0.2,
+    "restLength": 0.45,
+    "maxTravel": 0.35,
     "stiffness": 40,
     "compression": 2.4,
     "relaxation": 2.8,

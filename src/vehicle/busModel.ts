@@ -261,7 +261,9 @@ export class BusModel {
       pivot.rotation.y = v.wheelSteering(index) ?? 0;
       spin.rotation.z = -(v.wheelRotation(index) ?? 0);
     }
-    this.steeringWheel.rotation.z = (bus.vehicle.wheelSteering(0) ?? 0) * 4;
+    // Its axis points forward, away from the driver: negated so it turns counterclockwise, as
+    // seen from the seat, when the wheels steer left.
+    this.steeringWheel.rotation.z = -(bus.vehicle.wheelSteering(0) ?? 0) * 4;
     this.flames.visible = bus.boosting;
     if (bus.boosting) for (const f of this.flames.children) f.scale.x = 0.8 + Math.random() * 0.6;
   }

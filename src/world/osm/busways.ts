@@ -73,6 +73,7 @@ const TAPER = 14;
  */
 export function clearBusways(roads: Road[]): Road[] {
   const general = generalRoads(roads);
+  const busways = roads.filter((r) => r.access === 'brt');
   return roads.map((road) => {
     if (road.access !== 'brt' || road.points.length < 2) return road;
     const { pts, pin, cum, toPin } = resampled(road, roads);
@@ -92,7 +93,27 @@ export function clearBusways(roads: Road[]): Road[] {
         v = { x: v.x + ((p.x - q.x) / d) * k, z: v.z + ((p.z - q.z) / d) * k };
       }
       const l = Math.hypot(v.x, v.z);
-      return l > MAX_PUSH ? { x: (v.x / l) * MAX_PUSH, z: (v.z / l) * MAX_PUSH } : v;
+      if (l > MAX_PUSH) v = { x: (v.x / l) * MAX_PUSH, z: (v.z / l) * MAX_PUSH };
+      // A lane apart from a busway alongside: a pair of one-way busways in a median gets pushed
+      // inward by both carriageways and would merge into one lane, where oncoming buses meet nose
+      // to nose. Each keeps half of the room between their lanes (the other one moves too), and
+      // where OSM draws them closer (fanning out of a shared node) each moves half the shortfall
+      // away. Only a busway beside this one counts, not the next piece of the way ahead.
+      const a = pts[Math.max(0, i - 1)];
+      const b = pts[Math.min(pts.length - 1, i + 1)];
+      const tl = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+      for (const o of busways) {
+        if (o === road) continue;
+        const q = nearestPoint(o.points, p);
+        const d = Math.hypot(q.x - p.x, q.z - p.z);
+        if (d < 0.3) continue;
+        const n = { x: (q.x - p.x) / d, z: (q.z - p.z) / d };
+        if (Math.abs((n.x * (b.x - a.x) + n.z * (b.z - a.z)) / tl) > 0.5) continue;
+        const room = (d - hw - o.width / 2) / 2;
+        const over = v.x * n.x + v.z * n.z - room;
+        if (over > 0) v = { x: v.x - n.x * over, z: v.z - n.z * over };
+      }
+      return v;
     });
     // Smooth the pushes along the way, then taper them toward the pinned points.
     for (let pass = 0; pass < 3; pass++)

@@ -121,6 +121,11 @@ and graph/surface mismatches, two swept-volume hits on the Patria bridge ramps, 
 the Guambra; 1 navigation: the e524/e277 step). Rebuilding the city can move a structure's
 center by a meter, which renames its tests (`@(-42,734)` became `@(-43,733)`): rename the entries.
 
+The AE86 rides higher since 2026-10-15 (suspension rest length 0.3 → 0.45 m, travel 0.2 → 0.35,
+close to the buses' ground clearance): it now gets through the 10 de Agosto cut and no longer
+stops under the Guambra deck overlap; what's left there is a railing graze on the Patria bridge at
+(-658.3, 279.8) at 89 km/h, and the 12 de Octubre wall it shares with the buseta.
+
 The harness measures a car's height against a junction at street level as the ground under it
 (`surfaceAlong`), and a route joint where both edges are on the ground at a street-level node
 isn't a step (a big junction's paving slopes with the ground).

@@ -8,7 +8,7 @@ import { Navigator } from '../src/gameplay/navigation';
 import { TrafficSim } from '../src/gameplay/traffic';
 import { TrafficLights } from '../src/gameplay/trafficLights';
 import { sidewalkSections } from '../src/world/sidewalks';
-import { isBusway, buswayWidth, BUSWAY_NAME } from '../src/world/osm/busways';
+import { isBusway, buswayWidth, clearBusways, BUSWAY_NAME } from '../src/world/osm/busways';
 import { snapToRoad } from '../src/world/roadSnap';
 
 const mariscal: CityData = JSON.parse(readFileSync('data/cities/mariscal.json', 'utf8'));
@@ -79,6 +79,37 @@ describe('busway import (La Mariscal)', () => {
     // overlaps the carriageway by a meter or two. Known limitation (a third of the samples today);
     // this keeps it from getting worse.
     expect(overlap / total).toBeLessThan(0.4);
+  });
+});
+
+describe('clearBusways', () => {
+  // A divided avenue whose median holds a pair of one-way busways, drawn a lane apart as OSM does
+  // on 6 de Diciembre, with the carriageways' generic widths reaching over them.
+  const road = (z: number, extra: Partial<Road>, reverse = false): Road => {
+    const pts = [0, 50, 100, 150, 200].map((x) => ({ x, z }));
+    return { name: 'Avenida', kind: 'street', points: reverse ? pts.reverse() : pts, width: 7.6, lanes: 2, oneway: true, ...extra };
+  };
+  const bus = { name: BUSWAY_NAME, access: 'brt' as const, width: 3.4, lanes: 1 };
+  const roads = [road(-6, {}), road(-1.75, bus), road(1.75, bus, true), road(6, {}, true)];
+
+  it('pushes busways off the carriageways but never into each other', () => {
+    const [, a, b] = clearBusways(roads);
+    for (const p of a.points.slice(1, -1)) {
+      const gap = distToPolyline(p, b.points);
+      expect(gap).toBeGreaterThanOrEqual(3.4);
+    }
+  });
+
+  it('pulls a pair fanning out of a shared node a lane apart past the taper', () => {
+    // A two-way busway splits into a one-way pair that OSM draws barely 1.5 m apart for 30 m.
+    const trunk: Road = { name: BUSWAY_NAME, kind: 'street', points: [{ x: -100, z: 0 }, { x: 0, z: 0 }], width: 6.8, lanes: 2, access: 'brt' };
+    const out: Road = { ...bus, kind: 'street', oneway: true, points: [{ x: 0, z: 0 }, { x: 30, z: 1.1 }, { x: 200, z: 1.75 }] };
+    const back: Road = { ...bus, kind: 'street', oneway: true, points: [{ x: 200, z: -1.75 }, { x: 30, z: -1.1 }, { x: 0, z: 0 }] };
+    const [t, a, b] = clearBusways([trunk, out, back]);
+    for (const p of t.points) expect(p.z).toBe(0);
+    expect(a.points[0]).toEqual({ x: 0, z: 0 });
+    expect(b.points.at(-1)).toEqual({ x: 0, z: 0 });
+    for (const p of a.points.filter((q) => q.x >= 16 && q.x < 190)) expect(distToPolyline(p, b.points)).toBeGreaterThanOrEqual(3.3);
   });
 });
 
