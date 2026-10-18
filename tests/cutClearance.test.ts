@@ -30,6 +30,20 @@ describe('clearCuts', () => {
     expect(out[2]).toBe(far);
   });
 
+  it('gives a ramp\'s shallow walled top room on a bend, but leaves a street overlapping it there alone', () => {
+    // A ramp climbing out of its cut: 4 m down at x 0, 0.6 m down by x 100 (still walled there)
+    // and bending left there (12 de Octubre's S→N link to Patria, Ladrón de Guevara beside it).
+    const ramp: Road = { ...street(0), points: [{ x: 0, z: 0 }, { x: 60, z: 0 }, { x: 100, z: 0 }, { x: 120, z: -12 }], lift: [-4, -2, -0.6, 0] };
+    const beside: Road = { ...street(7.5), points: [{ x: 40, z: 7.5 }, { x: 100, z: 7.5 }, { x: 160, z: 7.5 }] };
+    const [, moved] = clearCuts([ramp, beside]);
+    const at = moved.points.reduce((b, p) => (Math.abs(p.x - 98) < Math.abs(b.x - 98) ? p : b));
+    // Already clear of its shoulder and wall (1.5 m): only the bend allowance moves it.
+    expect(at.z).toBeGreaterThan(7.5 + 0.3);
+    const over: Road = { ...street(4), points: [{ x: 40, z: 4 }, { x: 100, z: 4 }, { x: 160, z: 4 }] };
+    const [, kept] = clearCuts([{ ...ramp, lift: [-0.9, -0.8, -0.6, 0] }, over]);
+    for (const p of kept.points) expect(p.z).toBeCloseTo(4, 1);
+  });
+
   it('never moves a street toward another street or a busway beside it', () => {
     const other = street(-7);
     const bus: Road = { ...street(-5), access: 'brt', width: 3.4 };

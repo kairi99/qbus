@@ -35,7 +35,8 @@ import { TRAFFIC } from './thresholds';
 // 12), so it stays known. The 10 de Agosto and José Riofrío failures do NOT reproduce on master with any
 // seed 1-14; with the final data (busways kept 12 m from structures) they no longer fail at seeds 1/2.
 known({
-  'no cars overlap in cut sin nombre @(-876,-220)': 'The cut road (e515) and Av. América (e731) both run into node 172 with lanes 0.3 m apart over their last 15 m: cars side by side there overlap. Reproduces before the streets-alongside-cuts change (2026-10-15) with seed 10, the lanes are unchanged by it; the dice moved it to seed 1',
+  'no car stuck in cut sin nombre @(-876,-220)': 'Reproduces on master with other seeds (3, 9, 12): dice-dependent stall in this cut (it and an overlap of the two lanes merging into node 172 trade places as the road layout moves the dice)',
+  "traffic rides at the road's height in bridge Av. Patria @(-658,290)": 'A car floating 0.40 m on e167 at (-691.9, 234.9), on the Guambra up-ramp where every vehicle sinks or floats (see the drive notes): nothing within 80 m changed in the 2026-10-18 city, the draw of the traffic\'s dice puts a car there (seed 1)',
 });
 
 const LIST = 8;

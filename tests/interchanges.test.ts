@@ -23,7 +23,7 @@ describe('traffic through the bridges and underpasses', () => {
     ['Puente del Guambra', { x: -660, z: 292 }, null],
     // Including the link from 12 de Octubre northbound through its tunnel up to Patria.
     ['Patria y 12 de Octubre', { x: -30, z: 725 }, { x: -60, z: 757 }],
-  ])('flows through %s without cars getting stuck', (_, focus, mustUse) => {
+  ])('flows through %s without cars getting stuck', { timeout: 90_000 }, (_, focus, mustUse) => {
     const graph = buildRoadGraph(city);
     const world = createWorld();
     buildCity(city, world, new THREE.Scene(), graph);

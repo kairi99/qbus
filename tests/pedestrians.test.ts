@@ -70,7 +70,10 @@ describe.each([
         if (onAsphalt(city, p.pos)) {
           onRoad.add(p.id);
           expect(p.onRoad, `ped ${p.id} ${p.mode}`).toBe(true);
-          const nearJunction = junctions.some((n) => Math.hypot(n.pos.x - p.pos.x, n.pos.z - p.pos.z) < 30);
+          // A zebra crossing starts within 25 m of a junction and is up to 28 m long: over a wide
+          // merged junction a walker on one can be 30 m from its center (exactly that at
+          // (-41.7, 704.7) and (-247.6, 575.6), seed-dependent), still nowhere near mid-block.
+          const nearJunction = junctions.some((n) => Math.hypot(n.pos.x - p.pos.x, n.pos.z - p.pos.z) < 40);
           expect(nearJunction, `ped ${p.id} at ${p.pos.x.toFixed(1)},${p.pos.z.toFixed(1)}`).toBe(true);
         } else if (onRoad.delete(p.id)) crossed++;
       }

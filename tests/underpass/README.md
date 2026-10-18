@@ -135,6 +135,15 @@ and can move a structure's center by a meter: rename the entries (map old to new
 order). The traffic suite's dice move with them: the (-876,-220) stall passes at seeds 1/2 now and
 an overlap of two lanes merging into node 172 (reproduced on the older city with seed 10) shows up instead.
 
+2026-10-18: the S→N link to Patria (Q2) passes: Ladrón de Guevara, a street crossing over the main
+12 de Octubre cut by Patria, was never pushed aside (the whole street counted as "on the roof"),
+and the link's top bend needs the cut's bend allowance; both are in `clearCuts` now. Two traffic
+deadlocks it exposed are fixed in `traffic.ts` (a car claiming a junction ahead of the car it queues
+behind; a short exit's feeders starved by the stream through the junction after it). The
+articulado's graze in the cut at (-652, 321) (Δv 1.08–1.18 against 1.0) passes in the suite's order
+and fails run alone: no longer listed. Traffic dice moved again: a car floating on the Guambra
+up-ramp (seed 1, unchanged geometry) is listed, and (-876,-220)'s stuck/overlap entries trade places.
+
 The harness measures a car's height against a junction at street level as the ground under it
 (`surfaceAlong`), and a route joint where both edges are on the ground at a street-level node
 isn't a step (a big junction's paving slopes with the ground).

@@ -409,7 +409,10 @@ export class TrafficSim {
           vTarget = Math.min(vTarget, Math.sqrt(2 * DECEL * Math.max(0, toLine - 0.3)));
           car.held = true;
         } else if (toLine < decide) {
-          if (this.canEnter(car, e, external)) this.reserve(car, node, e.id);
+          // Never ahead of a car in front still waiting to go in (one in the next lane merging
+          // into our path): with our claim it may not enter, and we can't pass it.
+          const queued = ahead !== null && ahead.state === 'driving' && !ahead.turn && ahead.edge === e.id && ahead.reserved !== node;
+          if (!queued && this.canEnter(car, e, external)) this.reserve(car, node, e.id);
           else {
             // Stop with the front bumper at the line, not the middle of the car.
             vTarget = Math.min(vTarget, Math.sqrt(2 * DECEL * Math.max(0, remaining - car.kind.length / 2 - 0.5)));
@@ -582,7 +585,13 @@ export class TrafficSim {
     // A short exit gives no room to wait: the junction after it must be free for us too.
     const after = this.graph.edges[car.next];
     if (after.len < 25 && this.graph.nodes[after.to].junction) {
-      for (const [id, o] of this.occupants.get(after.to) ?? []) if (id !== car.id && o.from !== after.id) return false;
+      for (const [id, o] of this.occupants.get(after.to) ?? [])
+        if (id !== car.id && o.from !== after.id) {
+          // Claim that junction for the short exit's stream too, or a busy stream through it
+          // starves ours for good (the Queseras tunnel link behind Queseras' 16 m).
+          if (car.wait > PRIORITY_WAIT && !this.priority.has(after.to)) this.priority.set(after.to, { car: car.id, edge: after.id });
+          return false;
+        }
     }
     // Don't block the box: the lane we're turning into must have room.
     const next = this.graph.edges[car.next];
