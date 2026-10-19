@@ -8,10 +8,11 @@ import interparroquial from '../data/buses/interparroquial.json';
 import buseta from '../data/buses/buseta.json';
 import ae86 from '../data/buses/ae86.json';
 import articulado from '../data/buses/articulado.json';
+import gusanito from '../data/buses/gusanito.json';
 
 const idle: DriveInput = { throttle: 0, steer: 0, handbrake: false };
 
-describe.each([popular, interparroquial, buseta, ae86, articulado] as BusPreset[])('BusPhysics ($name)', (preset) => {
+describe.each([popular, interparroquial, buseta, ae86, articulado, gusanito] as BusPreset[])('BusPhysics ($name)', (preset) => {
 function setup() {
   const world = createWorld();
   // Big enough that the fastest vehicle can't drive off it during a test.
@@ -339,5 +340,222 @@ describe('articulated bus', () => {
     expect(Math.abs(bus.bend)).toBeLessThan(0.01);
     // Facing +Z... heading pi/2 points to -Z: the tail is toward +Z.
     expect(bus.rear!.body.translation().z).toBeGreaterThan(bus.body.translation().z + 8);
+  });
+});
+
+describe('gusanito (a train of trailers)', () => {
+  const preset = gusanito as BusPreset;
+  const art = preset.articulated!;
+  const n = art.sections!;
+  const deg = (r: number) => (r * 180) / Math.PI;
+  beforeAll(() => initRapier());
+
+  function setup(walls?: (w: ReturnType<typeof createWorld>) => void) {
+    const world = createWorld();
+    addGround(world, 3000);
+    walls?.(world);
+    const bus = new BusPhysics(world, preset, { x: 0, y: 3, z: 0, heading: 0 });
+    const anchor = (b: typeof bus.body, x: number) => {
+      const t = b.translation();
+      const q = b.rotation();
+      return { x: t.x + x * (1 - 2 * (q.y * q.y + q.z * q.z)), y: t.y + x * 2 * (q.x * q.y + q.w * q.z), z: t.z + x * 2 * (q.x * q.z - q.w * q.y) };
+    };
+    /** Widest gap between any turntable's two anchors. */
+    const separation = () => {
+      let worst = 0;
+      bus.rears.forEach((r, i) => {
+        const ahead = i ? bus.rears[i - 1] : { body: bus.body, length: bus.frontLength };
+        const a = anchor(ahead.body, -(ahead.length / 2 + art.gap / 2));
+        const b = anchor(r.body, art.rearLength / 2 + art.gap / 2);
+        worst = Math.max(worst, Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z));
+      });
+      return worst;
+    };
+    const maxBend = () => Math.max(...bus.rears.map((_, i) => Math.abs(bus.bendAt(i))));
+    const minUp = () =>
+      Math.min(
+        ...bus.bodies.map((b) => {
+          const q = b.rotation();
+          return 1 - 2 * (q.x * q.x + q.z * q.z);
+        }),
+      );
+    const run = (input: DriveInput, seconds: number, each?: () => void) => {
+      for (let t = 0; t < seconds; t += PHYSICS_STEP) {
+        bus.update(input, PHYSICS_STEP);
+        world.step();
+        each?.();
+      }
+    };
+    return { world, bus, run, separation, maxBend, minUp };
+  }
+
+  it('is a head car and its wagons, adding up to the preset length', () => {
+    const { bus } = setup();
+    expect(bus.rears).toHaveLength(n);
+    expect(bus.bodies).toHaveLength(n + 1);
+    expect(bus.frontLength + n * (art.gap + art.rearLength)).toBeCloseTo(preset.body.length);
+    expect(bus.wheelCount).toBe(4 + 2 * n);
+    expect(bus.sections()).toHaveLength(n + 1);
+  });
+
+  it('settles on every wheel and drives straight, wagons in line behind', () => {
+    const { bus, run, maxBend } = setup();
+    run(idle, 2);
+    expect(bus.wheelsOnGround).toBe(bus.wheelCount);
+    run({ ...idle, throttle: 1 }, 6);
+    expect(deg(maxBend())).toBeLessThan(1.5);
+    const xs = bus.bodies.map((b) => b.translation().x);
+    for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeLessThan(xs[i - 1] - art.rearLength);
+    for (const b of bus.bodies) expect(Math.abs(b.translation().z)).toBeLessThan(0.5);
+  });
+
+  it('wags through a turn without folding past its limit, and straightens out again', () => {
+    const { bus, run, maxBend, separation } = setup();
+    run(idle, 1);
+    run({ ...idle, throttle: 1 }, 4);
+    let max = 0;
+    let sep = 0;
+    run({ throttle: 0.6, steer: -1, handbrake: false }, 4, () => ((max = Math.max(max, maxBend())), (sep = Math.max(sep, separation()))));
+    expect(deg(max)).toBeGreaterThan(5);
+    expect(deg(max)).toBeLessThan(art.yawLimitDeg + 6);
+    expect(sep).toBeLessThan(0.1);
+    run({ throttle: 0.6, steer: 0, handbrake: false }, 6);
+    expect(deg(maxBend())).toBeLessThan(3);
+  });
+
+  it('backs up in line, even on full lock (the turntables pull straight), upright, joints closed', () => {
+    const { bus, run, maxBend, separation, minUp } = setup();
+    run(idle, 1);
+    let bend = 0;
+    let sep = 0;
+    let up = 1;
+    run({ ...idle, throttle: -1, steer: 1 }, 8, () => ((bend = Math.max(bend, maxBend())), (sep = Math.max(sep, separation())), (up = Math.min(up, minUp()))));
+    expect(deg(bend)).toBeLessThan(20);
+    expect(sep).toBeLessThan(0.1);
+    expect(up).toBeGreaterThan(0.9);
+    expect(bus.speed).toBeLessThan(-2);
+  });
+
+  it('holds together through hard swerves, a handbrake drift and its whiplash', () => {
+    const { run, maxBend, separation, minUp } = setup();
+    run(idle, 1);
+    run({ ...idle, throttle: 1 }, 8);
+    let bend = 0;
+    let sep = 0;
+    let up = 1;
+    const watch = () => ((bend = Math.max(bend, maxBend())), (sep = Math.max(sep, separation())), (up = Math.min(up, minUp())));
+    let t = 0;
+    for (let k = 0; k < 5 * 60; k++) {
+      t += PHYSICS_STEP;
+      run({ throttle: 1, steer: Math.sin(t * 5) > 0 ? 1 : -1, handbrake: false }, PHYSICS_STEP, watch);
+    }
+    run({ throttle: 1, steer: 1, handbrake: true }, 1.5, watch);
+    run({ throttle: 1, steer: 0, handbrake: false }, 4, watch);
+    expect(deg(bend)).toBeLessThan(art.yawLimitDeg + 8);
+    expect(sep).toBeLessThan(0.15);
+    expect(up).toBeGreaterThan(0.6);
+  });
+
+  it('its wagons never collide with each other, but the last one stops at a wall behind', () => {
+    const back = setup((w) => {
+      const b = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(-16, 2, 0));
+      w.createCollider(RAPIER.ColliderDesc.cuboid(0.5, 2, 20), b);
+    });
+    const groups = back.bus.colliders.map((c) => c.collisionGroups());
+    expect(new Set(groups).size).toBe(1);
+    // A section's membership isn't in its own filter: the train doesn't touch itself.
+    expect((groups[0] >>> 16) & groups[0] & 0xffff).toBe(0);
+    back.run(idle, 1);
+    back.run({ ...idle, throttle: -1 }, 6);
+    const last = back.bus.rears[n - 1].body.translation().x;
+    expect(last - art.rearLength / 2).toBeGreaterThan(-15.5 - 0.15);
+  });
+
+  it('crosses speed humps without leaving the road or flipping', () => {
+    const { bus, run, minUp } = setup((w) => {
+      for (const x of [50, 70]) {
+        const b = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, 0.04, 0));
+        w.createCollider(RAPIER.ColliderDesc.cuboid(1.5, 0.12, 6), b);
+      }
+    });
+    run(idle, 1);
+    let up = 1;
+    run({ ...idle, throttle: 0.4 }, 14, () => (up = Math.min(up, minUp())));
+    expect(bus.rears[n - 1].body.translation().x).toBeGreaterThan(80);
+    expect(up).toBeGreaterThan(0.93);
+  });
+
+  it('reset puts every section upright and in line, centered on the spawn', () => {
+    const { bus, run, maxBend } = setup();
+    run({ ...idle, throttle: 1, steer: 1 }, 4);
+    bus.reset({ x: 10, y: 0, z: 5, heading: Math.PI / 2 });
+    const c = bus.position();
+    expect(c.x).toBeCloseTo(10, 1);
+    expect(c.z).toBeCloseTo(5, 1);
+    expect(maxBend()).toBeLessThan(0.01);
+    expect(bus.rears[n - 1].body.translation().z).toBeGreaterThan(bus.body.translation().z + preset.body.length - bus.frontLength / 2 - art.rearLength / 2 - 0.1);
+  });
+});
+
+describe('weather', () => {
+  beforeAll(() => initRapier());
+  const setup = (preset: BusPreset) => {
+    const world = createWorld();
+    addGround(world, 3000);
+    const bus = new BusPhysics(world, preset, { x: 0, y: 3, z: 0, heading: 0 });
+    const run = (input: DriveInput, seconds: number) => {
+      for (let t = 0; t < seconds; t += PHYSICS_STEP) {
+        bus.update(input, PHYSICS_STEP);
+        world.step();
+      }
+    };
+    return { bus, run };
+  };
+
+  const all = [popular, interparroquial, buseta, ae86, articulado, gusanito] as BusPreset[];
+  it.each(all)('a soaked road brakes longer and (but for the articulado) slides in a hard turn, without spinning ($name)', (preset) => {
+    const turn = (grip: number) => {
+      const { bus, run } = setup(preset);
+      bus.grip = grip;
+      run(idle, 1);
+      run({ ...idle, throttle: 1 }, 4);
+      let max = 0;
+      for (let t = 0; t < 1.5; t += PHYSICS_STEP) {
+        run({ throttle: 0.6, steer: 1, handbrake: false }, PHYSICS_STEP);
+        max = Math.max(max, Math.abs(bus.slipAngle));
+      }
+      return (max * 180) / Math.PI;
+    };
+    const braking = (grip: number) => {
+      const { bus, run } = setup(preset);
+      bus.grip = grip;
+      run(idle, 1);
+      run({ ...idle, throttle: 1 }, 4);
+      const x0 = bus.body.translation().x;
+      for (let t = 0; bus.speed > 1 && t < 10; t += PHYSICS_STEP) run({ ...idle, throttle: -1 }, PHYSICS_STEP);
+      return bus.body.translation().x - x0;
+    };
+    const [dry, wet] = [turn(1), turn(0.7)];
+    if (preset.id !== 'articulado') expect(wet).toBeGreaterThan(dry + 3.5);
+    expect(wet).toBeLessThan(30);
+    expect(braking(0.7)).toBeGreaterThan(braking(1) * 1.25);
+  });
+
+  it.each([popular, gusanito] as BusPreset[])('floodwater slows the bus to a crawl, nitro still pushes through ($name)', (preset) => {
+    const dry = setup(preset);
+    const wet = setup(preset);
+    const boosted = setup(preset);
+    for (const s of [dry, wet, boosted]) {
+      s.run(idle, 1);
+      s.run({ ...idle, throttle: 1 }, 4);
+      if (s !== dry) s.bus.wade = 0.6;
+    }
+    dry.run({ ...idle, throttle: 1 }, 4);
+    wet.run({ ...idle, throttle: 1 }, 4);
+    boosted.run({ ...idle, throttle: 1, boost: true }, 1.5);
+    expect(wet.bus.speed * 3.6).toBeLessThan(25);
+    expect(wet.bus.speed).toBeGreaterThan(1.5);
+    expect(dry.bus.speed).toBeGreaterThan(wet.bus.speed * 2);
+    expect(boosted.bus.speed).toBeGreaterThan(wet.bus.speed * 1.3);
   });
 });

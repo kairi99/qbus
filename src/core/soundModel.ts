@@ -123,6 +123,12 @@ export const LEVELS = {
   horn: { bus: 1.4, car: 1.2 },
   /** A traffic car honking at the bus, right next to it. */
   trafficHorn: 0.55,
+  /** Rain on the roof at its heaviest (a filtered noise loop, scaled by how hard it rains). */
+  rain: 0.5,
+  /** A thunderclap's rumble at its peak. */
+  thunder: 0.9,
+  /** Water hissing off the wheels, wading flat out. */
+  splash: 0.45,
 } as const;
 
 /** Linear gain to decibels. */

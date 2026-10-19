@@ -12,6 +12,8 @@ export const LINES = {
   carHit: ['¡Mi carro!', '¡Me va a pagar el choque!', '¡Ya me dañó el guardachoque!'],
   pedDive: ['¡Casi me mata!', '¡Ave María Purísima!', '¡Fíjese por dónde va!', '¡Bruto!'],
   works: ['¡Ya mismo acaban esa obra, ya mismo!', '¡Otra vez cerrado! ¡Estos del Municipio!', '¡Por ahí no hay paso, maestro!', '¡Esa obra lleva años, veci!'],
+  rain: ['¡Se largó a llover!', '¡Chuta, se vino el aguacero!', '¡Despacito, maestro, que la calle resbala!', '¡Cierre la ventana, veci!'],
+  flood: ['¡Los pasos deprimidos ya están hechos piscina!', '¡No se meta al túnel, que está inundado!', '¡Con este aguacero se inunda todo, maestro!'],
 } as const;
 
 export type LineKind = keyof typeof LINES;
@@ -30,4 +32,6 @@ export const SPEAKER: Record<LineKind, string> = {
   carHit: 'Conductor',
   pedDive: 'Peatón',
   works: 'Ayudante',
+  rain: 'Pasajera',
+  flood: 'Ayudante',
 };

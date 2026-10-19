@@ -135,6 +135,81 @@ export class BusAudio {
     }
   }
 
+  private rain: { gain: GainNode; splash: GainNode } | null = null;
+
+  /** One looping buffer of white noise (rain and splashes are filtered from it). */
+  private noise(ctx: AudioContext, seconds: number): AudioBufferSourceNode {
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * seconds), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    return src;
+  }
+
+  /**
+   * Weather sounds, synthesized: rain (`rain` 0..1) drumming on the roof (noise through a
+   * bandpass, a hiss over a patter), and `splash` (0..1) water spraying off the wheels.
+   */
+  weather(rain: number, splash: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (!this.rain && rain <= 0 && splash <= 0) return;
+    if (!this.rain) {
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      const hiss = ctx.createBiquadFilter();
+      hiss.type = 'bandpass';
+      hiss.frequency.value = 3200;
+      hiss.Q.value = 0.5;
+      const patter = ctx.createBiquadFilter();
+      patter.type = 'lowpass';
+      patter.frequency.value = 900;
+      const src = this.noise(ctx, 2);
+      src.connect(hiss).connect(gain);
+      src.connect(patter).connect(gain);
+      src.start();
+      const splashGain = ctx.createGain();
+      splashGain.gain.value = 0;
+      const spray = ctx.createBiquadFilter();
+      spray.type = 'highpass';
+      spray.frequency.value = 1500;
+      const s2 = this.noise(ctx, 1.3);
+      s2.connect(spray).connect(splashGain);
+      s2.start();
+      gain.connect(this.master);
+      splashGain.connect(this.master);
+      this.rain = { gain, splash: splashGain };
+    }
+    const now = ctx.currentTime;
+    this.rain.gain.gain.setTargetAtTime(LEVELS.rain * rain * rain, now, 0.3);
+    this.rain.splash.gain.setTargetAtTime(LEVELS.splash * Math.min(1, splash), now, 0.08);
+  }
+
+  /** A thunderclap: a crack, then a long low rumble (`distance` 0 close .. 1 far: later, duller, quieter). */
+  thunder(distance = 0.5): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const len = 4 + distance * 2;
+    const src = this.noise(ctx, len);
+    src.loop = false;
+    const low = ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(1400 - distance * 900, now);
+    low.frequency.exponentialRampToValueAtTime(120, now + 1.2);
+    const g = ctx.createGain();
+    const peak = LEVELS.thunder * (1 - distance * 0.6);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(peak, now + 0.08 + distance * 0.4);
+    g.gain.setTargetAtTime(peak * 0.5, now + 0.6, 0.4);
+    g.gain.setTargetAtTime(0.0001, now + 1.6, len / 4);
+    src.connect(low).connect(g).connect(this.master);
+    src.start(now);
+    src.stop(now + len);
+  }
+
   /** The audio context once a gesture has started it (the radio plays through it too). */
   get context(): AudioContext | null {
     return this.ctx;

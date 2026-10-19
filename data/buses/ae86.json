@@ -34,6 +34,7 @@
     "sideFrictionStiffness": 1.0,
     "handbrakeFrictionSlip": 1.0
   },
+  "wet": { "front": 1.75, "rear": 1.4 },
   "drift": {
     "maxAngleDeg": 32,
     "gripRecovery": 3.0

@@ -31,6 +31,15 @@ describe('settings', () => {
     expect(loadSettings(store).tutorial).toBe(false);
   });
 
+  it('rains at random unless set otherwise, also for saves from before rain existed', () => {
+    const { rain: _, ...old } = DEFAULTS;
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2 }) })).rain).toBe('random');
+    const store = memory();
+    saveSettings({ ...DEFAULTS, rain: 'off' }, store);
+    expect(loadSettings(store).rain).toBe('off');
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...DEFAULTS, rain: 'granizo' }) })).rain).toBe('random');
+  });
+
   it('starts on real hills', () => {
     expect(DEFAULTS.hills).toBe(1);
   });

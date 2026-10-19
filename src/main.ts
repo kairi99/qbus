@@ -22,10 +22,14 @@ import { Hud } from './ui/hud';
 import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
 import { BRT_BUS, busById } from './vehicle/buses';
+import { isTrain } from './vehicle/busPreset';
 import { routesFor } from './gameplay/routes';
 import { loadSettings, saveSettings } from './menu/settings';
 import { RadioToast } from './ui/radioToast';
 import { Tutorial } from './ui/tutorial';
+import { Weather, gripFor, parseRainSetting } from './gameplay/weather';
+import { FloodWater, floodBasins, floodedEdges, waterDepth } from './world/floods';
+import { RainView } from './world/rain';
 
 const MAX_FRAME = 0.1;
 
@@ -95,9 +99,11 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   scene.add(model.root);
 
   const input = new Input();
-  const audio = new BusAudio(preset.kind === 'car' ? 'car' : 'bus');
+  // The gusanito runs on a car's engine and has no doors to hiss.
+  const audio = new BusAudio(preset.kind === 'car' || isTrain(preset) ? 'car' : 'bus');
   // The chase camera stays out of walls and roofs (tunnels, cuts, buildings).
-  const rig = new CameraRig(camera, staticObstacles(world));
+  const obstacles = staticObstacles(world);
+  const rig = new CameraRig(camera, obstacles);
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
   const hud = new Hud(hudRoot, city.attribution);
   // Records are kept per zone and route (a generated city other than the default seed is its own zone).
@@ -132,6 +138,25 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
   if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
 
+  // Weather: showers at random moments, or always, or never (a setting; ?rain= overrides: 0 never,
+  // 1 raining, 2 a downpour that floods the underpasses, or a setting's name).
+  const rainParam = params.get('rain');
+  const weatherSeed = Math.floor(Math.random() * 2 ** 31);
+  const weather =
+    rainParam === '0' ? new Weather('off', weatherSeed)
+    : rainParam === '1' || rainParam === '2' ? new Weather('always', weatherSeed, rainParam === '2' ? 1 : 0.55)
+    : new Weather(parseRainSetting(rainParam) ?? settings.rain, weatherSeed);
+  const basins = floodBasins(city);
+  const floodWater = new FloodWater(basins);
+  scene.add(floodWater.mesh);
+  const flooded = floodedEdges(basins, graph);
+  const rain = new RainView(scene, backdrop, renderer, tod);
+  rain.onThunder = (d) => audio.thunder(d);
+  let covered = false;
+  let weatherClock = Infinity;
+  let rained = false;
+  let floodedNews = false;
+
   performance.mark('qbus:session');
   // Weak GPUs: render fewer pixels (and smaller shadows) while the frame rate stays low. Automation
   // (Playwright's software GL is always slow) keeps full quality unless ?adaptive=1.
@@ -140,7 +165,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { quality, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { quality, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, weather, basins, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   const scratchPos = { x: 0, y: 0, z: 0 };
   let acc = 0;
@@ -196,6 +221,25 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       if (action === 'horn') session.playerHonk();
     }
 
+    // Weather: wet tires, floodwater in the underpasses (the bus wades, traffic crawls through).
+    const w = weather.update(paused ? 0 : dt);
+    bus.grip = gripFor(w.wet);
+    floodWater.setFlood(w.flood);
+    bus.wade = waterDepth(basins, bus.position(scratchPos), bus.roadHeight(), w.flood);
+    weatherClock += dt;
+    if (weatherClock >= 0.25) {
+      weatherClock = 0;
+      // Under a roof (a tunnel, a deck): no rain falls around the camera, and it sounds far off.
+      covered = obstacles.cast(camera.position.x, camera.position.y, camera.position.z, 0, 1, 0, 40) < 40;
+      session.traffic.speedScale = 1 - 0.15 * w.wet;
+      session.traffic.slowEdges.clear();
+      for (const f of flooded) if (basins[f.basin].floor + w.flood > f.low + 0.15) session.traffic.slowEdges.set(f.edge, 3.5);
+      if (!rained && w.rain > 0.2) session.weatherNews('rain');
+      rained = w.rain > 0.2 || (rained && w.rain > 0);
+      if (!floodedNews && w.flood > 0.2) session.weatherNews('flood');
+      floodedNews = w.flood > 0.2 || (floodedNews && w.flood > 0);
+    }
+
     // The tutorial holds the bus still: the clock only starts on the first throttle after it.
     const drive = paused || tutorial.open ? { throttle: 0, steer: 0, handbrake: false } : input.drive();
     if (drive.throttle > 0 || drive.boost) session.start();
@@ -223,6 +267,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     model.setCockpitView(rig.mode === 'cockpit' && !lookBack);
     rig.update(dt, bus, lookBack);
     followSun(sun, model.root.position);
+    const spray = bus.wade > 0.05 ? Math.min(1, Math.abs(bus.speed) / 10) * Math.min(1, bus.wade / 0.4) : 0;
+    model.setSpray(spray);
     session.frame(dt, camera, rig.mode);
     const speedFrac = Math.abs(bus.speed) / (preset.topSpeedKmh / 3.6);
     if (bus.boosting && !wasBoosting) audio.cue('nitro');
@@ -238,6 +284,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       paused ? 0 : dt,
     );
     radio.update(audio.context, paused);
+    rain.update(w, camera, paused ? 0 : dt, covered);
+    audio.weather(paused ? 0 : w.rain * (covered ? 0.4 : 1), paused ? 0 : spray);
     const t = bus.position(scratchPos);
     // The street name changes slowly: look it up a few times a second, not every frame.
     streetClock += dt;

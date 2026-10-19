@@ -126,13 +126,21 @@ export class PassengersView {
     return d;
   }
 
-  /** Front door on the right-hand side of the bus (or the left), at street level. */
+  /**
+   * Front door on the right-hand side of the bus (or the left), at street level. A train (the
+   * gusanito) has no doors: riders climb into the first wagon.
+   */
   private doorPos(bus: BusPhysics, left = false): THREE.Vector3 {
+    const W = bus.preset.body.width;
+    if (bus.rears.length > 1) {
+      const w = bus.sections()[1];
+      const rt = right(w.heading + (left ? Math.PI : 0));
+      return this.at({ x: w.pos.x + rt.x * (W / 2 + 0.3), z: w.pos.z + rt.z * (W / 2 + 0.3) });
+    }
     const t = bus.body.translation();
     const fw = forward(bus.heading);
     const rt = right(bus.heading + (left ? Math.PI : 0));
     const L = bus.frontLength;
-    const W = bus.preset.body.width;
     return this.at({ x: t.x + fw.x * (L / 2 - 1.3) + rt.x * (W / 2 + 0.3), z: t.z + fw.z * (L / 2 - 1.3) + rt.z * (W / 2 + 0.3) });
   }
 

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import type { BusPreset } from './busPreset';
+import { type BusPreset, isTrain } from './busPreset';
 import type { BusPhysics } from './bus';
 import { carCockpit, carExterior } from './carBody';
+import { gusanitoCockpit, gusanitoHead, gusanitoWagon } from './gusanitoBody';
 
 const flat = (color: THREE.ColorRepresentation) => new THREE.MeshLambertMaterial({ color, flatShading: true });
 
@@ -38,30 +39,38 @@ export class BusModel {
   readonly root = new THREE.Group();
   private exterior = new THREE.Group();
   private cockpit = new THREE.Group();
-  private wheels: { pivot: THREE.Object3D; spin: THREE.Object3D; rear: boolean; index: number }[] = [];
-  /** Rear section of an articulated bus, posed relative to the front one. */
-  private rearGroup: THREE.Group | null = null;
+  /** `section`: 0 = the front one, i + 1 = rear section i. */
+  private wheels: { pivot: THREE.Object3D; spin: THREE.Object3D; section: number; index: number }[] = [];
+  /** Rear sections of an articulated bus, each posed relative to the front one. */
+  private rearGroups: THREE.Group[] = [];
   /** Length of the front section (the whole bus when rigid). */
   private frontLength: number;
   private steeringWheel!: THREE.Object3D;
   /** Exhaust flames, shown while the nitro burns. */
   private flames = new THREE.Group();
+  /** Water thrown up off the front wheels, wading through a flood. */
+  private spray = new THREE.Group();
+  private sprayMat = new THREE.MeshBasicMaterial({ color: '#d9d4c6', transparent: true, opacity: 0.6, depthWrite: false });
 
   constructor(private preset: BusPreset) {
     const { length: total, width: W, height: H } = preset.body;
     const art = preset.articulated;
-    const L = art ? total - art.rearLength - art.gap : total;
+    const rears = art ? (art.sections ?? 1) : 0;
+    const L = art ? total - rears * (art.rearLength + art.gap) : total;
     this.frontLength = L;
     const car = preset.kind === 'car';
+    const worm = isTrain(preset);
     if (car) this.exterior.add(...carExterior(preset));
+    else if (worm) this.gusanitoExterior(preset, art!, rears);
     else if (art) this.articulatedExterior(preset, art);
     else this.busExterior(preset);
     this.exterior.traverse((o) => (o.castShadow = true));
 
     // Nitro flames out of two exhausts under the rear bumper, pointing backwards.
-    const flameGeo = new THREE.ConeGeometry(car ? 0.12 : 0.22, car ? 1.0 : 1.6, 8);
+    const small = car || worm;
+    const flameGeo = new THREE.ConeGeometry(small ? 0.12 : 0.22, small ? 1.0 : 1.6, 8);
     flameGeo.rotateZ(Math.PI / 2);
-    flameGeo.translate(car ? -0.5 : -0.8, 0, 0);
+    flameGeo.translate(small ? -0.5 : -0.8, 0, 0);
     const outer = new THREE.MeshBasicMaterial({ color: '#3fa9ff', transparent: true, opacity: 0.75, depthWrite: false });
     const inner = new THREE.MeshBasicMaterial({ color: '#fff4c2' });
     for (const z of [-W * 0.25, W * 0.25]) {
@@ -70,15 +79,16 @@ export class BusModel {
       core.scale.set(0.6, 0.5, 0.5);
       flame.add(core);
       flame.position.set(-(art ? art.rearLength : L) / 2, car ? -H * 0.3 : -H * 0.42, z);
+      if (worm) flame.position.y = -H / 2 + 0.25;
       this.flames.add(flame);
     }
     this.flames.visible = false;
-    (this.rearGroup ?? this.exterior).add(this.flames);
+    (this.rearGroups[this.rearGroups.length - 1] ?? this.exterior).add(this.flames);
 
     // Cockpit: dashboard, pillars, roof edge and steering wheel seen from the driver seat.
-    this.steeringWheel = steeringWheel(car ? 0.18 : 0.22);
-    if (car) {
-      const { parts, wheelMount } = carCockpit(preset);
+    this.steeringWheel = steeringWheel(car || worm ? 0.18 : 0.22);
+    if (car || worm) {
+      const { parts, wheelMount } = worm ? gusanitoCockpit(preset, L) : carCockpit(preset);
       wheelMount.add(this.steeringWheel);
       this.cockpit.add(...parts, wheelMount);
     } else this.busCockpit(preset);
@@ -86,22 +96,20 @@ export class BusModel {
 
     // Wheels
     const w = preset.wheels;
-    const tireWidth = car ? 0.2 : 0.4;
+    const tireWidth = car || worm ? 0.2 : 0.4;
     const tire = new THREE.CylinderGeometry(w.radius, w.radius, tireWidth, 12);
     tire.rotateX(Math.PI / 2);
     const tireMat = flat('#1b1b1b');
-    const hubMat = flat(car ? '#d9d9d4' : '#bbbbbb');
-    const axles: [number, number, boolean][] = [
-      [w.frontOffset, -w.track, false],
-      [w.frontOffset, w.track, false],
-      [w.rearOffset, -w.track, false],
-      [w.rearOffset, w.track, false],
+    const hubMat = flat(car || worm ? '#d9d9d4' : '#bbbbbb');
+    const axles: [number, number, number][] = [
+      [w.frontOffset, -w.track, 0],
+      [w.frontOffset, w.track, 0],
+      [w.rearOffset, -w.track, 0],
+      [w.rearOffset, w.track, 0],
     ];
-    if (art)
-      axles.push([art.rearAxle, -w.track, true], [art.rearAxle, w.track, true]);
-    let nFront = 0;
-    let nRear = 0;
-    for (const [x, z, rear] of axles) {
+    for (let i = 1; i <= rears; i++) axles.push([art!.rearAxle, -w.track, i], [art!.rearAxle, w.track, i]);
+    const count: number[] = [];
+    for (const [x, z, section] of axles) {
       const pivot = new THREE.Group();
       pivot.position.set(x, w.mountHeight, z);
       const spin = new THREE.Group();
@@ -110,11 +118,30 @@ export class BusModel {
       const hub = new THREE.Mesh(new THREE.BoxGeometry(w.radius * 0.9, w.radius * 0.3, tireWidth + 0.02), hubMat);
       spin.add(mesh, hub);
       pivot.add(spin);
-      (rear ? this.rearGroup! : this.exterior).add(pivot);
-      this.wheels.push({ pivot, spin, rear, index: rear ? nRear++ : nFront++ });
+      (section ? this.rearGroups[section - 1] : this.exterior).add(pivot);
+      count[section] = (count[section] ?? 0) + 1;
+      this.wheels.push({ pivot, spin, section, index: count[section] - 1 });
     }
 
-    this.root.add(this.exterior, this.cockpit);
+    // Spray: a fan of water out to each side of the front wheels, and a wake behind them.
+    const fan = new THREE.ConeGeometry(0.6, 2.2, 8, 1, true);
+    fan.translate(0, 1.1, 0);
+    for (const side of [-1, 1]) {
+      const m = new THREE.Mesh(fan, this.sprayMat);
+      m.position.set(w.frontOffset, w.mountHeight - w.radius * 0.6, side * (W / 2));
+      m.rotation.set(side * 1.0, 0, 0.9);
+      this.spray.add(m);
+    }
+    this.spray.visible = false;
+    this.root.add(this.exterior, this.cockpit, this.spray);
+  }
+
+  /** Spray off the wheels, 0 (none) to 1 (wading flat out). */
+  setSpray(k: number): void {
+    this.spray.visible = k > 0.05;
+    if (!this.spray.visible) return;
+    for (const m of this.spray.children) m.scale.set(0.5 + k * 0.7, 0.3 + k * (0.8 + Math.random() * 0.3), 0.5 + k * 0.7);
+    this.sprayMat.opacity = 0.35 + 0.3 * k;
   }
 
   private busExterior(preset: BusPreset): void {
@@ -159,7 +186,7 @@ export class BusModel {
   }
 
   /**
-   * Articulated bus: a front section (in `exterior`) and a rear one (in `rearGroup`, posed by
+   * Articulated bus: a front section (in `exterior`) and a rear one (in `rearGroups`, posed by
    * `sync`), each with half of the black bellows over the turntable, and passenger doors on both
    * sides: right ones for street stops, left ones for BRT median platforms.
    */
@@ -170,7 +197,7 @@ export class BusModel {
     this.exterior.add(...this.busSection(preset, Lf, true, false));
     const rear = new THREE.Group();
     rear.add(...this.busSection(preset, Lr, false, true));
-    this.rearGroup = rear;
+    this.rearGroups = [rear];
     this.exterior.add(rear);
     const bellowsMat = flat('#202225');
     const bellowsLen = art.gap / 2 + 0.25;
@@ -199,6 +226,17 @@ export class BusModel {
       door(this.exterior, -Lf / 2 + 1.0, side);
       door(rear, Lr / 2 - 1.6, side);
       door(rear, -Lr / 2 + 2.2, side);
+    }
+  }
+
+  /** The gusanito: its worm-faced head car (in `exterior`) and a wagon per rear section. */
+  private gusanitoExterior(preset: BusPreset, art: NonNullable<BusPreset['articulated']>, n: number): void {
+    this.exterior.add(...gusanitoHead(preset, this.frontLength));
+    for (let i = 0; i < n; i++) {
+      const wagon = new THREE.Group();
+      wagon.add(...gusanitoWagon(preset, i, i === n - 1, art.gap));
+      this.rearGroups.push(wagon);
+      this.exterior.add(wagon);
     }
   }
 
@@ -270,18 +308,18 @@ export class BusModel {
     this.root.position.set(t.x, t.y, t.z);
     this.root.quaternion.set(q.x, q.y, q.z, q.w);
 
-    if (this.rearGroup && bus.rear) {
-      // The rear section relative to the front one: inverse(front) * rear.
-      const r = bus.rear.body;
+    this.inv.copy(this.root.quaternion).invert();
+    this.rearGroups.forEach((group, i) => {
+      // Each rear section relative to the front one: inverse(front) * rear.
+      const r = bus.rears[i].body;
       const tr = r.translation();
       const qr = r.rotation();
-      this.inv.copy(this.root.quaternion).invert();
-      this.rearGroup.position.set(tr.x - t.x, tr.y - t.y, tr.z - t.z).applyQuaternion(this.inv);
-      this.rearGroup.quaternion.copy(this.inv).multiply(this.qTmp.set(qr.x, qr.y, qr.z, qr.w));
-    }
+      group.position.set(tr.x - t.x, tr.y - t.y, tr.z - t.z).applyQuaternion(this.inv);
+      group.quaternion.copy(this.inv).multiply(this.qTmp.set(qr.x, qr.y, qr.z, qr.w));
+    });
     const mount = bus.preset.wheels.mountHeight;
-    for (const { pivot, spin, rear, index } of this.wheels) {
-      const v = rear ? bus.rear!.vehicle : bus.vehicle;
+    for (const { pivot, spin, section, index } of this.wheels) {
+      const v = section ? bus.rears[section - 1].vehicle : bus.vehicle;
       pivot.position.y = mount - (v.wheelSuspensionLength(index) ?? 0);
       pivot.rotation.y = v.wheelSteering(index) ?? 0;
       spin.rotation.z = -(v.wheelRotation(index) ?? 0);

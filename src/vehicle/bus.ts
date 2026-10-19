@@ -1,4 +1,4 @@
-import { RAPIER } from '../physics/world';
+import { GROUP, RAPIER, groups } from '../physics/world';
 import type { DriveInput } from '../core/input';
 import type { BusPreset } from './busPreset';
 
@@ -19,15 +19,33 @@ type Q4 = { x: number; y: number; z: number; w: number };
 const FRONT = [0, 1];
 const REAR = [2, 3];
 const COAST_BRAKE = 1.5;
+/** Floodwater's drag (1/s per meter of depth): half a meter of water holds a bus to a crawl. */
+const WADE_DRAG = 1.1;
+/** Grip left in water deeper than AQUAPLANE (the tires float on it). */
+const WADE_GRIP = 0.6;
+const AQUAPLANE = 0.15;
+/** The grip of a soaked road (weather.ts's WET_GRIP; physics doesn't import gameplay). */
+const WET_GRIP_REF = 0.7;
+/** Brakes on a soaked road stop this much less hard (the tires lock and skid). */
+const WET_BRAKE = 0.7;
 
-/** The rear section of an articulated bus: its own body and trailing axle, hinged to the front section. */
+/** A rear section of an articulated bus: its own body and trailing axle, hinged to the section ahead. */
 export interface RearSection {
   body: RAPIER.RigidBody;
   vehicle: RAPIER.DynamicRayCastVehicleController;
   joint: RAPIER.ImpulseJoint;
   /** Length of its box (m). */
   length: number;
+  /** Bend frozen by the handbrake (`driftLock`), null while free. */
+  lockedBend: number | null;
 }
+
+/**
+ * A train of sections (more than one rear section, the gusanito): its sections never touch each
+ * other (on a tight bend the third wagon swings into the first one's box) and its wheels don't
+ * stand on them.
+ */
+const TRAIN = groups(GROUP.PLAYER, GROUP.ALL & ~GROUP.PLAYER);
 
 /** Turntable motor: beyond the yaw limit it pushes back hard; inside, a little damping keeps the swing calm. */
 const TURNTABLE_STIFFNESS = 600;
@@ -44,21 +62,28 @@ function motor(joint: RAPIER.ImpulseJoint, axis: RAPIER.JointAxis, target: numbe
 
 /**
  * Physics side of a bus: chassis rigid body + Rapier raycast vehicle. An articulated preset
- * (`preset.articulated`) adds a second body with a trailing axle, hinged to the first at a
- * turntable (a ball joint whose motors hold the roll and a soft yaw limit); `body` stays
- * the front section. Chassis space: +X forward, +Y up, +Z right. Has no rendering dependencies,
+ * (`preset.articulated`) adds bodies with a trailing axle each (`sections` of them, one by
+ * default), each hinged to the one ahead at a turntable (a ball joint whose motors hold the roll
+ * and a soft yaw limit); `body` stays the front section. Chassis space: +X forward, +Y up, +Z right. Has no rendering dependencies,
  * so it runs under Vitest in Node.
  */
 export class BusPhysics {
   readonly body: RAPIER.RigidBody;
   readonly vehicle: RAPIER.DynamicRayCastVehicleController;
-  /** The rear section of an articulated bus; null for a rigid one. */
-  readonly rear: RearSection | null = null;
+  /** The rear sections of an articulated bus, front to back; empty for a rigid one. */
+  readonly rears: RearSection[] = [];
   /** Length of the front section (the whole vehicle for a rigid bus). */
   readonly frontLength: number;
   private steerAngle = 0;
-  private lockedBend: number | null = null;
   private rearGrip: number;
+  /** Tire grip from the weather (1 dry, less on a wet road): scales every wheel's friction. */
+  grip = 1;
+  /** Depth of floodwater the bus stands in (m; set by the game, 0 when dry): it drags it back. */
+  wade = 0;
+  /** Backing up (throttle back, or rolling backwards), for `reverseLock`. */
+  private reversing = false;
+  /** Ray filter for the wheels of a train (null: the default, everything). */
+  private wheelGroups: number | undefined;
   /** Nitro fired on the last update. */
   boosting = false;
 
@@ -68,7 +93,9 @@ export class BusPhysics {
     spawn: Spawn,
   ) {
     const art = preset.articulated;
-    this.frontLength = art ? preset.body.length - art.rearLength - art.gap : preset.body.length;
+    const n = art ? (art.sections ?? 1) : 0;
+    this.frontLength = art ? preset.body.length - n * (art.rearLength + art.gap) : preset.body.length;
+    if (n > 1) this.wheelGroups = TRAIN;
     const w = preset.wheels;
     this.body = this.section(this.frontLength, preset.mass);
     this.vehicle = this.addAxles(this.body, [
@@ -79,20 +106,22 @@ export class BusPhysics {
     ]);
     this.rearGrip = w.frictionSlip;
 
-    if (art) {
-      const body = this.section(art.rearLength, art.rearMass);
+    for (let i = 0; i < n; i++) {
+      const ahead = i ? this.rears[i - 1] : null;
+      const body = this.section(art!.rearLength, art!.rearMass);
       const vehicle = this.addAxles(body, [
-        [art.rearAxle, -w.track],
-        [art.rearAxle, w.track],
+        [art!.rearAxle, -w.track],
+        [art!.rearAxle, w.track],
       ]);
       // Ball joint in the middle of the gap, free to yaw and nod; its motors hold the roll and
       // the yaw limit. The sections' boxes may overlap on a tight bend, so they ignore each other.
-      const data = RAPIER.JointData.spherical({ x: -(this.frontLength / 2 + art.gap / 2), y: 0, z: 0 }, { x: art.rearLength / 2 + art.gap / 2, y: 0, z: 0 });
-      const joint = world.createImpulseJoint(data, this.body, body, true) as RAPIER.ImpulseJoint;
+      const data = RAPIER.JointData.spherical({ x: -((ahead?.length ?? this.frontLength) / 2 + art!.gap / 2), y: 0, z: 0 }, { x: art!.rearLength / 2 + art!.gap / 2, y: 0, z: 0 });
+      const joint = world.createImpulseJoint(data, ahead?.body ?? this.body, body, true) as RAPIER.ImpulseJoint;
       joint.setContactsEnabled(false);
       motor(joint, RAPIER.JointAxis.AngX, 0, TURNTABLE_STIFFNESS, TURNTABLE_DAMPING);
-      this.rear = { body, vehicle, joint, length: art.rearLength };
+      this.rears.push({ body, vehicle, joint, length: art!.rearLength, lockedBend: null });
     }
+    if (n > 1) for (const c of this.colliders) c.setCollisionGroups(TRAIN);
 
     this.reset(spawn);
   }
@@ -150,9 +179,14 @@ export class BusPhysics {
     return vehicle;
   }
 
-  /** Every rigid body of the vehicle: the front section, then the rear one. */
+  /** The first rear section (the only one of an articulated bus); null for a rigid one. */
+  get rear(): RearSection | null {
+    return this.rears[0] ?? null;
+  }
+
+  /** Every rigid body of the vehicle: the front section, then the rear ones. */
   get bodies(): RAPIER.RigidBody[] {
-    return this.rear ? [this.body, this.rear.body] : [this.body];
+    return [this.body, ...this.rears.map((r) => r.body)];
   }
 
   /** Chassis colliders, for contact tests (traffic hits) and to exclude from queries. */
@@ -173,13 +207,14 @@ export class BusPhysics {
     c.x = t.x;
     c.y = t.y;
     c.z = t.z;
-    if (!this.rear) return c;
-    const r = this.rear.body.translation();
+    const last = this.rears[this.rears.length - 1];
+    if (!last) return c;
+    const r = last.body.translation();
     const f = this.forwardOf(this.body.rotation(), this.frontLength / 2);
     c.x = t.x + f.x;
     c.y = t.y + f.y;
     c.z = t.z + f.z;
-    const b = this.forwardOf(this.rear.body.rotation(), -this.rear.length / 2);
+    const b = this.forwardOf(last.body.rotation(), -last.length / 2);
     c.x = (c.x + r.x + b.x) / 2;
     c.y = (c.y + r.y + b.y) / 2;
     c.z = (c.z + r.z + b.z) / 2;
@@ -189,7 +224,7 @@ export class BusPhysics {
   /** Each section's center, heading and length (one for a rigid bus), e.g. for the boxes traffic steers around. */
   sections(): { pos: { x: number; y: number; z: number }; heading: number; length: number }[] {
     const out = [{ pos: this.body.translation(), heading: this.heading, length: this.frontLength }];
-    if (this.rear) out.push({ pos: this.rear.body.translation(), heading: this.headingOf(this.rear.body.rotation()), length: this.rear.length });
+    for (const r of this.rears) out.push({ pos: r.body.translation(), heading: this.headingOf(r.body.rotation()), length: r.length });
     return out;
   }
 
@@ -212,11 +247,15 @@ export class BusPhysics {
     return a;
   }
 
-  /** Bend between the sections (rear heading minus front heading), radians. 0 for a rigid bus. */
+  /** Bend between the front section and the one behind it (rear heading minus front heading), radians. 0 for a rigid bus. */
   get bend(): number {
-    if (!this.rear) return 0;
-    const h = this.headingOf(this.body.rotation());
-    const d = this.headingOf(this.rear.body.rotation()) - h;
+    return this.rears.length ? this.bendAt(0) : 0;
+  }
+
+  /** Bend at the `i`th turntable: rear section `i`'s heading minus the heading of the section ahead of it. */
+  bendAt(i: number): number {
+    const h = this.headingOf((i ? this.rears[i - 1].body : this.body).rotation());
+    const d = this.headingOf(this.rears[i].body.rotation()) - h;
     return Math.atan2(Math.sin(d), Math.cos(d));
   }
 
@@ -233,13 +272,13 @@ export class BusPhysics {
   get wheelsOnGround(): number {
     let n = 0;
     for (let i = 0; i < 4; i++) if (this.vehicle.wheelIsInContact(i)) n++;
-    if (this.rear) for (let i = 0; i < 2; i++) if (this.rear.vehicle.wheelIsInContact(i)) n++;
+    for (const r of this.rears) for (let i = 0; i < 2; i++) if (r.vehicle.wheelIsInContact(i)) n++;
     return n;
   }
 
-  /** Number of wheels (4, or 6 for an articulated bus). */
+  /** Number of wheels (4, plus 2 per rear section of an articulated bus). */
   get wheelCount(): number {
-    return this.rear ? 6 : 4;
+    return 4 + 2 * this.rears.length;
   }
 
   /**
@@ -250,7 +289,7 @@ export class BusPhysics {
   roadHeight(): number {
     let sum = 0;
     let n = 0;
-    for (const v of this.rear ? [this.vehicle, this.rear.vehicle] : [this.vehicle]) {
+    for (const v of [this.vehicle, ...this.rears.map((r) => r.vehicle)]) {
       for (let i = 0, k = v.numWheels(); i < k; i++) {
         if (!v.wheelIsInContact(i)) continue;
         const c = v.wheelContactPoint(i, this.contact);
@@ -288,6 +327,7 @@ export class BusPhysics {
     } else {
       brake = COAST_BRAKE;
     }
+    brake *= 1 - (1 - WET_BRAKE) * Math.min(1, this.wetness);
 
     for (const i of FRONT) this.vehicle.setWheelBrake(i, brake);
     for (const i of REAR) {
@@ -304,36 +344,82 @@ export class BusPhysics {
     const fg = p.articulated?.driftFrontGrip;
     if (fg) for (const i of FRONT) this.vehicle.setWheelFrictionSlip(i, input.handbrake ? Math.min(p.wheels.frictionSlip, this.rearGrip * fg) : p.wheels.frictionSlip);
 
-    this.vehicle.updateVehicle(dt);
-    if (this.rear) this.updateRear(brake, !!input.handbrake, dt);
+    this.wetTires(this.vehicle);
+    this.vehicle.updateVehicle(dt, undefined, this.wheelGroups);
+    this.reversing = input.throttle < 0 || speed < -1;
+    this.rears.forEach((r, i) => this.updateRear(r, i, brake, !!input.handbrake, dt));
     this.driftAssist(input, speed, dt);
     this.limitDriftAngle(dt);
     this.boost(!!input.boost, speed, dt);
+    this.wading(dt);
   }
 
-  /** The trailing axle only brakes (no engine, no steering); the turntable gets its limits. */
-  private updateRear(brake: number, handbrake: boolean, dt: number): void {
-    const rear = this.rear!;
+  /**
+   * A wet road caps the tires' friction (the friction already set for this step: handbrake and
+   * drift values stay when lower) at the preset's `wet` values on a soaked road (at `grip` 1
+   * nothing changes). The presets' dry friction is far over what a turn needs, so how low the cap
+   * must go to slide depends on the vehicle (its weight on each axle): tuned per preset, the rear
+   * lower than the front so the tail steps out rather than the nose plowing on. In water deeper
+   * than AQUAPLANE the tires float and lose more.
+   */
+  private wetTires(v: RAPIER.DynamicRayCastVehicleController): void {
+    const wet = this.wetness;
+    if (wet <= 0) return;
+    const dry = this.preset.wheels.frictionSlip;
+    const caps = this.preset.wet ?? { front: dry, rear: dry };
+    for (let i = 0, n = v.numWheels(); i < n; i++) {
+      const soaked = v === this.vehicle && i < 2 ? caps.front : caps.rear;
+      const cap = dry + (Math.min(dry, soaked) - dry) * wet;
+      v.setWheelFrictionSlip(i, Math.max(0.2, Math.min(v.wheelFrictionSlip(i) ?? 0, cap)));
+    }
+  }
+
+  /** 0 on a dry road, 1 soaked (`grip` WET_GRIP_REF), up to 1.5 in floodwater. */
+  private get wetness(): number {
+    const grip = this.wade > AQUAPLANE ? this.grip * WADE_GRIP : this.grip;
+    return Math.min(1.5, (1 - grip) / (1 - WET_GRIP_REF));
+  }
+
+  /** Floodwater drags every section back, more the deeper and faster it goes (a splash, then a crawl). */
+  private wading(dt: number): void {
+    if (this.wade <= 0) return;
+    const k = Math.min(1, WADE_DRAG * Math.min(1, this.wade) * dt);
+    for (const b of this.bodies) {
+      const v = b.linvel();
+      const m = b.mass();
+      b.applyImpulse({ x: -v.x * m * k, y: 0, z: -v.z * m * k }, true);
+    }
+  }
+
+  /** A trailing axle only brakes (no engine, no steering); its turntable gets its limits. */
+  private updateRear(rear: RearSection, index: number, brake: number, handbrake: boolean, dt: number): void {
     const p = this.preset;
     const art = p.articulated!;
     const b = handbrake ? Math.max(brake, p.handbrakeForce) : brake;
     for (let i = 0; i < 2; i++) {
-      rear.vehicle.setWheelBrake(i, b * (p.articulated!.rearMass / p.mass));
+      rear.vehicle.setWheelBrake(i, b * (art.rearMass / p.mass));
       // The handbrake lets go of the trailing axle too, or it would hold the whole bus in line.
       rear.vehicle.setWheelFrictionSlip(i, this.rearGrip);
     }
-    rear.vehicle.updateVehicle(dt);
-    const lim = (p.articulated!.yawLimitDeg * Math.PI) / 180;
-    const bend = this.bend;
+    this.wetTires(rear.vehicle);
+    rear.vehicle.updateVehicle(dt, undefined, this.wheelGroups);
+    const lim = (art.yawLimitDeg * Math.PI) / 180;
+    const bend = this.bendAt(index);
     // Handbrake: the turntable freezes at the bend it had, so the whole bus swings out as one
     // body (a hinged tail would just fold) and a drift builds a real slip angle.
     if (handbrake && art.driftLock) {
-      this.lockedBend ??= Math.max(-lim, Math.min(lim, bend));
-      motor(rear.joint, RAPIER.JointAxis.AngY, this.lockedBend, art.driftLock, TURNTABLE_DAMPING);
+      rear.lockedBend ??= Math.max(-lim, Math.min(lim, bend));
+      motor(rear.joint, RAPIER.JointAxis.AngY, rear.lockedBend, art.driftLock, TURNTABLE_DAMPING);
       return;
     }
-    this.lockedBend = null;
-    if (Math.abs(bend) > lim) motor(rear.joint, RAPIER.JointAxis.AngY, Math.sign(bend) * lim, TURNTABLE_STIFFNESS, TURNTABLE_DAMPING);
+    rear.lockedBend = null;
+    // Backing up a train of trailers folds it (each pushes the one ahead sideways): the
+    // turntables pull straight instead, and it reverses like one long rigid bus.
+    if (art.reverseLock && this.speed < 0.5 && this.reversing) {
+      motor(rear.joint, RAPIER.JointAxis.AngY, 0, art.reverseLock, TURNTABLE_DAMPING);
+      return;
+    }
+    if (Math.abs(bend) > lim) motor(rear.joint, RAPIER.JointAxis.AngY, Math.sign(bend) * lim, art.yawLimitStiffness ?? TURNTABLE_STIFFNESS, TURNTABLE_DAMPING);
     else motor(rear.joint, RAPIER.JointAxis.AngY, 0, 0, TURNTABLE_FREE_DAMPING);
   }
 
@@ -410,11 +496,16 @@ export class BusPhysics {
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     };
     place(this.body, L / 2 - this.frontLength / 2);
-    if (this.rear) place(this.rear.body, -(L / 2 - this.rear.length / 2));
+    let at = L / 2 - this.frontLength;
+    for (const r of this.rears) {
+      at -= (this.preset.articulated?.gap ?? 0) + r.length;
+      place(r.body, at + r.length / 2);
+      r.lockedBend = null;
+    }
     this.steerAngle = 0;
-    this.lockedBend = null;
     this.rearGrip = this.preset.wheels.frictionSlip;
     this.boosting = false;
+    this.wade = 0;
   }
 
   /** Current yaw, derived from the forward vector projected onto the ground plane. */

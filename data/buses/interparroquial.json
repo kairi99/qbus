@@ -22,6 +22,7 @@
     "sideFrictionStiffness": 1.0,
     "handbrakeFrictionSlip": 0.28
   },
+  "wet": { "front": 0.9, "rear": 0.35 },
   "drift": { "maxAngleDeg": 38, "gripRecovery": 2.2 },
   "nitro": { "accel": 8, "topSpeedBonusKmh": 35 },
   "suspension": {

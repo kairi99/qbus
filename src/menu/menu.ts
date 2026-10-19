@@ -1,11 +1,11 @@
-import type { BusPreset } from '../vehicle/busPreset';
+import { type BusPreset, isTrain } from '../vehicle/busPreset';
 import { BRT_BUS, BUSES, VEHICLES, busStats } from '../vehicle/buses';
 import { ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose } from '../gameplay/routes';
 import { type StarThresholds, starThresholds, starsFor } from '../gameplay/stars';
 import { buildRoadGraph } from '../world/roadGraph';
-import { HILLS_OPTIONS, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
+import { HILLS_OPTIONS, RAIN_OPTIONS, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
 import { RADIO_OFF, STATIONS } from '../core/radioStations';
 import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
 import { MISSIONS } from '../gameplay/missions';
@@ -126,7 +126,7 @@ export class Menu {
           <section>
             <h2>Sonidos</h2>
             <p>Grabaciones de dominio público (CC0) de ${link('https://freesound.org', 'Freesound')}: kyles, AndrewAlexander, rabbydaw,
-            DigPro120, am7 y tt_runscript. Detalle en <code>public/sounds/CREDITS.md</code>. Los sonidos del menú son sintetizados por código.</p>
+            DigPro120, am7 y tt_runscript. Detalle en <code>public/sounds/CREDITS.md</code>. Los sonidos del menú, la lluvia y los truenos son sintetizados por código.</p>
           </section>
           <section>
             <h2>Música</h2>
@@ -249,6 +249,10 @@ export class Menu {
             ${TIME_OPTIONS.map((o) => choice('timeOfDay', o.value, o.label, s.timeOfDay === o.value)).join('')}
           </fieldset>
           <fieldset>
+            <legend>Lluvia</legend>
+            ${RAIN_OPTIONS.map((o) => choice('rain', o.value, o.label, s.rain === o.value)).join('')}
+          </fieldset>
+          <fieldset>
             <legend>Radio al arrancar</legend>
             ${choice('radio', 'off', RADIO_OFF, s.radio === 'off')}
             ${STATIONS.map((st) => choice('radio', st.id, st.name, s.radio === st.id)).join('')}
@@ -268,6 +272,7 @@ export class Menu {
         if (el.name === 'camera') this.settings.camera = el.value as Settings['camera'];
         if (el.name === 'hills') this.settings.hills = Number(el.value);
         if (el.name === 'timeOfDay') this.settings.timeOfDay = el.value as Settings['timeOfDay'];
+        if (el.name === 'rain') this.settings.rain = el.value as Settings['rain'];
         if (el.name === 'radio') this.settings.radio = el.value as Settings['radio'];
         if (el.name === 'tutorial') this.settings.tutorial = el.value === 'on';
         saveSettings(this.settings);
@@ -402,6 +407,36 @@ const AE86_ART = `
     <circle cx="114" cy="41" r="8" fill="#1b1b1b"/><circle cx="114" cy="41" r="4" fill="#d9d9d4"/>
   </g>`;
 
+/** The gusanito on its card: the worm's head (eye, lips, antenna) and four wagons with striped canopies. */
+const GUSANITO_ART = (() => {
+  const canopies = ['#ffd21f', '#3fc4ff', '#8fdc2c', '#ff8a2a'];
+  const wagons = canopies
+    .map((c, i) => {
+      const x = 4 + i * 36;
+      return `<rect x="${x}" y="30" width="32" height="16" rx="7" fill="${i % 2 ? '#5fd06a' : '#8fdc2c'}"/>
+      <rect x="${x + 2}" y="38" width="28" height="3" fill="#ffd21f"/>
+      <circle cx="${x + 10}" cy="27" r="3.5" fill="#c68642"/><circle cx="${x + 22}" cy="27" r="3.5" fill="#f1c27d"/>
+      <rect x="${x + 2}" y="12" width="2" height="18" fill="#f4f4f4"/><rect x="${x + 28}" y="12" width="2" height="18" fill="#f4f4f4"/>
+      <path d="M${x} 13 Q${x + 16} 2 ${x + 32} 13 Z" fill="${c}"/>
+      <circle cx="${x + 9}" cy="48" r="5" fill="#1b1b1b"/><circle cx="${x + 9}" cy="48" r="2" fill="#d9d9d4"/>`;
+    })
+    .join('');
+  return `
+  <g transform="translate(10,12)">${wagons}
+    <rect x="148" y="26" width="44" height="20" rx="9" fill="#8fdc2c"/>
+    <ellipse cx="178" cy="24" rx="14" ry="10" fill="#8fdc2c"/>
+    <path d="M148 13 Q160 3 172 13 Z" fill="#ff5fae"/><rect x="150" y="12" width="2" height="16" fill="#f4f4f4"/>
+    <rect x="166" y="12" width="2" height="16" fill="#1c2a38"/>
+    <circle cx="182" cy="20" r="6" fill="#fff"/><circle cx="185" cy="20" r="3" fill="#2f62ff"/>
+    <path d="M176 13 Q182 9 188 13" stroke="#151515" stroke-width="1.5" fill="none"/>
+    <path d="M180 14 Q178 4 172 0" stroke="#9b5cff" stroke-width="2" fill="none"/><circle cx="172" cy="0" r="3" fill="#ff3fa0"/>
+    <ellipse cx="193" cy="38" rx="5" ry="4" fill="#e8262b"/><circle cx="194" cy="29" r="3" fill="#e8262b"/>
+    <rect x="148" y="38" width="40" height="3" fill="#ffd21f"/>
+    <circle cx="157" cy="48" r="5" fill="#1b1b1b"/><circle cx="157" cy="48" r="2" fill="#d9d9d4"/>
+    <circle cx="181" cy="48" r="5" fill="#1b1b1b"/><circle cx="181" cy="48" r="2" fill="#d9d9d4"/>
+  </g>`;
+})();
+
 function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset[]): string {
   const { color, stripe, roof } = p.body;
   // Side view scaled to the bus's real length, so the buseta looks small and the coach long.
@@ -434,7 +469,9 @@ function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset
       <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">${
         p.kind === 'car'
           ? AE86_ART
-          : `
+          : isTrain(p)
+            ? GUSANITO_ART
+            : `
         <g transform="translate(${(220 - w) / 2},8)">${body}
         </g>`
       }

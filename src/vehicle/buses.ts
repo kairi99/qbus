@@ -4,6 +4,7 @@ import interparroquial from '../../data/buses/interparroquial.json';
 import buseta from '../../data/buses/buseta.json';
 import ae86 from '../../data/buses/ae86.json';
 import articulado from '../../data/buses/articulado.json';
+import gusanito from '../../data/buses/gusanito.json';
 
 /** Selectable buses, in menu order, with a one-line pitch each. */
 export const BUSES: { preset: BusPreset; blurb: string }[] = [
@@ -11,6 +12,7 @@ export const BUSES: { preset: BusPreset; blurb: string }[] = [
   { preset: interparroquial as BusPreset, blurb: 'Grandote y veloz, pero le cuesta arrancar' },
   { preset: buseta as BusPreset, blurb: 'Chiquita y ágil, derrapa en cualquier esquina' },
   { preset: articulado as BusPreset, blurb: 'El del corredor: 18 metros que se doblan en la curva, con puertas a ambos lados' },
+  { preset: gusanito as BusPreset, blurb: 'El de las fiestas: cuatro vagoncitos que culebrean detrás, la gente va colgada y feliz' },
 ];
 
 /** The bus a Trolebús/Ecovía/Metrobus route suggests (the menu selects it, the player may pick another). */

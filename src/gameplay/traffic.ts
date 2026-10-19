@@ -171,6 +171,10 @@ export class TrafficSim {
   cars: Car[] = [];
   /** Seconds simulated: the clock the traffic lights run on. */
   time = 0;
+  /** Drivers' pace (rain: they slow down a little). */
+  speedScale = 1;
+  /** Speed caps (m/s) by edge id: lanes under floodwater, which cars crawl through. */
+  slowEdges = new Map<number, number>();
   private lights: TrafficLights | null;
   private rng: Rng;
   /** Per junction: cars inside it, where each came from and where it's going. */
@@ -335,7 +339,8 @@ export class TrafficSim {
     }
     if (car.tail !== null && !car.turn && car.s > car.kind.length / 2 + 2) this.clearTail(car);
     const e = this.graph.edges[car.edge];
-    const vmax = car.kind.vmax * (car.hurry > 0 ? 1.15 : 1);
+    const cap = this.slowEdges.get(car.edge);
+    const vmax = Math.min(cap ?? Infinity, car.kind.vmax * (car.hurry > 0 ? 1.15 : 1) * this.speedScale);
     car.hurry = Math.max(0, car.hurry - dt);
     car.honkCooldown = Math.max(0, car.honkCooldown - dt);
 

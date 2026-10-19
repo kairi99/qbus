@@ -1,0 +1,38 @@
+{
+  "id": "gusanito",
+  "name": "El Gusanito",
+  "body": { "length": 19.6, "width": 1.9, "height": 2.7, "color": "#8fdc2c", "stripe": "#ffd21f", "roof": "#ff5fae" },
+  "articulated": { "sections": 4, "rearLength": 3.0, "gap": 0.8, "rearAxle": -0.5, "rearMass": 260, "yawLimitDeg": 42, "yawLimitStiffness": 6000, "pitchLimitDeg": 12, "bevel": 0.5, "driftYawRate": 1.5, "driftFrontGrip": 3, "reverseLock": 500 },
+  "capacity": 40,
+  "mass": 650,
+  "centerOfMassHeight": 0.2,
+  "engineForce": 3800,
+  "reverseForce": 3600,
+  "reverseTopSpeedKmh": 30,
+  "brakeForce": 60,
+  "handbrakeForce": 12,
+  "topSpeedKmh": 62,
+  "steer": { "maxAngle": 0.55, "highSpeedAngle": 0.2, "speed": 4 },
+  "wheels": {
+    "radius": 0.33,
+    "frontOffset": 1.35,
+    "rearOffset": -1.25,
+    "track": 0.78,
+    "mountHeight": -1.0,
+    "frictionSlip": 2.0,
+    "sideFrictionStiffness": 1.0,
+    "handbrakeFrictionSlip": 0.4
+  },
+  "wet": { "front": 1.05, "rear": 0.5 },
+  "drift": { "maxAngleDeg": 32, "gripRecovery": 2.6 },
+  "cockpit": { "seat": [-0.85, 0.35, -0.42] },
+  "nitro": { "accel": 9, "topSpeedBonusKmh": 25 },
+  "suspension": {
+    "restLength": 0.4,
+    "maxTravel": 0.35,
+    "stiffness": 32,
+    "compression": 2.3,
+    "relaxation": 2.7,
+    "maxForce": 40000
+  }
+}

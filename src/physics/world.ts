@@ -46,9 +46,10 @@ export function addTerrainCollider(world: RAPIER.World, t: Terrain, sink?: { pit
 /**
  * Collision groups (membership << 16 | filter). The static world only belongs to STATIC, so
  * traffic in its lane (TRAFFIC, filtering out STATIC) never touches it; everything else keeps
- * the default "all groups" and collides with everything.
+ * the default "all groups" and collides with everything. PLAYER: a train of sections (the
+ * gusanito) whose sections ignore each other; static-only queries don't see it.
  */
-export const GROUP = { STATIC: 0x0001, TRAFFIC: 0x0002, ALL: 0xffff };
+export const GROUP = { STATIC: 0x0001, TRAFFIC: 0x0002, PLAYER: 0x0004, ALL: 0xffff };
 export const groups = (member: number, filter: number) => (member << 16) | filter;
 
 /** Puts every collider on a fixed body (or on none) in the STATIC group. Call once the city is built. */

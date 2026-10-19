@@ -494,6 +494,12 @@ export class GameSession {
     }
   }
 
+  /** The weather turned: it started raining, or the underpasses are flooding. */
+  weatherNews(kind: 'rain' | 'flood'): void {
+    this.hud.popup(kind === 'rain' ? 'Lluvia: ¡la calle resbala!' : 'Aguacero: pasos deprimidos inundados', 'bad');
+    this.say(kind);
+  }
+
   private say(kind: LineKind, chance = 1): void {
     if (this.rng.next() > chance) return;
     this.hud.say(SPEAKER[kind], this.rng.pick(LINES[kind]));

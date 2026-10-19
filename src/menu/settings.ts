@@ -3,6 +3,7 @@ import { DEFAULT_HILLS } from '../world/loadCity';
 import { type TimeOfDay, parseTimeOfDay } from '../world/sky';
 import { type RadioSetting, parseRadio } from '../core/radioStations';
 import { aliasRouteId } from '../world/osm/operators';
+import { type RainSetting, parseRainSetting } from '../gameplay/weather';
 
 /** What the player picked last time, and their preferences. Saved in localStorage. */
 export interface Settings {
@@ -26,9 +27,11 @@ export interface Settings {
   radio: RadioSetting;
   /** Show the how-to-play card when a shift or free roam starts. */
   tutorial: boolean;
+  /** Rain: showers at random moments, never, or raining from the start. */
+  rain: RainSetting;
 }
 
-export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito', tutorial: true };
+export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito', tutorial: true, rain: 'random' };
 export const HILLS_OPTIONS = [
   { value: 1, label: 'Reales' },
   { value: 1.3, label: 'Un poquito más' },
@@ -38,6 +41,12 @@ export const TIME_OPTIONS: { value: TimeOfDay; label: string }[] = [
   { value: 'day', label: 'Día' },
   { value: 'sunset', label: 'Atardecer' },
   { value: 'night', label: 'Noche' },
+];
+
+export const RAIN_OPTIONS: { value: RainSetting; label: string }[] = [
+  { value: 'random', label: 'Cuando le dé la gana' },
+  { value: 'always', label: 'Siempre' },
+  { value: 'off', label: 'Nunca' },
 ];
 
 export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>;
@@ -75,6 +84,7 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     musicVolume: num('musicVolume', 0, 1),
     radio: parseRadio(raw.radio) ?? DEFAULTS.radio,
     tutorial: raw.tutorial !== false,
+    rain: parseRainSetting(raw.rain) ?? DEFAULTS.rain,
   };
 }
 

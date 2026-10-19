@@ -14,9 +14,8 @@ import { freeStartPose, routesFor, startPose } from '../src/gameplay/routes';
 
 const city: CityData = JSON.parse(readFileSync('data/cities/mariscal.json', 'utf8'));
 city.terrain!.scale = DEFAULT_HILLS;
-const preset = busById('articulado');
-
-describe('articulated bus in La Mariscal', () => {
+describe.each(['articulado', 'gusanito'])('articulated %s in La Mariscal', (id) => {
+  const preset = busById(id);
   const graph = buildRoadGraph(city);
   let world: ReturnType<typeof createWorld>;
   beforeAll(async () => {
@@ -25,7 +24,7 @@ describe('articulated bus in La Mariscal', () => {
     buildCity(city, world, new THREE.Scene(), graph);
   });
 
-  it('has room at every route start and the free-roam start (whole 18 m footprint clear of walls)', () => {
+  it('has room at every route start and the free-roam start (whole footprint clear of walls)', () => {
     const fits = vehicleClearance(world, preset.body);
     const poses = [...routesFor(city).map((r) => ({ id: r.id, pose: startPose(city, graph, r) })), { id: 'free', pose: freeStartPose(city, graph) }];
     const blocked = poses.filter((p) => !fits(p.pose)).map((p) => p.id);
@@ -40,7 +39,7 @@ describe('articulated bus in La Mariscal', () => {
       bus.update({ throttle: 0, steer: 0, handbrake: false }, PHYSICS_STEP);
       world.step();
     }
-    expect(bus.wheelsOnGround).toBe(6);
+    expect(bus.wheelsOnGround).toBe(bus.wheelCount);
     const c = bus.position();
     const s = snapToRoad(city, { x: c.x, z: c.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length });
     bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
@@ -48,8 +47,8 @@ describe('articulated bus in La Mariscal', () => {
       bus.update({ throttle: 0, steer: 0, handbrake: false }, PHYSICS_STEP);
       world.step();
     }
-    expect(bus.wheelsOnGround).toBe(6);
-    expect(Math.abs(bus.bend)).toBeLessThan(0.05);
+    expect(bus.wheelsOnGround).toBe(bus.wheelCount);
+    for (let i = 0; i < bus.rears.length; i++) expect(Math.abs(bus.bendAt(i))).toBeLessThan(0.05);
     expect(Math.abs(bus.roadHeight() - s.y)).toBeLessThan(0.5);
   });
 
@@ -61,13 +60,14 @@ describe('articulated bus in La Mariscal', () => {
     for (let t = 0; t < 30; t += PHYSICS_STEP) {
       bus.update({ throttle: t < 6 ? 1 : 0.2, steer: t > 8 && Math.sin(t) > 0.5 ? 0.6 : 0, handbrake: false }, PHYSICS_STEP);
       world.step();
-      maxBend = Math.max(maxBend, Math.abs(bus.bend));
+      for (let i = 0; i < bus.rears.length; i++) maxBend = Math.max(maxBend, Math.abs(bus.bendAt(i)));
       for (const b of bus.bodies) {
         const q = b.rotation();
         minUp = Math.min(minUp, 1 - 2 * (q.x * q.x + q.z * q.z));
       }
     }
-    expect(maxBend).toBeLessThan(((preset.articulated!.yawLimitDeg + 6) * Math.PI) / 180);
+    // The script runs into a building at one bend; the gusanito's light wagons swing on a few degrees more.
+    expect(maxBend).toBeLessThan(((preset.articulated!.yawLimitDeg + 8) * Math.PI) / 180);
     expect(minUp).toBeGreaterThan(0.8);
   });
 });

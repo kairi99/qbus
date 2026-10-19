@@ -10,7 +10,8 @@ function wheelTopZ(id: string, steer: number): number {
   const model = new BusModel(preset);
   const body = { translation: () => ({ x: 0, y: 0, z: 0 }), rotation: () => ({ x: 0, y: 0, z: 0, w: 1 }) };
   const vehicle = { wheelSuspensionLength: () => 0, wheelSteering: () => steer, wheelRotation: () => 0 };
-  const bus = { preset, body, vehicle, rear: preset.articulated ? { body, vehicle } : null, boosting: false } as unknown as BusPhysics;
+  const rears = Array.from({ length: preset.articulated ? (preset.articulated.sections ?? 1) : 0 }, () => ({ body, vehicle }));
+  const bus = { preset, body, vehicle, rears, boosting: false } as unknown as BusPhysics;
   model.sync(bus);
   const wheel = (model as unknown as { steeringWheel: THREE.Object3D }).steeringWheel;
   model.root.updateMatrixWorld(true);
@@ -25,7 +26,7 @@ describe('steering wheel', () => {
   });
   // Positive wheel steering turns the vehicle left (toward -z); seen from the seat the steering
   // wheel then turns counterclockwise, its top moving left.
-  for (const id of ['popular', 'articulado', 'ae86'])
+  for (const id of ['popular', 'articulado', 'ae86', 'gusanito'])
     it(`${id}: upright when straight, counterclockwise to steer left`, () => {
       expect(Math.abs(wheelTopZ(id, 0))).toBeLessThan(0.01);
       expect(wheelTopZ(id, 0.3)).toBeLessThan(-0.05);
