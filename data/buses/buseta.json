@@ -10,6 +10,7 @@
     "roof": "#efefef"
   },
   "capacity": 26,
+  "race": { "corner": 12, "brake": 8, "wetCorner": 9, "wetBrake": 7 },
   "mass": 1100,
   "centerOfMassHeight": 0.4,
   "engineForce": 3000,

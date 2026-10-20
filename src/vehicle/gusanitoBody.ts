@@ -139,9 +139,10 @@ export function gusanitoHead(preset: BusPreset, L: number): THREE.Object3D[] {
     a.rotation.set(s * 0.25, 0, -0.35);
     out.push(a, ball(0.12, x1 - 0.77, belt + 1.06, s * W * 0.36, flat('#ff3fa0')));
   }
-  // Windshield on a frame, and the canopy over the driver's seat behind it.
+  // Windshield on a frame (tinted, see-through: the driver shows behind it), and the canopy
+  // over the driver's seat behind it.
   const wsX = x1 - 2.05;
-  const glass = box(0.05, top - 0.35 - belt, W * 0.84, wsX, (top - 0.35 + belt) / 2, 0, flat(GLASS));
+  const glass = box(0.05, top - 0.35 - belt, W * 0.84, wsX, (top - 0.35 + belt) / 2, 0, new THREE.MeshLambertMaterial({ color: GLASS, transparent: true, opacity: 0.35, depthWrite: false }));
   glass.name = 'windshield';
   out.push(glass);
   out.push(box(0.08, 0.08, W * 0.86, wsX, belt + 0.02, 0, flat('#f4f4f4')));
@@ -149,8 +150,18 @@ export function gusanitoHead(preset: BusPreset, L: number): THREE.Object3D[] {
   const c = canopy(cLen, W, belt, top, CANOPY[0], LED[0]);
   for (const o of c) o.position.x += -L / 2 + cLen / 2 + 0.05;
   out.push(...c);
-  // Driver's seat back and the tail of the head car (a coupling plate).
-  out.push(box(0.15, 0.7, W * 0.4, -1.15, belt + 0.1, -W * 0.22, flat('#c62828')));
+  // Driver's seat back, the driver (a cap, arms out to the wheel), and the tail of the head car (a coupling plate).
+  const dz = -W * 0.22;
+  out.push(box(0.15, 0.7, W * 0.4, -1.15, belt + 0.1, dz, flat('#c62828')));
+  const shirt = flat('#ffd21f');
+  out.push(box(0.32, 0.46, 0.38, -0.92, belt + 0.23, dz, shirt));
+  out.push(ball(0.14, -0.9, belt + 0.6, dz, flat(SKIN[1])));
+  out.push(box(0.3, 0.07, 0.3, -0.88, belt + 0.73, dz, flat('#c62828')), box(0.16, 0.03, 0.26, -0.7, belt + 0.7, dz, flat('#c62828')));
+  for (const s of [-1, 1]) {
+    const arm = box(0.5, 0.09, 0.09, -0.6, belt + 0.32, dz + s * 0.15, shirt);
+    arm.rotation.z = 0.25;
+    out.push(arm);
+  }
   out.push(box(0.3, 0.12, 0.3, -L / 2 - 0.1, floor + 0.15, 0, flat('#333')));
   return out;
 }

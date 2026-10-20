@@ -43,9 +43,13 @@ export interface RearSection {
 /**
  * A train of sections (more than one rear section, the gusanito): its sections never touch each
  * other (on a tight bend the third wagon swings into the first one's box) and its wheels don't
- * stand on them.
+ * stand on them. Each train has a bit of its own: another gusanito (a race's rivals) is solid.
  */
-const TRAIN = groups(GROUP.PLAYER, GROUP.ALL & ~GROUP.PLAYER);
+let trains = 0;
+const trainGroups = () => {
+  const bit = GROUP.TRAIN << trains++ % GROUP.TRAINS;
+  return groups(bit, GROUP.ALL & ~bit);
+};
 
 /** Turntable motor: beyond the yaw limit it pushes back hard; inside, a little damping keeps the swing calm. */
 const TURNTABLE_STIFFNESS = 600;
@@ -95,7 +99,8 @@ export class BusPhysics {
     const art = preset.articulated;
     const n = art ? (art.sections ?? 1) : 0;
     this.frontLength = art ? preset.body.length - n * (art.rearLength + art.gap) : preset.body.length;
-    if (n > 1) this.wheelGroups = TRAIN;
+    const train = n > 1 ? trainGroups() : undefined;
+    this.wheelGroups = train;
     const w = preset.wheels;
     this.body = this.section(this.frontLength, preset.mass);
     this.vehicle = this.addAxles(this.body, [
@@ -121,7 +126,7 @@ export class BusPhysics {
       motor(joint, RAPIER.JointAxis.AngX, 0, TURNTABLE_STIFFNESS, TURNTABLE_DAMPING);
       this.rears.push({ body, vehicle, joint, length: art!.rearLength, lockedBend: null });
     }
-    if (n > 1) for (const c of this.colliders) c.setCollisionGroups(TRAIN);
+    if (train !== undefined) for (const c of this.colliders) c.setCollisionGroups(train);
 
     this.reset(spawn);
   }

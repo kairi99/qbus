@@ -199,6 +199,6 @@ test('a race from the menu: the track, the rivals and what they drive, traffic, 
   const field = await page.evaluate(() => (window as any).__qbus.racing.rivals.map((r: any) => r.preset.id));
   expect(field).toEqual(['buseta', 'buseta']);
   // Traffic is on (it keeps off the grid: the cars show up down the road).
-  expect(await page.evaluate(() => (window as any).__qbus.session.traffic.cars.length)).toBe(9);
+  expect(await page.evaluate(() => (window as any).__qbus.session.traffic.cars.length)).toBe(6);
   expect(errors).toEqual([]);
 });

@@ -42,6 +42,12 @@ export interface BusPreset {
   };
   /** Passengers that fit on board. */
   capacity: number;
+  /**
+   * What a race's AI driver plans with at its limit (hard skill): the lateral acceleration it
+   * corners at and the braking (m/s²) this vehicle really manages, dry and on a soaked road,
+   * measured on the track with `tools/sim-race.ts` (CORNER=, BRAKE=, WET=1). Absent: cautious defaults.
+   */
+  race?: { corner: number; brake: number; wetCorner: number; wetBrake: number };
   mass: number;
   /** Height of the center of mass above the chassis center (m). Higher = more comic body roll. */
   centerOfMassHeight: number;

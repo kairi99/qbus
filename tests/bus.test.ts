@@ -471,6 +471,27 @@ describe('gusanito (a train of trailers)', () => {
     expect(last - art.rearLength / 2).toBeGreaterThan(-15.5 - 0.15);
   });
 
+  it('two gusanitos (a race of them) are solid to each other, and stay so driven into each other', () => {
+    const world = createWorld();
+    addGround(world, 3000);
+    const a = new BusPhysics(world, preset, { x: 0, y: 3, z: 0, heading: 0 });
+    const b = new BusPhysics(world, preset, { x: 0, y: 3, z: 6, heading: 0 });
+    const [ga, gb] = [a.colliders[0].collisionGroups(), b.colliders[0].collisionGroups()];
+    const meets = (x: number, y: number) => ((x >>> 16) & y & 0xffff) !== 0 && ((y >>> 16) & x & 0xffff) !== 0;
+    expect(meets(ga, gb)).toBe(true);
+    // Each still ignores its own wagons.
+    expect(meets(ga, ga)).toBe(false);
+    // Steered into each other side by side for a few seconds: they never end up overlapping.
+    let closest = Infinity;
+    for (let t = 0; t < 4; t += PHYSICS_STEP) {
+      a.update({ throttle: 0.6, steer: 0.5, handbrake: false }, PHYSICS_STEP);
+      b.update({ throttle: 0.6, steer: -0.5, handbrake: false }, PHYSICS_STEP);
+      world.step();
+      closest = Math.min(closest, Math.abs(a.body.translation().z - b.body.translation().z));
+    }
+    expect(closest).toBeGreaterThan(preset.body.width * 0.8);
+  });
+
   it('crosses speed humps without leaving the road or flipping', () => {
     const { bus, run, minUp } = setup((w) => {
       for (const x of [50, 70]) {

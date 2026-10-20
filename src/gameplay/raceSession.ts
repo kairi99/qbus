@@ -11,7 +11,7 @@ import type { DriveInput } from '../core/input';
 import { engineLoad } from '../core/soundModel';
 import { Rng } from '../core/rng';
 import { Nitro } from './nitro';
-import { KEEP_RIGHT, RaceDriver, type RoadUser, SKILLS, type TrafficCar, chooseLane } from './raceDriver';
+import { KEEP_RIGHT, RaceDriver, type RoadUser, SKILLS, type TrafficCar, chooseLane, vehicleLimits } from './raceDriver';
 import { FALL_BACK, FallWatch } from './fallWatch';
 import { LAUNCH_EFFECT, type LaunchGrade, LaunchRev, aiGrade } from './launch';
 import { RaceGame } from './raceGame';
@@ -99,8 +99,9 @@ export class RaceSession {
   /** Traffic on the track this frame (`pool` holds the records, reused frame to frame). */
   private cars: TrafficCar[] = [];
   private pool: TrafficCar[] = [];
-  /** Tire grip from the weather (`gripFor(wet)`), for every bus on the road. */
+  /** Tire grip from the weather (`gripFor(wet)`), for every bus on the road, and how wet it is (0..1: the rivals drive to it). */
   weatherGrip = 1;
+  wet = 0;
 
   constructor(
     world: RAPIER.World,
@@ -127,7 +128,7 @@ export class RaceSession {
       scene.add(model.root);
       // The middle of the road, a little to either side; with traffic about, the right half.
       const home = busy ? KEEP_RIGHT - (i % 2) * 0.3 : (i % 2 ? 1 : -1) * 0.6;
-      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], home), nitro: new Nitro(), fall: new FallWatch(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, throttle: 0 });
+      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], vehicleLimits(preset), home), nitro: new Nitro(), fall: new FallWatch(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, throttle: 0 });
     }
     this.game = new RaceGame(['Tú', ...this.rivals.map((r) => r.preset.name)], track.finish - track.start);
     this.progress = new Array(n + 1).fill(0);
@@ -174,7 +175,7 @@ export class RaceSession {
     const me = this.users[k];
     this.near.length = 0;
     for (let j = 0; j < this.users.length; j++) if (j !== k) this.near.push(this.users[j]);
-    return chooseLane(me, this.near, this.cars, home);
+    return chooseLane(me, this.near, this.cars, home, SKILLS[this.skill].passClear);
   }
 
   /** Each physics step, before the world steps: the rivals drive. */
@@ -190,11 +191,14 @@ export class RaceSession {
       const ahead = this.progress[i + 1] - playerS;
       const way = this.laneFor(i + 1, r.home);
       r.driver.lane = way.lane;
-      const pace = 1 - RUBBER * Math.max(-1, Math.min(1, ahead / RUBBER_GAP));
-      const input = r.driver.drive(r.bus, dt, pace, r.nitro.ready, way.limit);
+      // Eases off ahead of the player as much as its skill lets it, pushes when behind.
+      const band = Math.max(-1, Math.min(1, ahead / RUBBER_GAP));
+      const pace = 1 - RUBBER * (band > 0 ? band * SKILLS[this.skill].ease : band);
+      const input = r.driver.drive(r.bus, dt, pace, r.nitro.ready || r.nitro.active, way.limit);
       const e = r.grade && r.effect > 0 ? LAUNCH_EFFECT[r.grade] : null;
       if (r.effect > 0) r.effect -= dt;
       r.bus.grip = this.weatherGrip * (e?.grip ?? 1);
+      r.driver.wet = this.wet;
       r.throttle = input.throttle * (e?.throttle ?? 1);
       r.bus.update({ throttle: r.throttle, steer: input.steer, handbrake: input.handbrake, boost: r.nitro.step(!!input.boost, dt) || (!!e && e.boost > 0) }, dt);
     });

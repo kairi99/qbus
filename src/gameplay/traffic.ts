@@ -315,25 +315,18 @@ export class TrafficSim {
   /**
    * Moves driving cars that fell out of the bubble around the bus to hidden spots near it.
    * `fill` spreads them over the whole bubble instead (at startup, before anyone is looking).
-   * `also`: more bubbles (a race's rivals): a car in any of them stays, and a recycled one goes
-   * to one of them at random, near it but still out of the player's sight.
    */
-  recycle(focus: { pos: Vec2; heading: number }, fill = false, also: readonly Vec2[] = []): void {
+  recycle(focus: { pos: Vec2; heading: number }, fill = false): void {
     this.focus = focus;
     const dist = (p: Vec2, q: Vec2) => Math.hypot(p.x - q.x, p.z - q.z);
-    const elsewhere = (c: Car) => {
-      const k = this.rng.int(0, also.length);
-      if (k === also.length) this.place(c, focus.pos, 0, (p) => hiddenFrom(focus, p));
-      else this.place(c, also[k], SPAWN_BEHIND_DIST, (p) => dist(p, also[k]) < SPAWN_MAX_DIST && outOfSight(focus, p));
-    };
+    const elsewhere = (c: Car) => this.place(c, focus.pos, 0, (p) => hiddenFrom(focus, p));
     for (const c of this.cars) {
       // A busway bus parked for lack of a corridor in range comes back when one is.
       if (c.state === 'parked' && c.kind === BRT_KIND) this.place(c, focus.pos, 0, fill ? () => true : (p) => hiddenFrom(focus, p));
       // On a track (no budget to keep) a car is only parked for want of a spot: it tries again.
       else if (c.state === 'parked' && this.keep && !fill) elsewhere(c);
       if (c.state !== 'driving') continue;
-      let d = dist(c.pos, focus.pos);
-      for (const a of also) d = Math.min(d, dist(c.pos, a));
+      const d = dist(c.pos, focus.pos);
       if (fill) this.place(c, focus.pos, 20, (p) => dist(p, focus.pos) < RECYCLE_RADIUS * 0.8);
       else if (d >= RECYCLE_RADIUS) elsewhere(c);
     }

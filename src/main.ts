@@ -33,7 +33,7 @@ import { RainView } from './world/rain';
 import { locateOnTrack, trackPose } from './world/track';
 import { FALL_BACK, FallWatch } from './gameplay/fallWatch';
 import { RaceSession } from './gameplay/raceSession';
-import { MAX_RIVALS, TRAFFIC_PER_RACER, gridSlots, parseRivalChoice, rivalVehicles } from './gameplay/raceField';
+import { MAX_RIVALS, TRACK_TRAFFIC, gridSlots, parseRivalChoice, rivalVehicles } from './gameplay/raceField';
 
 const MAX_FRAME = 0.1;
 /** Haze on a mountain track (m), the same in the near scene and the far view. */
@@ -131,7 +131,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const field = raceMode ? rivalVehicles(parseRivalChoice(params.get('rivalBus'), ids), preset.id, rivals, ids) : [];
   const grid = raceMode ? gridSlots(city.race!, [...field.map((id) => busById(id).body.length), preset.body.length]) : null;
   // Traffic on a track only if asked for (free roam on one too).
-  const trackTraffic = city.race && params.get('traffic') === '1' ? TRAFFIC_PER_RACER * Math.max(2, field.length + 1) : 0;
+  const trackTraffic = city.race && params.get('traffic') === '1' ? TRACK_TRAFFIC : 0;
   const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone, start: grid?.[grid.length - 1], title: raceMode ? 'Carrera' : undefined, trackTraffic });
   const racing = raceMode
     ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null })
@@ -278,7 +278,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     // Weather: wet tires, floodwater in the underpasses (the bus wades, traffic crawls through).
     const w = weather.update(paused ? 0 : dt);
     bus.grip = gripFor(w.wet) * (racing?.playerGrip ?? 1);
-    if (racing) racing.weatherGrip = gripFor(w.wet);
+    if (racing) {
+    racing.weatherGrip = gripFor(w.wet);
+    racing.wet = w.wet;
+  }
     floodWater.setFlood(w.flood);
     bus.wade = waterDepth(basins, bus.position(scratchPos), bus.roadHeight(), w.flood);
     weatherClock += dt;

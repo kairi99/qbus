@@ -15,11 +15,12 @@ import { buildCity } from '../src/world/cityBuilder';
 import type { CityData } from '../src/world/cityData';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { locateOnTrack, trackPose, trackStartPose } from '../src/world/track';
-import { KEEP_RIGHT, RaceDriver, SKILLS, type TrafficCar, chooseLane } from '../src/gameplay/raceDriver';
+import { KEEP_RIGHT, RaceDriver, SKILLS, type TrafficCar, chooseLane, vehicleLimits } from '../src/gameplay/raceDriver';
 import { Nitro } from '../src/gameplay/nitro';
+import { gripFor } from '../src/gameplay/weather';
 import { TrafficSim } from '../src/gameplay/traffic';
 import { TrafficBodies, laneSurface } from '../src/gameplay/trafficBodies';
-import { TRAFFIC_PER_RACER } from '../src/gameplay/raceField';
+import { TRACK_TRAFFIC } from '../src/gameplay/raceField';
 
 const [zone = 'papallacta', busId = 'popular', skillId = 'normal', trafficArg] = process.argv.slice(2);
 const city: CityData = JSON.parse(readFileSync(`data/cities/${zone}.json`, 'utf8'));
@@ -31,15 +32,29 @@ buildCity(city, world, new THREE.Scene(), graph);
 const preset = busById(busId);
 const start = trackStartPose(race, 12);
 const bus = new BusPhysics(world, preset, { x: start.pos.x, y: start.y, z: start.pos.z, heading: start.heading, pitch: start.pitch });
-const carCount = trafficArg === undefined ? 0 : Number(trafficArg) || TRAFFIC_PER_RACER * 2;
+const carCount = trafficArg === undefined ? 0 : Number(trafficArg) || TRACK_TRAFFIC;
 // As the session sets it up (gameplay/session.ts): one edge each way, kept off the grid.
 const ahead = graph.edges.map((e) => Math.hypot(e.center.pts[0].x - race.points[0].x, e.center.pts[0].z - race.points[0].z) < 1);
 const trackS = (edge: number, s: number) => (ahead[edge] ? s : graph.edges[edge].len - s);
 const sim = carCount ? new TrafficSim(graph, city, { seed: 11, count: carCount, avoid: { pos: start.pos, radius: 25 }, keep: (e, s) => trackS(e, s) > race.start + 250, uturns: false }) : null;
 const bodies = sim ? new TrafficBodies(world, sim, laneSurface(city, graph, sim, world)) : null;
 sim?.recycle({ pos: start.pos, heading: start.heading }, true);
-const driver = new RaceDriver(race, SKILLS[skillId as keyof typeof SKILLS], carCount ? KEEP_RIGHT : 0);
+// CORNER= / BRAKE= try other limits than the preset's (to measure them: the largest that still finish clean).
+const limits = vehicleLimits(preset);
+if (process.env.CORNER) limits.corner = Number(process.env.CORNER);
+if (process.env.BRAKE) limits.brake = Number(process.env.BRAKE);
+// On a wet road (WET=) they try the wet limits.
+if (process.env.CORNER) limits.wetCorner = Number(process.env.CORNER);
+if (process.env.BRAKE) limits.wetBrake = Number(process.env.BRAKE);
+const skill = SKILLS[skillId as keyof typeof SKILLS];
+const driver = new RaceDriver(race, skill, limits, carCount ? KEEP_RIGHT : 0);
 const nitro = new Nitro();
+// WET=0..1: the road that wet (rain's grip on every tire, as in a race).
+const wet = Number(process.env.WET ?? 0);
+// PACE=: the rubber band's push (a rival far behind the player drives at 1.07).
+const pace = Number(process.env.PACE ?? 1);
+bus.grip = gripFor(wet);
+driver.wet = wet;
 let t = 0;
 let off = 0;
 let worstDrop = 0;
@@ -62,7 +77,7 @@ while (t < 900) {
       cars.push({ s, off: dir * Math.abs(c.offset), v: c.speed, dir, len: c.kind.length });
     }
     const here = locateOnTrack(race, bus.nose(p), driver.s, 60);
-    const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], cars, home);
+    const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], cars, home, skill.passClear);
     driver.lane = way.lane;
     limit = way.limit;
     if (limit < Infinity) following += PHYSICS_STEP;
@@ -75,7 +90,7 @@ while (t < 900) {
     sim.step(PHYSICS_STEP, [...obstacles, ...bodies!.obstacles()]);
     bodies!.steer(PHYSICS_STEP);
   }
-  const input = driver.drive(bus, PHYSICS_STEP, 1, nitro.ready, limit);
+  const input = driver.drive(bus, PHYSICS_STEP, pace, nitro.ready || nitro.active, limit);
   bus.update({ ...input, boost: nitro.step(!!input.boost, PHYSICS_STEP) }, PHYSICS_STEP);
   world.step();
   if (bodies) {

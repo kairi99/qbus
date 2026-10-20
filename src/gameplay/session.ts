@@ -64,7 +64,7 @@ export interface SessionDeps {
   start?: RoadPose;
   /** Shown in the HUD instead of the route's name or "Paseo libre". */
   title?: string;
-  /** Cars on a race track (none by default), shared out around the racers (`GameSession.racers`). */
+  /** Cars on a race track (none by default), all of them around the player (`GameSession.racers` only meet them there). */
   trackTraffic?: number;
 }
 
@@ -132,7 +132,6 @@ export class GameSession {
   others: { x: number; z: number }[] = [];
   private rivals: BusPhysics[] = [];
   private hitters: RAPIER.Collider[];
-  private spots: Vec2[] = [];
   /** A traffic car's lane edge and meters along it to meters along the race track. */
   readonly trackS: (edge: number, s: number) => number;
   private pedObstacles = new Map<number, Obstacle>();
@@ -179,25 +178,14 @@ export class GameSession {
     this.restart();
   }
 
-  /** The other racers' vehicles (a race): traffic stops for them, keeps around them too, and is wrecked by them. */
+  /** The other racers' vehicles (a race): traffic stops for them and is wrecked by them (it only lives around the player). */
   set racers(list: BusPhysics[]) {
     this.rivals = list;
     this.hitters = [...this.d.bus.colliders, ...list.flatMap((r) => r.colliders)];
-    this.spots = list.map(() => ({ x: 0, z: 0 }));
   }
 
   get racers(): BusPhysics[] {
     return this.rivals;
-  }
-
-  /** Where the rivals are (the traffic's other bubbles), refreshed in place. */
-  private racerSpots(): Vec2[] {
-    this.rivals.forEach((r, i) => {
-      const p = r.position(this.posC);
-      this.spots[i].x = p.x;
-      this.spots[i].z = p.z;
-    });
-    return this.spots;
   }
 
   set onHudAction(fn: ((a: import('../ui/gameHud').HudAction) => void) | null) {
@@ -260,7 +248,7 @@ export class GameSession {
     this.sinceRecycle += dt;
     if (this.sinceRecycle > RECYCLE_EVERY) {
       this.sinceRecycle = 0;
-      this.traffic.recycle({ pos: busPos, heading: bus.heading }, false, this.racerSpots());
+      this.traffic.recycle({ pos: busPos, heading: bus.heading });
       this.peds.recycle({ pos: busPos, heading: bus.heading });
     }
     // Reused every step (this runs 60 times a second): the bus, wrecks, then people on the street.

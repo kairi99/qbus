@@ -3,6 +3,7 @@
   "name": "Interparroquial",
   "body": { "length": 12.5, "width": 2.55, "height": 3.3, "color": "#f2f2ee", "stripe": "#1f8a4c", "roof": "#dcdcd6" },
   "capacity": 48,
+  "race": { "corner": 16, "brake": 8, "wetCorner": 5.5, "wetBrake": 5 },
   "mass": 1900,
   "centerOfMassHeight": 0.45,
   "engineForce": 3900,

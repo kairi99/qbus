@@ -1,22 +1,49 @@
 import type { DriveInput } from '../core/input';
+import type { BusPreset } from '../vehicle/busPreset';
 import { type TrackData, locateOnTrack, trackPoint } from '../world/track';
 
-/** How a driver takes the track: cornering grip it trusts, how hard it brakes, its top pace. */
-export interface DriverSkill {
-  /** Lateral acceleration it corners at (m/s²). */
+/**
+ * What a vehicle can do, for a driver to plan with: cornering and braking (m/s²) on a dry road
+ * and on a soaked one, top speed (m/s).
+ */
+export interface VehicleLimits {
   corner: number;
-  /** Braking it plans with (m/s²). */
   brake: number;
-  /** Never faster than this (m/s). */
-  cruise: number;
-  /** Fires the nitro on the straights. */
-  nitro: boolean;
+  wetCorner: number;
+  wetBrake: number;
+  top: number;
+  /** Top speed with the nitro burning (m/s). */
+  boostTop: number;
 }
 
+/** Without measured limits (`BusPreset.race`): a bus's, cautiously. */
+const DEFAULT_LIMITS = { corner: 5, brake: 5, wetCorner: 3.5, wetBrake: 3.5 };
+
+/** A vehicle's limits from its preset (`race`, measured with `tools/sim-race.ts`). */
+export function vehicleLimits(p: BusPreset): VehicleLimits {
+  return { ...DEFAULT_LIMITS, ...p.race, top: p.topSpeedKmh / 3.6, boostTop: (p.topSpeedKmh + (p.nitro?.topSpeedBonusKmh ?? 0)) / 3.6 };
+}
+
+/**
+ * How a driver takes the track, as shares of what its vehicle can do: cornering, braking, top
+ * speed; how much speed it must have to gain before it fires the nitro (m/s, Infinity: never);
+ * how much it eases off when ahead of the player (`ease`, 0..1 of the rubber band); and how
+ * much clear road it wants to pass on the oncoming half (m).
+ */
+export interface DriverSkill {
+  corner: number;
+  brake: number;
+  cruise: number;
+  nitroGap: number;
+  ease: number;
+  passClear: number;
+}
+
+/** Hard drives the vehicle at its limits, burns nitro on every straight, never lets up when ahead, and passes on less road. */
 export const SKILLS: Record<'easy' | 'normal' | 'hard', DriverSkill> = {
-  easy: { corner: 3.2, brake: 3.5, cruise: 15, nitro: false },
-  normal: { corner: 4.2, brake: 4.5, cruise: 18, nitro: true },
-  hard: { corner: 5.2, brake: 5.5, cruise: 22, nitro: true },
+  easy: { corner: 0.6, brake: 0.7, cruise: 0.72, nitroGap: Infinity, ease: 1, passClear: 170 },
+  normal: { corner: 0.8, brake: 0.85, cruise: 0.9, nitroGap: 4, ease: 0.5, passClear: 140 },
+  hard: { corner: 1, brake: 1, cruise: 1, nitroGap: 1.5, ease: 0, passClear: 110 },
 };
 
 /** What the driver needs to see of its bus: where its front axle is, which way it points, how fast. */
@@ -46,6 +73,10 @@ export class RaceDriver {
   /** Offset off the centerline it aims for (m, + right). */
   lane: number;
   private profile: Float32Array;
+  /** The same on a soaked road. */
+  private wetProfile: Float32Array;
+  /** How wet the road is (0 dry .. 1 soaked): the plan blends from the dry profile to the wet one. */
+  wet = 0;
   private stuck = 0;
   private reverse = 0;
   /** Where it was RESCUE_TIME seconds ago (its progress check). */
@@ -57,13 +88,24 @@ export class RaceDriver {
   private aim = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
   private out: DriveInput = { throttle: 0, steer: 0, handbrake: false, boost: false };
 
+  /** Never faster than this (m/s): the skill's share of the top speed; and with the nitro burning. */
+  private cruise: number;
+  private boostTop: number;
+  /** Asked for the nitro last step. */
+  private boosting = false;
+
   constructor(
     private track: TrackData,
     readonly skill: DriverSkill,
+    limits: VehicleLimits,
     lane = 0,
   ) {
     this.lane = lane;
-    this.profile = speedProfile(track, skill);
+    this.cruise = skill.cruise * limits.top;
+    this.boostTop = skill.nitroGap < Infinity ? Math.max(this.cruise, limits.boostTop) : this.cruise;
+    // The bends' limits up to the nitro's top speed (`drive` holds it to `cruise` without it).
+    this.profile = speedProfile(track, skill.corner * limits.corner, skill.brake * limits.brake, this.boostTop);
+    this.wetProfile = speedProfile(track, skill.corner * limits.wetCorner, skill.brake * limits.wetBrake, this.boostTop);
   }
 
   /** Put back on the road (after a rescue or a fall): the progress check starts over. */
@@ -79,28 +121,33 @@ export class RaceDriver {
   /** The planned speed `s` meters along (m/s). */
   plannedAt(s: number): number {
     const i = Math.max(0, Math.min(this.profile.length - 1, Math.round(s / STEP)));
-    return this.profile[i];
+    return this.profile[i] + (this.wetProfile[i] - this.profile[i]) * this.wet;
   }
 
   /**
-   * `pace` scales the planned speed (rubber band, a launch gone wrong); `nitroReady`: the tank
-   * can fire; `limit` (m/s): never faster (following a car it can't pass).
+   * `pace` scales the planned speed (rubber band, a launch gone wrong; over 1 only on the
+   * straights: the bends are planned at the grip's limit); `nitro`: the tank can fire (or is
+   * burning); `limit` (m/s): never faster (following a car it can't pass).
    */
-  drive(bus: DrivenBus, dt: number, pace = 1, nitroReady = false, limit = Infinity): DriveInput {
+  drive(bus: DrivenBus, dt: number, pace = 1, nitro = false, limit = Infinity): DriveInput {
     const t = this.track;
     const p = bus.nose(this.nose);
     const here = locateOnTrack(t, p, this.s, 60);
     this.s = here.s;
     const v = bus.speed;
+    // What the bends allow, and on top of that the top speed (higher with the nitro burning).
+    const bends = Math.min(this.plannedAt(here.s + 4) * Math.min(1, pace), limit);
+    const top = this.boosting && nitro ? this.boostTop : this.cruise * pace;
     // Past the finish it pulls up on the runoff.
-    const target = here.s > t.finish + 30 ? 0 : Math.min(this.skill.cruise * pace, this.plannedAt(here.s + 4) * pace, limit);
+    const target = here.s > t.finish + 30 ? 0 : Math.min(top, bends);
     const look = Math.max(8, Math.abs(v) * 0.75);
     const a = trackPoint(t, here.s + look, this.aim);
     const ax = a.x - a.dz * this.lane;
     const az = a.z + a.dx * this.lane;
     const err = wrap(Math.atan2(-(az - p.z), ax - p.x) - bus.heading);
     const o = this.out;
-    o.throttle = target === 0 ? (v > 0.5 ? -1 : 0) : v < target - 0.6 ? 1 : v > target + 0.8 ? -1 : 0.25;
+    // Over the target: brakes for a bend (or a car ahead), but only lifts off past its top speed (after a burst of nitro).
+    o.throttle = target === 0 ? (v > 0.5 ? -1 : 0) : v < target - 0.6 ? 1 : v > bends + 0.8 ? -1 : v > target + 0.8 ? 0 : 0.25;
     o.steer = Math.max(-1, Math.min(1, -err * 2.4));
     o.handbrake = false;
     // Stuck against a rail or a wagon: back up for a moment, steering the other way.
@@ -115,7 +162,10 @@ export class RaceDriver {
     this.checkT += dt;
     if (this.checkS < 0 || here.s - this.checkS > RESCUE_DIST || target < 1) (this.checkS = here.s), (this.checkT = 0);
     this.needsRescue = this.checkT > RESCUE_TIME;
-    o.boost = this.skill.nitro && nitroReady && limit === Infinity && this.reverse <= 0 && Math.abs(err) < 0.08 && target > v + 4 && this.plannedAt(here.s + 60) > v + 4;
+    // Nitro where the road ahead lets it go faster for a while (and a burst runs on while it does).
+    const gap = this.skill.nitroGap;
+    o.boost = nitro && limit === Infinity && this.reverse <= 0 && Math.abs(err) < 0.1 && here.s < t.finish && bends > v + gap && this.plannedAt(here.s + 60) > v + gap;
+    this.boosting = o.boost;
     return o;
   }
 }
@@ -138,7 +188,7 @@ const PASS_AHEAD = 22;
 const PASS_LANE = 1.9;
 /** A slower car this close ahead (m) in our lane is passed (or followed). */
 const CAR_AHEAD = 45;
-/** The other half of the road must be clear of oncoming cars this far ahead (m) to pass on it. */
+/** The other half of the road must be clear of oncoming cars this far ahead (m) to pass on it (by default: `DriverSkill.passClear`). */
 const ONCOMING_CLEAR = 140;
 /** Already alongside the car being passed: finish the pass unless an oncoming car is this close (m). */
 const ONCOMING_ABORT = 45;
@@ -159,7 +209,7 @@ const MEET_RIGHT = 1.8;
  * in on it; caught alongside with an oncoming car close, it drops back behind it. Out in the
  * other half with an oncoming car near, it goes back to the right.
  */
-export function chooseLane(me: RoadUser, racers: readonly RoadUser[], cars: readonly TrafficCar[], home: number): { lane: number; limit: number } {
+export function chooseLane(me: RoadUser, racers: readonly RoadUser[], cars: readonly TrafficCar[], home: number, passClear = ONCOMING_CLEAR): { lane: number; limit: number } {
   let gap = Infinity;
   let bOff = 0;
   let bV = 0;
@@ -192,7 +242,7 @@ export function chooseLane(me: RoadUser, racers: readonly RoadUser[], cars: read
   const right = Math.max(home, oncoming < MEET ? MEET_RIGHT : KEEP_RIGHT);
   if (gap < Infinity) {
     const pass = bOff > 0 ? -PASS_LANE : PASS_LANE;
-    if (pass > 0 || oncoming > (beside ? ONCOMING_ABORT : ONCOMING_CLEAR)) return { lane: pass, limit: Infinity };
+    if (pass > 0 || oncoming > (beside ? ONCOMING_ABORT : passClear)) return { lane: pass, limit: Infinity };
     // Caught alongside: brake to drop back behind it, still in the other half until we have.
     if (beside) return { lane: pass, limit: Math.max(0, bV - 4) };
     return { lane: right, limit: bV + Math.max(0, gap - 14) * 0.4 };
@@ -201,8 +251,8 @@ export function chooseLane(me: RoadUser, racers: readonly RoadUser[], cars: read
   return { lane: home, limit: Infinity };
 }
 
-/** The fastest speed at each point that the bends ahead allow, braking at `brake` for them. */
-export function speedProfile(t: TrackData, skill: DriverSkill): Float32Array {
+/** The fastest speed at each point (never over `cruise`) that the bends ahead allow, cornering at `corner` and braking at `brake` for them. */
+export function speedProfile(t: TrackData, corner: number, brake: number, cruise: number): Float32Array {
   const len = t.cum[t.cum.length - 1];
   const n = Math.floor(len / STEP) + 1;
   const v = new Float32Array(n);
@@ -212,9 +262,9 @@ export function speedProfile(t: TrackData, skill: DriverSkill): Float32Array {
     trackPoint(t, i * STEP - CURVE_SPAN / 2, a);
     trackPoint(t, i * STEP + CURVE_SPAN / 2, b);
     const k = Math.abs(Math.asin(Math.max(-1, Math.min(1, a.dx * b.dz - a.dz * b.dx)))) / CURVE_SPAN;
-    v[i] = Math.min(skill.cruise, Math.sqrt(skill.corner / Math.max(k, 1e-4)));
+    v[i] = Math.min(cruise, Math.sqrt(corner / Math.max(k, 1e-4)));
   }
-  for (let i = n - 2; i >= 0; i--) v[i] = Math.min(v[i], Math.sqrt(v[i + 1] * v[i + 1] + 2 * skill.brake * STEP));
+  for (let i = n - 2; i >= 0; i--) v[i] = Math.min(v[i], Math.sqrt(v[i + 1] * v[i + 1] + 2 * brake * STEP));
   return v;
 }
 

@@ -10,7 +10,7 @@ import { terrainHeight } from '../src/world/terrain';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { snapToRoad } from '../src/world/roadSnap';
 import { locateOnTrack, trackPoint, trackPose, trackStartPose } from '../src/world/track';
-import { RaceDriver, SKILLS } from '../src/gameplay/raceDriver';
+import { RaceDriver, SKILLS, vehicleLimits } from '../src/gameplay/raceDriver';
 import { gridSlots } from '../src/gameplay/raceField';
 import { TrafficSim } from '../src/gameplay/traffic';
 import { FALL_AIR, FALL_SHOW, FallWatch } from '../src/gameplay/fallWatch';
@@ -45,7 +45,9 @@ describe('the grid and the traffic', () => {
     let closest = Infinity;
     const ways = new Set<number>();
     for (let t = 0; t < 120; t += 0.05) {
-      sim.recycle({ pos: grid.pos, heading: grid.heading }, false, [trackPoint(race, 900)]);
+      // Around the grid and, half the time, further down the road (as if the player were there).
+      const at = t % 20 < 10 ? grid : trackPose(race, 900);
+      sim.recycle({ pos: at.pos, heading: at.heading });
       sim.step(0.05, []);
       for (const c of sim.cars) {
         if (c.state !== 'driving') continue;
@@ -170,7 +172,7 @@ describe('the Papallacta track (physics)', () => {
   it.each(['popular', 'articulado', 'gusanito', 'ae86'])('the AI drives a %s from start to finish on the asphalt', (id) => {
     const start = trackStartPose(race, 12);
     const bus = new BusPhysics(world, busById(id), { x: start.pos.x, y: start.y, z: start.pos.z, heading: start.heading, pitch: start.pitch });
-    const driver = new RaceDriver(race, SKILLS.normal);
+    const driver = new RaceDriver(race, SKILLS.hard, vehicleLimits(busById(id)));
     const p = { x: 0, y: 0, z: 0 };
     let offFor = 0;
     let deepest = 0;
@@ -192,7 +194,7 @@ describe('the Papallacta track (physics)', () => {
     const ids = ['interparroquial', 'popular'];
     const slots = gridSlots(race, ids.map((id) => busById(id).body.length));
     const buses = slots.map((sl, k) => new BusPhysics(world, busById(ids[k]), { x: sl.pos.x, y: sl.y, z: sl.pos.z, heading: sl.heading, pitch: sl.pitch }));
-    const drivers = slots.map((_, k) => new RaceDriver(race, SKILLS.normal, (k % 2 ? 1 : -1) * 0.6));
+    const drivers = slots.map((_, k) => new RaceDriver(race, SKILLS.hard, vehicleLimits(busById(ids[k])), (k % 2 ? 1 : -1) * 0.6));
     let t = 0;
     let rescues = 0;
     for (; t < 700 && drivers.some((d) => d.s < race.finish); t += PHYSICS_STEP) {

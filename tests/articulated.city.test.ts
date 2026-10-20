@@ -50,6 +50,8 @@ describe.each(['articulado', 'gusanito'])('articulated %s in La Mariscal', (id) 
     expect(bus.wheelsOnGround).toBe(bus.wheelCount);
     for (let i = 0; i < bus.rears.length; i++) expect(Math.abs(bus.bendAt(i))).toBeLessThan(0.05);
     expect(Math.abs(bus.roadHeight() - s.y)).toBeLessThan(0.5);
+    // Off the shared world: the next test starts on the same spot (and gusanitos are solid to each other).
+    for (const b of bus.bodies) world.removeRigidBody(b);
   });
 
   it('drives a street for 30 s and corners without flipping or folding past its limit', () => {
@@ -69,5 +71,6 @@ describe.each(['articulado', 'gusanito'])('articulated %s in La Mariscal', (id) 
     // The script runs into a building at one bend; the gusanito's light wagons swing on a few degrees more.
     expect(maxBend).toBeLessThan(((preset.articulated!.yawLimitDeg + 8) * Math.PI) / 180);
     expect(minUp).toBeGreaterThan(0.8);
+    for (const b of bus.bodies) world.removeRigidBody(b);
   });
 });

@@ -4,6 +4,7 @@
   "body": { "length": 19.6, "width": 1.9, "height": 2.7, "color": "#8fdc2c", "stripe": "#ffd21f", "roof": "#ff5fae" },
   "articulated": { "sections": 4, "rearLength": 3.0, "gap": 0.8, "rearAxle": -0.5, "rearMass": 260, "yawLimitDeg": 42, "yawLimitStiffness": 6000, "pitchLimitDeg": 12, "bevel": 0.5, "driftYawRate": 1.5, "driftFrontGrip": 3, "reverseLock": 500 },
   "capacity": 40,
+  "race": { "corner": 8, "brake": 7, "wetCorner": 5.5, "wetBrake": 5 },
   "mass": 650,
   "centerOfMassHeight": 0.2,
   "engineForce": 3800,

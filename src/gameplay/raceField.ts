@@ -16,8 +16,12 @@ export const CREWS: (Crew & { bus: string })[] = [
   { name: 'Trans Guambra', bus: 'popular', color: '#2e9b52', stripe: '#f2f2ee', roof: '#e8e8e8' },
 ];
 export const MAX_RIVALS = CREWS.length;
-/** Cars and trucks on a track with traffic on, for each racer (they keep around each one). */
-export const TRAFFIC_PER_RACER = 3;
+/**
+ * Cars and trucks on a track with traffic on: all in the bubble around the player (going both
+ * ways, recycled ahead or behind out of sight as they fall out of it), so there's always some
+ * about, and none far off costing time or holding up rivals nobody sees.
+ */
+export const TRACK_TRAFFIC = 6;
 /** Seconds a vehicle put back on the road (the player's R, a rival's rescue) waits before it may go. */
 export const RESET_WAIT = 3;
 
