@@ -91,6 +91,11 @@ describe('mix levels', () => {
     expect(db(LEVELS.rivalEngine)).toBeGreaterThan(-8);
   });
 
+  it('a river below the road is background, under the rain and well under the engine', () => {
+    expect(LEVELS.river).toBeLessThan(LEVELS.rain);
+    expect(db(LEVELS.river)).toBeLessThan(-8);
+  });
+
   it('the turbo only whistles under load, rising with the revs, far under the engine', () => {
     expect(turboWhistle(DIESEL.idleRpm, 1, DIESEL).gain).toBe(0);
     expect(turboWhistle(2000, 0, DIESEL).gain).toBe(0);

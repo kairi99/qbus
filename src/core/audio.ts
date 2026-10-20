@@ -6,7 +6,7 @@ type SoundName = (typeof FILES)[number];
 /** Recordings that loop, and their crossfade length in seconds. */
 const LOOPS: Partial<Record<SoundName, number>> = { 'engine-idle': 0.3, 'engine-load': 0.3, 'car-idle': 0.3, 'horn-bus': 0.12, 'horn-car': 0.08 };
 
-export type AudioCue = 'coin' | 'time' | 'crash' | 'carHorn' | 'nitro' | 'beep' | 'go' | 'pickup';
+export type AudioCue = 'coin' | 'time' | 'crash' | 'carHorn' | 'nitro' | 'beep' | 'go' | 'pickup' | 'shutter';
 
 /** A race rival's engine: where the vehicle is, how fast (over its top speed) and how hard it works. */
 export interface RivalVoice {
@@ -281,6 +281,7 @@ export class BusAudio {
   cue(kind: AudioCue, volume = 1): void {
     if (!this.ctx || volume <= 0.01) return;
     if (kind === 'nitro') return this.whoosh(volume);
+    if (kind === 'shutter') return this.shutter(volume);
     if (kind === 'carHorn') {
       // "pi-piii", each car a slightly different horn.
       const rate = 0.85 + Math.random() * 0.3;
@@ -323,6 +324,55 @@ export class BusAudio {
     this.play('timbre', LEVELS.timbre);
     this.play('door-open', LEVELS.doorOpen, 0.25);
     this.play('door-close', LEVELS.doorClose, 2.4);
+  }
+
+  /** A camera's shutter at the finish line: two quick clicks of filtered noise. */
+  private shutter(volume: number): void {
+    const ctx = this.ctx!;
+    const now = ctx.currentTime;
+    for (const at of [0, 0.09]) {
+      const src = this.noise(ctx, 0.05);
+      src.loop = false;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = at ? 2600 : 4200;
+      band.Q.value = 1.2;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(LEVELS.shutter * volume, now + at);
+      g.gain.exponentialRampToValueAtTime(0.001, now + at + 0.045);
+      src.connect(band).connect(g).connect(this.master);
+      src.start(now + at);
+      src.stop(now + at + 0.06);
+    }
+  }
+
+  private riverGain: GainNode | null = null;
+
+  /** A river rushing over rocks below the road (`level` 0..1 by how near it is): low rumble and hiss. */
+  river(level: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (!this.riverGain && level <= 0) return;
+    if (!this.riverGain) {
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      const low = ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 420;
+      const mid = ctx.createBiquadFilter();
+      mid.type = 'bandpass';
+      mid.frequency.value = 1300;
+      mid.Q.value = 0.7;
+      const midGain = ctx.createGain();
+      midGain.gain.value = 0.35;
+      const src = this.noise(ctx, 2.7);
+      src.connect(low).connect(gain);
+      src.connect(mid).connect(midGain).connect(gain);
+      src.start();
+      gain.connect(this.master);
+      this.riverGain = gain;
+    }
+    this.riverGain.gain.setTargetAtTime(LEVELS.river * level, ctx.currentTime, 0.5);
   }
 
   /** Nitro: a burst of filtered noise sweeping up. */

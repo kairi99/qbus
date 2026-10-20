@@ -144,3 +144,36 @@ export function raceClock(t: number): string {
   const s = t - m * 60;
   return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
 }
+
+/** How long (s) a new place must hold before it's announced: two buses side by side swap back and forth. */
+export const PLACE_SETTLE = 0.7;
+
+/**
+ * Announces the player's place changes once they settle: `update` returns the new place and
+ * whether it was gained, once per change that holds for `PLACE_SETTLE`, else null.
+ */
+export class PlaceCaller {
+  private shown = 0;
+  private pending = 0;
+  private held = 0;
+
+  /** Start over from `place` (announced as is). */
+  reset(place: number): void {
+    this.shown = this.pending = place;
+    this.held = 0;
+  }
+
+  update(dt: number, place: number): { place: number; gained: boolean } | null {
+    if (!this.shown) this.reset(place);
+    if (place !== this.pending) {
+      this.pending = place;
+      this.held = 0;
+      return null;
+    }
+    this.held += dt;
+    if (this.held < PLACE_SETTLE || place === this.shown) return null;
+    const gained = place < this.shown;
+    this.shown = place;
+    return { place, gained };
+  }
+}

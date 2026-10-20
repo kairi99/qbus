@@ -60,6 +60,8 @@ export class RaceHud {
         <div class="rh-time" data-k="time">0:00.0</div>
       </div>
       <div class="rh-count" data-k="count"></div>
+      <div class="rh-flash" data-k="flash" hidden></div>
+      <div class="rh-photo" data-k="photo" hidden></div>
       <div class="rh-wait" data-k="wait" hidden>De vuelta en la vía… <b data-k="waitN">3</b></div>
       <div class="rh-hint" data-k="hint">Acelera <span class="keys-only">con <b>W</b></span> y mantén la aguja en lo <b class="rh-green">verde</b>: ¡salida perfecta!</div>
       <div class="rh-strip"><div class="rh-flag">🏁</div></div>
@@ -115,6 +117,21 @@ export class RaceHud {
       this.tachHideIn = 1.6;
       this.k.hint.hidden = true;
     }
+  }
+
+  /**
+   * The finish line: a camera flash, and `text` over it ("¡FOTO FINISH! +0.31 s"; '' for the
+   * flash alone); null clears it.
+   */
+  photo(text: string | null): void {
+    const { flash, photo } = this.k;
+    flash.hidden = text === null;
+    photo.hidden = !text;
+    photo.textContent = text ?? '';
+    if (text === null) return;
+    flash.classList.remove('rh-flash-on');
+    void flash.offsetWidth;
+    flash.classList.add('rh-flash-on');
   }
 
   /** `wait`: seconds before the player may go on after an R reset (0: none). */

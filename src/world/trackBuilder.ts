@@ -17,6 +17,7 @@ import { Rng } from '../core/rng';
 import { type Puff, MIST_LOOK, mistMesh } from './mist';
 import type { TrackScenery } from './track';
 import { distToPolyline, pointInPolygon } from './geom';
+import { crowdMesh, crowdSpots } from './spectators';
 
 const ASPHALT = '#4a4c52';
 const MARK_WHITE = '#eceae0';
@@ -26,6 +27,8 @@ const STONE = '#7b746a';
 const STEEL = '#b8bdc3';
 const POST = '#868b90';
 const CHEVRON = '#f3c418';
+/** A chevron's face at night, lit by nothing but how it shines back in headlights. */
+const CHEVRON_LIT = '#b08c10';
 const SIGN_BACK = '#6d7075';
 /** Terrain colors: páramo grass, cloud-forest green, bare cut earth, rock, the gravel shoulder. */
 const PARAMO = new THREE.Color('#a39f58');
@@ -68,7 +71,10 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   const solid = new ChunkedMeshBuilder(300);
   roadDeck(race, deck, paint, ground, world, fixed);
   for (const r of race.rails) guardrail(race, r, solid, world, fixed);
-  chevrons(race, solid, ground);
+  // At night the boards shine back in the headlights (retroreflective): their faces unlit.
+  const lit = timeOfDayOf(scene) === 'night' ? new ChunkedMeshBuilder(300) : null;
+  const leds = chevrons(race, solid, ground, lit);
+  if (lit) scene.add(...lit.build(new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
   gantry(race, race.start, 'SALIDA', solid, paint, scene, world, fixed);
   gantry(race, race.finish, 'META', solid, paint, scene, world, fixed);
   const banks = new ChunkedMeshBuilder(300);
@@ -102,6 +108,11 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   const signs = textSigns(texts);
   if (signs) scene.add(signs);
   const tod = timeOfDayOf(scene);
+  // After dark the chevrons' lamps flash in sequence round each bend.
+  if (light.headlights && leds.length) scene.add(chevronLamps(leds));
+  // A crowd at the start and at the finish.
+  const clear = (p: Vec2) => !!sc && blocked(sc, p);
+  scene.add(crowdMesh([...crowdSpots(race, race.start - 70, race.start + 25, ground, clear), ...crowdSpots(race, race.finish - 40, race.finish + 15, ground, clear)]));
   scene.add(mistMesh(mistPuffs(race, t, zones), MIST_LOOK[tod], 2600));
 
   // No traffic lights or props on a track, but the session expects both.
@@ -219,7 +230,10 @@ function guardrail(race: TrackData, r: TrackData['rails'][number], solid: Chunke
 }
 
 /** Yellow chevron boards along the outside of each tight bend, facing the racers coming into it. */
-function chevrons(race: TrackData, solid: ChunkedMeshBuilder, ground: (p: Vec2) => number): void {
+function chevrons(race: TrackData, solid: ChunkedMeshBuilder, ground: (p: Vec2) => number, lit: ChunkedMeshBuilder | null): Lamp[] {
+  const lamps: Lamp[] = [];
+  // Each bend's boards in order: their lamps flash one after another round it.
+  let order = 0;
   const q = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
   const turnAt = (s: number) => {
     // Heading change over 30 m: + = turning right.
@@ -231,6 +245,7 @@ function chevrons(race: TrackData, solid: ChunkedMeshBuilder, ground: (p: Vec2) 
   for (let s = race.start; s < race.finish; s += 6) {
     const k = turnAt(s);
     if (Math.abs(k) < 1 / CHEVRON_RADIUS || s - last < 18) continue;
+    order = s - last > 40 ? 0 : order + 1;
     last = s;
     // Outside of the bend: left of travel for a right turn.
     const side = k > 0 ? -1 : 1;
@@ -250,17 +265,83 @@ function chevrons(race: TrackData, solid: ChunkedMeshBuilder, ground: (p: Vec2) 
     const yb = q.y + 1.2;
     const c = { x: p.x + face.x * 0.06, z: p.z + face.z * 0.06 };
     const corner = (u: number, v: number, out = 0) => ({ x: c.x + across.x * u + face.x * out, y: yb + v, z: c.z + across.z * u + face.z * out });
-    mb.quad(corner(-w / 2, 0), corner(w / 2, 0), corner(w / 2, h), corner(-w / 2, h), CHEVRON);
+    const faceMb = (lit ?? solid).at(p.x, p.z);
+    faceMb.quad(corner(-w / 2, 0), corner(w / 2, 0), corner(w / 2, h), corner(-w / 2, h), lit ? CHEVRON_LIT : CHEVRON);
     mb.quad(corner(-w / 2, 0, -0.03), corner(-w / 2, h, -0.03), corner(w / 2, h, -0.03), corner(w / 2, 0, -0.03), SIGN_BACK);
     // A black ">" pointing into the turn. `across` is the driver's left, so a right turn points to -u.
     const sgn = k > 0 ? -1 : 1;
     const arm = (pts: [number, number][]) => {
       const [p0, p1, p2, p3] = pts.map(([u, v]) => corner(u * sgn, v, 0.01));
-      mb.quad(p0, p1, p2, p3, '#1b1b1d');
+      faceMb.quad(p0, p1, p2, p3, '#1b1b1d');
     };
     arm([[-0.2, 0.52], [-0.06, 0.52], [0.18, 0.3], [0.04, 0.3]]);
     arm([[0.04, 0.3], [0.18, 0.3], [-0.06, 0.08], [-0.2, 0.08]]);
+    // A lamp on top of the board.
+    const top = corner(0, h + 0.08, 0.04);
+    lamps.push({ x: top.x, y: top.y, z: top.z, order });
   }
+  return lamps;
+}
+
+/** An amber lamp on a chevron board, and its place in its bend's sequence. */
+interface Lamp {
+  x: number;
+  y: number;
+  z: number;
+  order: number;
+}
+
+/**
+ * The chevrons' amber lamps after dark, one instanced draw: soft glows facing the camera, each
+ * bend's flashing in sequence toward its far end (timed in the vertex shader).
+ */
+function chevronLamps(lamps: Lamp[]): THREE.Mesh {
+  const base = new THREE.PlaneGeometry(1, 1);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index;
+  geo.setAttribute('position', base.getAttribute('position'));
+  geo.setAttribute('uv', base.getAttribute('uv'));
+  geo.setAttribute('center', new THREE.InstancedBufferAttribute(new Float32Array(lamps.flatMap((l) => [l.x, l.y, l.z])), 3));
+  geo.setAttribute('order', new THREE.InstancedBufferAttribute(new Float32Array(lamps.map((l) => l.order)), 1));
+  geo.instanceCount = lamps.length;
+  const uniforms = { time: { value: 0 } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      uniform float time;
+      attribute vec3 center; attribute float order;
+      varying vec2 vUv; varying float vOn;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(center, 1.0);
+        // Bigger with distance (up to a point), so a far bend still reads as a row of lights.
+        float d = -mv.z;
+        mv.xy += position.xy * clamp(d * 0.03, 0.9, 4.0);
+        float phase = fract(time * 1.25 - order * 0.18);
+        vOn = 0.15 + 0.85 * (1.0 - smoothstep(0.0, 0.3, phase));
+        vUv = uv;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying vec2 vUv; varying float vOn;
+      void main() {
+        float r = length(vUv * 2.0 - 1.0);
+        float k = (1.0 - smoothstep(0.0, 1.0, r)) * vOn;
+        if (k < 0.01) discard;
+        gl_FragColor = vec4(vec3(1.0, 0.62, 0.12) * (k + smoothstep(0.25, 0.0, r) * vOn), k);
+      }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 2;
+  mesh.name = 'chevron-lamps';
+  const t0 = performance.now();
+  mesh.onBeforeRender = () => {
+    uniforms.time.value = (performance.now() - t0) / 1000;
+  };
+  return mesh;
 }
 
 /** A gantry across the road (two poles and a banner) and a checkered line painted under it. */
@@ -287,15 +368,18 @@ function gantry(race: TrackData, s: number, label: string, solid: ChunkedMeshBui
     }
   // The banner: a canvas texture with the label, both faces.
   const width = half * 2;
-  const banner = new THREE.Mesh(new THREE.PlaneGeometry(width, 1.3), bannerMaterial(label));
-  banner.position.set(q.x, top + 0.45, q.z);
-  // Facing the racers coming up to it.
-  banner.rotation.y = Math.atan2(-q.dx, -q.dz);
-  scene.add(banner);
+  // Facing the racers coming up to it, and the same the right way round on its back.
+  const material = bannerMaterial(label);
+  for (const turn of [0, Math.PI]) {
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(width, 1.3), material);
+    banner.position.set(q.x, top + 0.45, q.z);
+    banner.rotation.y = Math.atan2(-q.dx, -q.dz) + turn;
+    scene.add(banner);
+  }
 }
 
 function bannerMaterial(label: string): THREE.Material {
-  if (typeof document === 'undefined') return new THREE.MeshBasicMaterial({ color: '#c62d2d', side: THREE.DoubleSide });
+  if (typeof document === 'undefined') return new THREE.MeshBasicMaterial({ color: '#c62d2d' });
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 64;
@@ -314,7 +398,7 @@ function bannerMaterial(label: string): THREE.Material {
   g.fillText(label, c.width / 2, c.height / 2 + 2);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
+  return new THREE.MeshLambertMaterial({ map: tex });
 }
 
 /**

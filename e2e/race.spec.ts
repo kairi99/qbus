@@ -43,10 +43,14 @@ test('a race on the Papallacta track: countdown, a perfect launch, a rival, the 
     const [a, b] = [r.points[i], r.points[i + 1]];
     q.bus.reset({ x: a.x, y: r.y[i], z: a.z, heading: Math.atan2(-(b.z - a.z), b.x - a.x) });
   });
+  // Over the line: the trackside camera first, then the results.
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.racing.finishView !== null), { timeout: 90_000 }).toBe(true);
+  expect(await page.locator('.rh-results').isVisible()).toBe(false);
+  await page.screenshot({ path: `${shots}/b3-race-finish-cam.png` });
   await expect(page.locator('.rh-results')).toBeVisible({ timeout: 90_000 });
   await expect(page.locator('.rh-results')).toContainText(/GANASTE|Llegaste/);
   await expect(page.locator('.rh-results')).toContainText('Récord');
-  await page.screenshot({ path: `${shots}/b3-race-results.png` });
+  await page.screenshot({ path: `${shots}/b4-race-results.png` });
   // Another race: back on the grid, counting down again.
   await page.locator('.rh-results [data-act="again"]').click();
   await expect.poll(() => page.evaluate(() => (window as any).__qbus.racing.game.phase), { timeout: 30_000 }).not.toBe('over');

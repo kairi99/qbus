@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GOOD, IDLE, LaunchRev, WINDOW, aiGrade, gradeOf } from '../src/gameplay/launch';
-import { COUNT_STEP, GRID_WAIT, RaceGame, raceClock } from '../src/gameplay/raceGame';
+import { COUNT_STEP, GRID_WAIT, PLACE_SETTLE, PlaceCaller, RaceGame, raceClock } from '../src/gameplay/raceGame';
 import { CREWS, MAX_RIVALS, parseRivalChoice, rivalVehicles } from '../src/gameplay/raceField';
 import { PICKUP_FILL, PICKUP_RESPAWN, Pickups } from '../src/gameplay/pickups';
 import { KEEP_RIGHT, chooseLane } from '../src/gameplay/raceDriver';
@@ -193,5 +193,29 @@ describe('lanes in traffic', () => {
 
   it('passes another racer close ahead in its lane', () => {
     expect(chooseLane({ ...me, off: 0 }, [{ s: 1010, off: 0.3, v: 15, len: 12 }], [], 0).lane).toBeLessThan(0);
+  });
+});
+
+describe('place calls', () => {
+  it('announces a place once it holds, not while two buses swap side by side', () => {
+    const c = new PlaceCaller();
+    expect(c.update(0.1, 3)).toBeNull();
+    // Alongside: 2, 3, 2, 3 every few frames says nothing.
+    for (let i = 0; i < 20; i++) expect(c.update(0.1, i % 2 ? 2 : 3)).toBeNull();
+    let call = null;
+    for (let t = 0; t <= PLACE_SETTLE + 0.2 && !call; t += 0.1) call = c.update(0.1, 2);
+    expect(call).toEqual({ place: 2, gained: true });
+    // Said once.
+    expect(c.update(1, 2)).toBeNull();
+    for (let t = 0; t <= PLACE_SETTLE + 0.2 && call; t += 0.1) call = c.update(0.1, 4);
+    for (let t = 0; t <= PLACE_SETTLE + 0.2 && !call; t += 0.1) call = c.update(0.1, 4);
+    expect(call).toEqual({ place: 4, gained: false });
+  });
+
+  it('back in its place before it settles: nothing to say', () => {
+    const c = new PlaceCaller();
+    c.reset(2);
+    c.update(PLACE_SETTLE / 2, 1);
+    for (let i = 0; i < 20; i++) expect(c.update(0.1, 2)).toBeNull();
   });
 });

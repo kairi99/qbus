@@ -7,6 +7,8 @@ const BASE_FOV = 68;
 const SPEED_FOV = 14;
 /** Extra widening while the nitro burns. */
 const NITRO_FOV = 10;
+/** The trackside camera, zoomed in like a TV camera. */
+const TRACKSIDE_FOV = 38;
 /** Chase camera: clearance kept under a roof or deck over the bus, and in front of a wall between it and the bus. */
 const ROOF_CLEAR = 1.2;
 const WALL_CLEAR = 0.9;
@@ -64,6 +66,9 @@ export class CameraRig {
     return this.mode;
   }
 
+  /** A trackside camera (the race's finish): it stands here, zoomed in, and turns to follow the bus. */
+  trackside: THREE.Vector3Like | null = null;
+
   /** Dev/testing: fixed viewpoint instead of following the bus. */
   debugView: { pos: THREE.Vector3Like; look: THREE.Vector3Like } | null = null;
 
@@ -85,6 +90,16 @@ export class CameraRig {
     this.busQuat.set(q.x, q.y, q.z, q.w);
     const h = bus.heading;
     this.flatFwd.set(Math.cos(h), 0, -Math.sin(h));
+
+    if (this.trackside) {
+      this.camera.fov = TRACKSIDE_FOV;
+      this.camera.updateProjectionMatrix();
+      this.camera.position.copy(this.trackside);
+      this.camera.lookAt(this.busPos.x, this.busPos.y + 0.5, this.busPos.z);
+      // Back to the bus with a cut, not a glide.
+      this.first = true;
+      return;
+    }
 
     // Switching views cuts instantly rather than swinging the camera through the bus.
     if (lookBack !== this.lookingBack) this.first = true;

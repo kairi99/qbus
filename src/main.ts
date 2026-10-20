@@ -33,11 +33,16 @@ import { RainView } from './world/rain';
 import { locateOnTrack, trackPose } from './world/track';
 import { FALL_BACK, FallWatch } from './gameplay/fallWatch';
 import { RaceSession } from './gameplay/raceSession';
+import { TireSmoke, dustOf, smokeOf } from './vehicle/tireSmoke';
+import { distToPolyline } from './world/geom';
 import { MAX_RIVALS, TRACK_TRAFFIC, gridSlots, parseRivalChoice, rivalVehicles } from './gameplay/raceField';
 
 const MAX_FRAME = 0.1;
 /** Haze on a mountain track (m), the same in the near scene and the far view. */
 const TRACK_FOG = { near: 150, far: 16000 };
+/** A river is heard from this far off (m), loudest within RIVER_NEAR. */
+const RIVER_FAR = 160;
+const RIVER_NEAR = 25;
 
 /**
  * Runs a shift (started by `boot.ts`, which shows the menu otherwise). `cityReady` is the city
@@ -134,9 +139,12 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const trackTraffic = city.race && params.get('traffic') === '1' ? TRACK_TRAFFIC : 0;
   const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone, start: grid?.[grid.length - 1], title: raceMode ? 'Carrera' : undefined, trackTraffic });
   const racing = raceMode
-    ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null })
+    ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null, ground: (p) => groundHeightAt(city, p) })
     : null;
   if (racing) session.racers = racing.buses;
+  // Tire smoke (drifts, a spinning launch) and dust off the asphalt, everyone's in one draw.
+  const smoke = new TireSmoke(scene, tod === 'night' ? 0.4 : tod === 'sunset' ? 0.75 : 1);
+  if (racing) racing.smoke = smoke;
   if (touch) new TouchControls(document.body, input);
   audio.setVolume(settings.volume);
   // The radio keeps its own level (under the engine) and plays straight to the speakers.
@@ -158,6 +166,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     racing?.restart();
     fall.reset();
     trackS = -1;
+    smoke.clear();
   };
   session.onHudAction = (a) => {
     if (a === 'resume') setPaused(false);
@@ -194,6 +203,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const race = city.race ?? null;
   const fall = new FallWatch();
   let trackS = -1;
+  /** How far past the asphalt's edge the bus is (m, negative on it), on a track. */
+  let offEdge = -1;
+  let river = 0;
 
   performance.mark('qbus:session');
   // Weak GPUs: render fewer pixels (and smaller shadows) while the frame rate stays low. Automation
@@ -203,7 +215,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { quality, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, weather, basins, timeOfDay: tod, fall, racing, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { quality, smoke, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, weather, basins, timeOfDay: tod, fall, racing, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   const scratchPos = { x: 0, y: 0, z: 0 };
   const earFwd = new THREE.Vector3();
@@ -279,9 +291,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     const w = weather.update(paused ? 0 : dt);
     bus.grip = gripFor(w.wet) * (racing?.playerGrip ?? 1);
     if (racing) {
-    racing.weatherGrip = gripFor(w.wet);
-    racing.wet = w.wet;
-  }
+      racing.weatherGrip = gripFor(w.wet);
+      racing.wet = w.wet;
+    }
     floodWater.setFlood(w.flood);
     bus.wade = waterDepth(basins, bus.position(scratchPos), bus.roadHeight(), w.flood);
     weatherClock += dt;
@@ -296,6 +308,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       rained = w.rain > 0.2 || (rained && w.rain > 0);
       if (!floodedNews && w.flood > 0.2) session.weatherNews('flood');
       floodedNews = w.flood > 0.2 || (floodedNews && w.flood > 0);
+      // Rivers down in the valley: heard from the camera when one is near.
+      let d = Infinity;
+      for (const rv of race?.scenery?.rivers ?? []) d = Math.min(d, distToPolyline({ x: camera.position.x, z: camera.position.z }, rv.points));
+      river = Math.max(0, Math.min(1, (RIVER_FAR - d) / (RIVER_FAR - RIVER_NEAR))) ** 2;
     }
 
     // The tutorial holds the bus still: the clock only starts on the first throttle after it.
@@ -330,6 +346,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       if (Math.hypot(here.off, here.y - p.y) > 25) here = locateOnTrack(race, p);
       // Down a ravine the nearest bit of road can be a hairpin's other leg: keep the last good spot.
       if (!fall.falling) trackS = here.s;
+      offEdge = fall.falling ? -1 : Math.abs(here.off) - race.width / 2;
       const ev = fall.update(dt, { roadY: here.y, busY: p.y, off: here.off, halfWidth: race.width / 2, wheelsOnGround: bus.wheelsOnGround });
       if (ev === 'fell') session.notice('¡Al barranco!');
       if (ev === 'respawn') {
@@ -340,9 +357,16 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     }
     props.sync();
     model.sync(bus);
+    if (!paused) {
+      const spin = racing && racing.playerGrip < 1 ? drive.throttle : 0;
+      smoke.emit(bus, smokeOf(bus.slipAngle, bus.speed, spin), dustOf(offEdge, bus.speed), dt);
+    }
+    smoke.update(paused ? 0 : dt);
     const lookBack = input.lookBackHeld;
-    // Looking back from the driver's seat needs the bus's outside to be there to look at.
-    model.setCockpitView(rig.mode === 'cockpit' && !lookBack);
+    // The finish line's trackside camera, while it rolls.
+    rig.trackside = racing?.finishView ?? null;
+    // Looking back from the driver's seat (or from beside the road) needs the bus's outside to be there to look at.
+    model.setCockpitView(rig.mode === 'cockpit' && !lookBack && !rig.trackside);
     rig.update(dt, bus, lookBack);
     followSun(sun, model.root.position);
     const spray = bus.wade > 0.05 ? Math.min(1, Math.abs(bus.speed) / 10) * Math.min(1, bus.wade / 0.4) : 0;
@@ -350,14 +374,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     if (racing) {
       racing.frame(paused ? 0 : dt, drive.throttle, !paused && !tutorial.open);
       session.others = racing.others as { x: number; z: number }[];
-      if (racing.launchNotice) {
-        session.notice(racing.launchNotice.text, racing.launchNotice.good ? 'money' : 'bad');
-        racing.launchNotice = null;
-      }
-      if (racing.pickupNotice) {
-        session.notice('¡Nitro!', 'money');
-        racing.pickupNotice = false;
-      }
+      for (const n of racing.notices) session.notice(n.text, n.tone);
+      racing.notices.length = 0;
       // The rivals' engines, heard from the camera.
       camera.getWorldDirection(earFwd);
       earUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
@@ -392,6 +410,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     radio.update(audio.context, paused);
     rain.update(w, camera, paused ? 0 : dt, covered);
     audio.weather(paused ? 0 : w.rain * (covered ? 0.4 : 1), paused ? 0 : spray);
+    audio.river(paused ? 0 : river);
     const t = bus.position(scratchPos);
     // The street name changes slowly: look it up a few times a second, not every frame.
     streetClock += dt;

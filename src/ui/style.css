@@ -2155,6 +2155,47 @@ body {
 }
 
 /* After an R reset: held still for a few seconds, counted down. */
+.rh-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rh-flash.rh-flash-on {
+  animation: rh-flash 0.7s ease-out both;
+}
+
+@keyframes rh-flash {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.rh-photo {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  padding: 8px 26px;
+  border: 4px solid #1d1a14;
+  background: #ffd21f;
+  color: #1d1a14;
+  font-size: 44px;
+  font-weight: 900;
+  white-space: nowrap;
+  animation: rh-pop 0.9s ease-out both;
+}
+
+.rh-flash[hidden],
+.rh-photo[hidden] {
+  display: none;
+}
+
 .rh-wait {
   position: absolute;
   top: 30%;
