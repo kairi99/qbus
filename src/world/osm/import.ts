@@ -114,7 +114,7 @@ export const HORIZON_HALF = 13000;
 const HORIZON_CELL = 100;
 
 /** Landmarks seen from anywhere in Quito (`summit`: meters above sea level, for volcanoes). */
-const LANDMARKS: { kind: 'virgen' | 'volcano'; name: string; lat: number; lon: number; summit?: number }[] = [
+export const LANDMARKS: { kind: 'virgen' | 'volcano'; name: string; lat: number; lon: number; summit?: number }[] = [
   // OSM way 302694122, "La Virgen de El Panecillo".
   { kind: 'virgen', name: 'Virgen del Panecillo', lat: -0.22885, lon: -78.51858 },
   { kind: 'volcano', name: 'Cotopaxi', lat: -0.6804, lon: -78.4378, summit: 5897 },
@@ -530,7 +530,7 @@ function buildTerrain(
 }
 
 /** Coarse real terrain around the zone, lightly averaged (the DSM has buildings in it). */
-function buildHorizon(dem: Dem, toLatLon: (p: Vec2) => { lat: number; lon: number }, base: number): Horizon {
+export function buildHorizon(dem: Dem, toLatLon: (p: Vec2) => { lat: number; lon: number }, base: number): Horizon {
   const cell = HORIZON_CELL;
   const n = Math.round((2 * HORIZON_HALF) / cell) + 1;
   const heights: number[] = [];
@@ -868,7 +868,7 @@ export function simplify(pts: Vec2[], tol: number): Vec2[] {
   return pts.filter((_, i) => keep[i]);
 }
 
-function sampleDem(dem: Dem, lat: number, lon: number): number {
+export function sampleDem(dem: Dem, lat: number, lon: number): number {
   return bilinear(dem.values, dem.cols, dem.rows, (lon - dem.lon0) / dem.dLon - 0.5, (lat - dem.lat0) / dem.dLat - 0.5);
 }
 

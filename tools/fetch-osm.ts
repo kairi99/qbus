@@ -6,6 +6,8 @@
  *   Metro de Quito stations/entrances
  * - <zone>.areas.json: campus grounds (universities, schools, hospitals) that get walls
  * The public servers are often overloaded; mirrors are tried in order.
+ * A race track zone (`track` in zones.ts) gets only its highway's ways, into <zone>.osm.json, and
+ * what's beside it (buildings, rivers, pipelines, roadside businesses) into <zone>.scenery.json.
  * Usage: npx tsx tools/fetch-osm.ts [zone] [osm|routes|stations|areas ...]
  */
 import { writeFileSync } from 'node:fs';
@@ -60,6 +62,32 @@ out center;`,
 out geom;`,
   },
 };
+// A race track only needs its highway's ways (a little past the bbox, so the chain is whole).
+if (zone.track) {
+  const [south, west, north, east] = zone.bbox;
+  const wide = [south - 0.01, west - 0.01, north + 0.01, east + 0.01].join(',');
+  for (const k of Object.keys(QUERIES)) delete QUERIES[k];
+  QUERIES.track = {
+    file: zone.osm,
+    query: `[out:json][timeout:120];
+way["highway"~"^(motorway|trunk|primary|secondary)$"]["ref"~"(^|;)${zone.track.ref}($|;)"](${wide});
+out geom;`,
+  };
+  // What's beside it: the town's buildings, the river and streams, the oil pipelines along the
+  // road, and the roadside businesses (named in the game by their trade only, never their name).
+  QUERIES.scenery = {
+    file: zone.osm.replace('.osm.json', '.scenery.json'),
+    query: `[out:json][timeout:120];
+(
+  way["building"](${b});
+  way["waterway"~"^(river|stream)$"](${b});
+  way["man_made"="pipeline"](${b});
+  node["amenity"~"^(restaurant|cafe|pharmacy)$"](${b});
+  node["tourism"~"^(hostel|hotel|guest_house)$"](${b});
+);
+out tags geom(${wide});`,
+  };
+}
 const MIRRORS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass-api.de/api/interpreter',

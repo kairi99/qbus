@@ -22,6 +22,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { LIGHTING, timeOfDayOf } from './sky';
 import { SignalLamps } from './signalBuilder';
 import { TrafficLights } from '../gameplay/trafficLights';
+import { buildTrack } from './trackBuilder';
 
 // Draw order on the ground is enforced with polygon offsets, not height gaps, so layers stay
 // put at any distance: terrain < sidewalk < asphalt < paint.
@@ -59,6 +60,7 @@ export interface BuiltCity {
  * lit for the scene's time of day (`setupSky`; day if none): windows lit from inside, lamps.
  */
 export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scene, graph = buildRoadGraph(city)): BuiltCity {
+  if (city.race) return buildTrack(city, world, scene, graph);
   const light = LIGHTING[timeOfDayOf(scene)];
   const h = (p: Vec2) => terrainAt(city, p);
   // Draped layers take the highest ground within half a drape step, so a flat quad spanning a

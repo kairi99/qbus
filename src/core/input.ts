@@ -7,6 +7,8 @@ export interface DriveInput {
   handbrake: boolean;
   /** Nitro held (the tank decides whether it actually fires). */
   boost?: boolean;
+  /** Held on the brakes, every wheel, full grip (a race's grid, on a mountain road's grade). */
+  parked?: boolean;
 }
 
 export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause' | 'radio' | 'confirm';

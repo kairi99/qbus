@@ -35,7 +35,8 @@ export class MiniMap {
     this.drawStreets();
   }
 
-  update(bus: Vec2, heading: number, path: Vec2[] | null, target: Vec2 | null, targetColor: string, stops: Vec2[]): void {
+  /** `others`: other racers, drawn as red dots. */
+  update(bus: Vec2, heading: number, path: Vec2[] | null, target: Vec2 | null, targetColor: string, stops: Vec2[], others: readonly Vec2[] = []): void {
     const c = this.ctx;
     const k = (SIZE * devicePixelRatio) / 2 / RANGE;
     const half = (SIZE * devicePixelRatio) / 2;
@@ -69,6 +70,15 @@ export class MiniMap {
       c.beginPath();
       c.arc(s.x, s.z, 5, 0, Math.PI * 2);
       c.fill();
+    }
+    c.fillStyle = '#e0352b';
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 3;
+    for (const o of others) {
+      c.beginPath();
+      c.arc(o.x, o.z, 9, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
     }
     c.restore();
 

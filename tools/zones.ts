@@ -1,3 +1,5 @@
+import type { TrackEnd } from '../src/world/osm/track';
+
 /** Real-city zones that can be imported. bbox = [south, west, north, east]. */
 export const ZONES: Record<
   string,
@@ -16,6 +18,11 @@ export const ZONES: Record<
     reverseWays?: number[];
     /** Famous monuments modeled by hand, at their real position. */
     monuments?: { kind: 'relojSolar'; name: string; lat: number; lon: number }[];
+    /**
+     * A race track instead of a city: the stretch of highway `ref` from `from` to `to` (see
+     * src/world/osm/track.ts). Only its ways are fetched (`track` query).
+     */
+    track?: { ref: string; from: TrackEnd; to: TrackEnd };
   }
 > = {
   mariscal: {
@@ -37,5 +44,16 @@ export const ZONES: Record<
     // entrance on Av. América: OSM node 2907866129 ("Plaza Indoamerica", historic=monument).
     // Just past the roadworks at the map edge, in view from Av. América.
     monuments: [{ kind: 'relojSolar', name: 'Reloj Solar de la Universidad Central', lat: -0.2013468, lon: -78.5017621 }],
+  },
+  // "Paso de la Muerte": the E20 (Vía Interoceánica) from Papallacta down the Papallacta river's
+  // gorge toward Cuyuja and Baeza: its first ~4.5 km raced (3120 to 2900 m, the windiest stretch),
+  // all inside the W079 DEM tile.
+  papallacta: {
+    id: 'papallacta',
+    name: 'Paso de la Muerte',
+    bbox: [-0.3842, -78.1425, -0.3672, -78.1010],
+    osm: 'data/raw/papallacta.osm.json',
+    dem: 'data/raw/copernicus-S01-W079.tif',
+    track: { ref: 'E20', from: { lat: -0.3796, lon: -78.139, name: 'Papallacta' }, to: { lat: -0.3697, lon: -78.106, name: 'Cuyuja' } },
   },
 };

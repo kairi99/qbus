@@ -3,6 +3,9 @@ import { FARE_CENTS, START_TIME, STOP_SPEED } from '../gameplay/routeGame';
 import { MIN_TO_START, NITRO_DURATION } from '../gameplay/nitro';
 import { COMBO_WINDOW, MAX_MULTIPLIER, TOP_SPEED } from '../gameplay/scoring';
 import type { StarThresholds } from '../gameplay/stars';
+import { LAUNCH_EFFECT } from '../gameplay/launch';
+import { PICKUP_FILL, PICKUP_RESPAWN } from '../gameplay/pickups';
+import { RESET_WAIT } from '../gameplay/raceField';
 import { money, targetsText } from './gameHud';
 
 const kmh = (ms: number) => Math.round(ms * 3.6);
@@ -41,17 +44,41 @@ const nitroText = () => `
   <li><b>Nitro:</b> el tanque arranca lleno y se quema en ${NITRO_DURATION} s. Para soltarlo necesitas al menos ${MIN_TO_START === 0.5 ? 'medio tanque' : `el ${Math.round(MIN_TO_START * 100)} % del tanque`} (la rayita del medidor).</li>
   <li>Solo se recarga <b>derrapando</b>, pasando <b>con las justas</b> junto a los carros (o haciendo saltar a la gente) y <b>pasándote los rojos</b> de los semáforos. Esperar no lo llena.</li>`;
 
+const tank = (k: number) => (k === 0.5 ? 'medio tanque' : k === 0.25 ? 'un cuarto de tanque' : `el ${Math.round(k * 100)} % del tanque`);
+
+/** A race on a mountain road: the race, the launch, pickups, the ravines and the R wait. */
+export interface RaceInfo {
+  from: string;
+  to: string;
+  traffic: boolean;
+}
+
 const keyList = (rows: [string, string][], cls: string) =>
   `<dl class="tut-keys ${cls}">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 
-const controls = () => `
+const controls = (race = false) => `
   <h2>Los controles</h2>
-  ${keyList(KEYS, 'keys-only')}
+  ${keyList(race ? KEYS.map(([k, v]) => [k, k === 'R' ? `Volver a la vía (y esperar ${RESET_WAIT} s)` : v]) : KEYS, 'keys-only')}
   ${keyList(TOUCH, 'touch-only')}
   <p class="tut-pad" data-pad hidden><b>Control:</b> ${PAD}</p>`;
 
-/** The pages of the card: a route shift explains the job, free roam just the ride. */
-function pages(free: boolean, targets: StarThresholds | null, brt: boolean): string[] {
+/** The pages of the card: a route shift explains the job, free roam just the ride, a race the race. */
+function pages(free: boolean, targets: StarThresholds | null, brt: boolean, race: RaceInfo | null): string[] {
+  if (race) {
+    const perfect = LAUNCH_EFFECT.perfect;
+    return [
+      `<h2>¡A la carrera!</h2>
+      <ul>
+        <li>Llega primero de <b>${race.from}</b> a <b>${race.to}</b>: arrancas al fondo de la parrilla.</li>
+        <li><b>La salida:</b> en la cuenta 3-2-1 acelera y mantén la aguja en lo <b class="rh-green">verde</b>. ¡Salida perfecta! = un empujón y ${tank(perfect.nitro)} de nitro. Muy poco y el motor <b>se ahoga</b>; a fondo, las llantas <b>patinan</b>.</li>
+        <li><b>Nitro en la vía:</b> los tanques azules llenan ${tank(PICKUP_FILL)} (vuelven a los ${PICKUP_RESPAWN} s). También se recarga derrapando y pasando con las justas.</li>
+        <li><b>Barrancos:</b> hay tramos sin baranda. Si te vas abajo vuelves a la vía un poco más atrás.</li>
+        <li>Con <b>R</b> vuelves a la vía donde estabas, pero esperas ${RESET_WAIT} s antes de seguir.</li>
+        ${race.traffic ? '<li><b>Tráfico:</b> carros y camiones en los dos sentidos. Rebasa solo con la vía libre.</li>' : ''}
+      </ul>`,
+      controls(true),
+    ];
+  }
   if (free)
     return [
       `<h2>Paseo libre</h2>
@@ -106,16 +133,17 @@ export class Tutorial {
     free: boolean,
     targets: StarThresholds | null,
     brt = false,
+    race: RaceInfo | null = null,
   ) {
     const el = (this.el = document.createElement('div'));
     el.className = 'gh-results tut';
     el.hidden = true;
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
-    el.setAttribute('aria-label', free ? 'Cómo jugar el paseo libre' : 'Cómo jugar el turno');
+    el.setAttribute('aria-label', race ? 'Cómo correr la carrera' : free ? 'Cómo jugar el paseo libre' : 'Cómo jugar el turno');
     el.innerHTML = `
       <div class="gh-results-card tut-card">
-        ${pages(free, targets, brt).map((p) => `<section class="tut-page" hidden>${p}</section>`).join('')}
+        ${pages(free, targets, brt, race).map((p) => `<section class="tut-page" hidden>${p}</section>`).join('')}
         <div class="tut-foot">
           <label class="tut-skip"><input type="checkbox" data-dont /> No mostrar otra vez</label>
           <span class="tut-dots" data-dots aria-hidden="true"></span>

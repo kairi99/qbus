@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CityData, Horizon, Landmark } from './cityData';
 import { buildMountains } from './mountains';
+import { type Puff, MIST_LOOK, mistMesh } from './mist';
 import { LIGHTING, type TimeOfDay, skyDome } from './sky';
 
 /**
@@ -27,9 +28,12 @@ export function buildBackdrop(city: CityData, cityRadius: number, tod: TimeOfDay
 
   const scale = city.terrain?.scale ?? 1;
   if (city.horizon) {
-    scene.add(horizonMesh(city.horizon, scale, light.horizon));
-    if (tod === 'night') scene.add(cityLights(city.horizon, scale));
+    scene.add(horizonMesh(city.horizon, scale, light.horizon, !!city.race));
+    // Quito's lights around a city zone; out on a mountain road the valley is dark.
+    if (tod === 'night' && !city.race) scene.add(cityLights(city.horizon, scale));
     for (const l of city.landmarks ?? []) scene.add(l.kind === 'virgen' ? virgen(l, scale) : volcano(l, scale));
+    // Out in the mountains, banks of cloud over the far ridges and around the volcanoes.
+    if (city.race) scene.add(mistMesh(farClouds(city.horizon, city.landmarks ?? []), MIST_LOOK[tod], 40000));
   } else scene.add(buildMountains(cityRadius));
   return scene;
 }
@@ -82,19 +86,29 @@ const BANDS: [number, THREE.Color][] = [
   [1850, new THREE.Color('#8d877a')],
 ];
 
-function bandColor(h: number, out: THREE.Color): THREE.Color {
-  if (h <= BANDS[0][0]) return out.copy(BANDS[0][1]);
-  for (let i = 1; i < BANDS.length; i++) {
-    if (h <= BANDS[i][0]) return out.copy(BANDS[i - 1][1]).lerp(BANDS[i][1], (h - BANDS[i - 1][0]) / (BANDS[i][0] - BANDS[i - 1][0]));
+/** Out in the mountains (a race track; heights over its valley floor): forest, páramo, rock, the snow on Antisana. */
+const WILD_BANDS: [number, THREE.Color][] = [
+  [0, new THREE.Color('#4d6f37')],
+  [600, new THREE.Color('#5c7b43')],
+  [1100, new THREE.Color('#98985d')],
+  [1700, new THREE.Color('#8a857a')],
+  [2300, new THREE.Color('#7d7a74')],
+  [2500, new THREE.Color('#eef0f3')],
+];
+
+function bandColor(h: number, out: THREE.Color, bands = BANDS): THREE.Color {
+  if (h <= bands[0][0]) return out.copy(bands[0][1]);
+  for (let i = 1; i < bands.length; i++) {
+    if (h <= bands[i][0]) return out.copy(bands[i - 1][1]).lerp(bands[i][1], (h - bands[i - 1][0]) / (bands[i][0] - bands[i - 1][0]));
   }
-  return out.copy(BANDS[BANDS.length - 1][1]);
+  return out.copy(bands[bands.length - 1][1]);
 }
 
 /**
  * The far terrain as one low-poly grid. Low ground near the city fades into the same haze as
  * the city's own fog, so the two meet without a seam; hills stand clear of it.
  */
-function horizonMesh(h: Horizon, scale: number, haze: THREE.Color): THREE.Mesh {
+function horizonMesh(h: Horizon, scale: number, haze: THREE.Color, wild = false): THREE.Mesh {
   const pos = new Float32Array(h.cols * h.rows * 3);
   const col = new Float32Array(h.cols * h.rows * 3);
   const c = new THREE.Color();
@@ -107,12 +121,13 @@ function horizonMesh(h: Horizon, scale: number, haze: THREE.Color): THREE.Mesh {
       pos.set([x, y * scale - 2, z], i * 3);
       // A little variation so the city floor doesn't read as a flat sheet.
       const n = Math.sin(x * 0.013 + z * 0.021) * Math.sin(x * 0.007 - z * 0.017);
-      bandColor(y, c).multiplyScalar(1 + n * 0.08);
+      bandColor(y, c, wild ? WILD_BANDS : BANDS).multiplyScalar(1 + n * 0.08);
       // Haze lies over the low city near the zone (matching the city's own fog); hills rising
       // out of it, like El Panecillo, stay clear.
       const near = Math.max(0, Math.min(1, 1 - (Math.hypot(x, z) - 1400) / 2200));
       const low = Math.max(0, Math.min(1, 1 - (y - 60) / 160));
-      c.lerp(haze, 0.85 * near * low);
+      // (Not in the mountains: there the low ground is the valley floor, as green as the rest.)
+      if (!wild) c.lerp(haze, 0.85 * near * low);
       col.set([c.r, c.g, c.b], i * 3);
     }
   const index: number[] = [];
@@ -178,4 +193,31 @@ function volcano(l: Landmark, scale: number): THREE.Group {
   g.add(rock, cap);
   g.position.set(l.pos.x, 0, l.pos.z);
   return g;
+}
+
+/** Cloud banks over the far terrain (1.5–12 km out) and wrapped around the volcanoes' flanks. */
+function farClouds(h: Horizon, landmarks: Landmark[]): Puff[] {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  const at = (x: number, z: number) => {
+    const c = Math.max(0, Math.min(h.cols - 1, Math.round((x - h.minX) / h.cell)));
+    const r = Math.max(0, Math.min(h.rows - 1, Math.round((z - h.minZ) / h.cell)));
+    return h.heights[r * h.cols + c];
+  };
+  const out: Puff[] = [];
+  for (let i = 0; i < 170; i++) {
+    const a = rnd() * Math.PI * 2;
+    const d = 1500 + rnd() ** 0.7 * 10500;
+    const x = Math.cos(a) * d;
+    const z = Math.sin(a) * d;
+    const size = 450 + rnd() * 1100;
+    out.push({ x, y: at(x, z) + 120 + rnd() * 450, z, size, alpha: 0.35 + rnd() * 0.4 });
+  }
+  for (const l of landmarks)
+    for (let i = 0; i < 14; i++) {
+      const a = rnd() * Math.PI * 2;
+      const d = 1500 + rnd() * 3500;
+      out.push({ x: l.pos.x + Math.cos(a) * d, y: l.y - 1700 + rnd() * 700, z: l.pos.z + Math.sin(a) * d, size: 1800 + rnd() * 1500, alpha: 0.45 + rnd() * 0.3 });
+    }
+  return out;
 }

@@ -4,12 +4,18 @@ import { generateCity } from './procCity';
 /** Imported zones, loaded on demand so each stays its own chunk. */
 const ZONES: Record<string, () => Promise<{ default: unknown }>> = {
   mariscal: () => import('../../data/cities/mariscal.json'),
+  papallacta: () => import('../../data/cities/papallacta.json'),
 };
 
 /** Zones shown in the menu. */
 export const ZONE_LIST = [
   { id: 'mariscal', name: 'La Mariscal', blurb: 'Calles reales de Quito, con sus cuestas y sus una-vía' },
   { id: 'grid', name: 'Ciudad de prueba', blurb: 'Cuadrícula plana con rampas, para practicar' },
+];
+
+/** Race tracks shown in the menu (zones with `city.race`). */
+export const TRACK_LIST = [
+  { id: 'papallacta', name: 'Paso de la Muerte', blurb: 'Vía Interoceánica, de Papallacta a Cuyuja: barrancos, neblina y curvas cerradas' },
 ];
 
 export const DEFAULT_ZONE = 'mariscal';
@@ -24,7 +30,8 @@ export async function loadCity(params: URLSearchParams): Promise<CityData> {
   const zone = params.get('city') ?? (params.has('seed') ? 'grid' : DEFAULT_ZONE);
   if (zone === 'grid' || !ZONES[zone]) return generateCity({ seed: Number(params.get('seed') ?? 42) });
   const city = (await ZONES[zone]()).default as CityData;
-  if (city.terrain) city.terrain.scale = Number(params.get('hills') ?? DEFAULT_HILLS);
+  // A race track's mountains are true to life: its road and cuts are graded for them.
+  if (city.terrain) city.terrain.scale = city.race ? 1 : Number(params.get('hills') ?? DEFAULT_HILLS);
   return city;
 }
 

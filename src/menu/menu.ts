@@ -1,11 +1,13 @@
 import { type BusPreset, isTrain } from '../vehicle/busPreset';
 import { BRT_BUS, BUSES, VEHICLES, busStats } from '../vehicle/buses';
-import { ZONE_LIST, loadZone } from '../world/loadCity';
+import { TRACK_LIST, ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose } from '../gameplay/routes';
 import { type StarThresholds, starThresholds, starsFor } from '../gameplay/stars';
 import { buildRoadGraph } from '../world/roadGraph';
-import { HILLS_OPTIONS, RAIN_OPTIONS, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
+import { HILLS_OPTIONS, RAIN_OPTIONS, type RaceSetup, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
+import { bestRace } from '../gameplay/raceRecords';
+import { raceClock } from '../gameplay/raceGame';
 import { RADIO_OFF, STATIONS } from '../core/radioStations';
 import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
 import { MISSIONS } from '../gameplay/missions';
@@ -13,15 +15,20 @@ import { money, starText, targetsText } from '../ui/gameHud';
 import { MenuSounds } from './menuSounds';
 
 export interface Selection {
-  mode: 'route' | 'free';
+  mode: 'route' | 'free' | 'race';
   bus: string;
   zone: string;
   route: string;
+  race?: RaceSetup;
 }
 
-/** URL that starts a shift (or a free drive) with this selection (the game reads it on load). */
+/** URL that starts a shift (or a free drive, or a race) with this selection (the game reads it on load). */
 export function playUrl(s: Selection): string {
   if (s.mode === 'free') return `?${new URLSearchParams({ play: '1', mode: 'free', city: s.zone, bus: s.bus })}`;
+  if (s.mode === 'race' && s.race) {
+    const r = s.race;
+    return `?${new URLSearchParams({ play: '1', mode: 'race', city: r.track, bus: s.bus, rivals: String(r.rivals), rivalBus: r.rivalBus, skill: r.skill, ...(r.traffic ? { traffic: '1' } : {}) })}`;
+  }
   return `?${new URLSearchParams({ play: '1', city: s.zone, bus: s.bus, route: s.route })}`;
 }
 
@@ -46,10 +53,18 @@ export function busForRoute(c: BusChoice, brt: boolean): BusChoice {
 const MODES = [
   { id: 'route', name: 'Turno', blurb: 'Una ruta con paradas, pasajeros, reloj y plata' },
   { id: 'free', name: 'Paseo libre', blurb: 'Recorra la ciudad a su gusto, sin paradas ni reloj' },
+  { id: 'race', name: 'Carrera', blurb: 'Contra otros buses, cuesta abajo por una vía de montaña de verdad' },
 ] as const;
 
-/** Vehicles offered in a mode: buses on a route; buses and cars in free roam. */
-const vehiclesFor = (mode: Selection['mode']) => (mode === 'free' ? VEHICLES : BUSES);
+/** Vehicles offered in a mode: buses on a route; buses and cars in free roam and races. */
+const vehiclesFor = (mode: Selection['mode']) => (mode === 'route' ? BUSES : VEHICLES);
+
+const RIVAL_COUNTS = [1, 2, 3];
+const SKILL_OPTIONS: { value: RaceSetup['skill']; label: string }[] = [
+  { value: 'easy', label: 'Tranquilos' },
+  { value: 'normal', label: 'Normales' },
+  { value: 'hard', label: 'Bravos' },
+];
 
 /**
  * Title screen and shift setup (bus, zone, route) plus settings. Pure DOM; the game itself
@@ -114,7 +129,9 @@ export class Menu {
             <h2>Mapa</h2>
             <p>Calles, edificios, paradas y rutas: © colaboradores de ${link('https://www.openstreetmap.org/copyright', 'OpenStreetMap')},
             bajo la licencia ${link('https://opendatacommons.org/licenses/odbl/1-0/', 'ODbL 1.0')}. Los datos de la ciudad del juego
-            (<code>data/cities/*.json</code>) son una base de datos derivada y se comparten bajo la misma licencia.</p>
+            (<code>data/cities/*.json</code>) son una base de datos derivada y se comparten bajo la misma licencia. La pista
+            Paso de la Muerte es un tramo real de la Vía Interoceánica (E20) entre Papallacta y Cuyuja: la vía, sus ríos, el
+            oleoducto y las casas también salen de OpenStreetMap; los letreros de los negocios solo dicen lo que venden.</p>
           </section>
           <section>
             <h2>Relieve</h2>
@@ -164,7 +181,7 @@ export class Menu {
           <h2 class="mn-vehicle-title"></h2>
           <div class="mn-row mn-vehicles" role="radiogroup" aria-label="Vehículo"></div>
         </section>
-        <section class="mn-step">
+        <section class="mn-step mn-step-zone">
           <h2>La zona</h2>
           <div class="mn-row" role="radiogroup" aria-label="Zona">${ZONE_LIST.map((z) => zoneCard(z, z.id === s.zone)).join('')}</div>
         </section>
@@ -173,6 +190,16 @@ export class Menu {
           <div class="mn-routes">
             <div class="mn-placards" role="radiogroup" aria-label="Ruta"><p class="mn-loading">Cargando rutas…</p></div>
             <canvas class="mn-map" width="360" height="360" aria-label="Mapa de la ruta"></canvas>
+          </div>
+        </section>
+        <section class="mn-step mn-step-race" hidden>
+          <h2>La pista</h2>
+          <div class="mn-routes">
+            <div class="mn-placards">
+              <div class="mn-row mn-tracks" role="radiogroup" aria-label="Pista"></div>
+              <div class="mn-panel mn-race-opts"></div>
+            </div>
+            <canvas class="mn-map mn-track-map" width="360" height="360" aria-label="Mapa de la pista"></canvas>
           </div>
         </section>
         <footer class="mn-bar">
@@ -213,7 +240,7 @@ export class Menu {
     const list = vehiclesFor(this.settings.mode);
     if (!list.some((v) => v.preset.id === this.settings.bus)) this.pick('bus', list[0].preset.id);
     const pool = list.map((v) => v.preset);
-    this.root.querySelector('.mn-vehicle-title')!.textContent = this.settings.mode === 'free' ? 'El vehículo' : 'El bus';
+    this.root.querySelector('.mn-vehicle-title')!.textContent = this.settings.mode === 'route' ? 'El bus' : 'El vehículo';
     const row = this.root.querySelector<HTMLElement>('.mn-vehicles')!;
     row.innerHTML = list.map((b) => busCard(b.preset, b.blurb, b.preset.id === this.settings.bus, pool)).join('');
     row.querySelectorAll<HTMLElement>('[data-bus]').forEach((el) =>
@@ -296,8 +323,12 @@ export class Menu {
     const box = this.root.querySelector<HTMLElement>('.mn-placards')!;
     const play = this.root.querySelector<HTMLButtonElement>('[data-go="play"]')!;
     // Free roam has no route to pick: nothing to load before playing.
-    const free = this.settings.mode === 'free';
+    const free = this.settings.mode !== 'route';
     this.root.querySelector<HTMLElement>('.mn-step-route')!.hidden = free;
+    const race = this.settings.mode === 'race';
+    this.root.querySelector<HTMLElement>('.mn-step-zone')!.hidden = race;
+    this.root.querySelector<HTMLElement>('.mn-step-race')!.hidden = !race;
+    if (race) void this.showRace();
     if (free) {
       play.disabled = false;
       this.summary();
@@ -335,6 +366,63 @@ export class Menu {
     this.summary();
   }
 
+  /** A race: the track (with its best time), the rivals (how many, what they drive, how well), traffic, and the track's map. */
+  private async showRace(): Promise<void> {
+    const r = this.settings.race;
+    if (!TRACK_LIST.some((t) => t.id === r.track)) r.track = TRACK_LIST[0].id;
+    const tracks = this.root.querySelector<HTMLElement>('.mn-tracks')!;
+    tracks.innerHTML = TRACK_LIST.map((t) => trackCard(t, t.id === r.track, bestRace(t.id)?.time ?? null)).join('');
+    tracks.querySelectorAll<HTMLElement>('[data-track]').forEach((el) =>
+      el.addEventListener('click', () => {
+        r.track = el.dataset.track!;
+        this.mark('[data-track]', el);
+        this.summary();
+        void this.drawTrack();
+      }),
+    );
+    if (!['mixed', 'same'].includes(r.rivalBus) && !VEHICLES.some((v) => v.preset.id === r.rivalBus)) r.rivalBus = 'mixed';
+    const opts = this.root.querySelector<HTMLElement>('.mn-race-opts')!;
+    opts.innerHTML = `
+      <fieldset>
+        <legend>Rivales</legend>
+        ${RIVAL_COUNTS.map((n) => choice('rivals', String(n), String(n), r.rivals === n)).join('')}
+      </fieldset>
+      <fieldset>
+        <legend>Qué manejan</legend>
+        ${choice('rivalBus', 'mixed', 'De todo un poco', r.rivalBus === 'mixed')}
+        ${choice('rivalBus', 'same', 'Lo mismo que yo', r.rivalBus === 'same')}
+        ${VEHICLES.map((v) => choice('rivalBus', v.preset.id, v.preset.name, r.rivalBus === v.preset.id)).join('')}
+      </fieldset>
+      <fieldset>
+        <legend>Choferes</legend>
+        ${SKILL_OPTIONS.map((o) => choice('skill', o.value, o.label, r.skill === o.value)).join('')}
+      </fieldset>
+      <fieldset>
+        <legend>Tráfico en la vía</legend>
+        ${choice('traffic', 'off', 'Vía libre', !r.traffic)}
+        ${choice('traffic', 'on', 'Con carros y camiones', r.traffic)}
+      </fieldset>`;
+    opts.querySelectorAll<HTMLInputElement>('input[type="radio"]').forEach((el) =>
+      el.addEventListener('change', () => {
+        if (el.name === 'rivals') r.rivals = Number(el.value);
+        if (el.name === 'rivalBus') r.rivalBus = el.value;
+        if (el.name === 'skill') r.skill = el.value as RaceSetup['skill'];
+        if (el.name === 'traffic') r.traffic = el.value === 'on';
+        this.summary();
+      }),
+    );
+    this.summary();
+    await this.drawTrack();
+  }
+
+  private async drawTrack(): Promise<void> {
+    const id = this.settings.race.track;
+    if (!this.cities.has(id)) this.cities.set(id, loadZone(id));
+    const city = await this.cities.get(id)!;
+    const canvas = this.root.querySelector<HTMLCanvasElement>('.mn-track-map');
+    if (canvas && city.race && this.settings.race.track === id) drawTrackMap(canvas, city);
+  }
+
   // ---- helpers ---------------------------------------------------------------
 
   private isBrt(routeId: string): boolean {
@@ -360,6 +448,13 @@ export class Menu {
     if (!el) return;
     const bus = VEHICLES.find((b) => b.preset.id === this.settings.bus)?.preset.name ?? '';
     const zone = ZONE_LIST.find((z) => z.id === this.settings.zone)?.name ?? '';
+    if (this.settings.mode === 'race') {
+      const r = this.settings.race;
+      const track = TRACK_LIST.find((t) => t.id === r.track)?.name ?? '';
+      const who = r.rivalBus === 'mixed' ? 'de todo un poco' : r.rivalBus === 'same' ? 'lo mismo que usted' : (VEHICLES.find((v) => v.preset.id === r.rivalBus)?.preset.name ?? '');
+      el.textContent = `${bus}, ${track}, ${r.rivals} ${r.rivals === 1 ? 'rival' : 'rivales'} (${who})${r.traffic ? ', con tráfico' : ''}`;
+      return;
+    }
     const route =
       this.settings.mode === 'free' ? 'Paseo libre' : (this.root.querySelector(`[data-route="${this.settings.route}"] .mn-placard-name`)?.textContent ?? '');
     el.textContent = [bus, zone, route].filter(Boolean).join(', ');
@@ -485,6 +580,15 @@ function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset
     </button>`;
 }
 
+function trackCard(t: { id: string; name: string; blurb: string }, checked: boolean, best: number | null): string {
+  return `
+    <button class="mn-card mn-zone" role="radio" aria-checked="${checked}" data-track="${t.id}">
+      <span class="mn-card-name">${t.name}</span>
+      <span class="mn-card-blurb">${t.blurb}</span>
+      <span class="mn-card-cap">${best !== null ? `Su récord: ${raceClock(best)}` : 'Sin récord todavía'}</span>
+    </button>`;
+}
+
 function zoneCard(z: { id: string; name: string; blurb: string }, checked: boolean): string {
   return `
     <button class="mn-card mn-zone" role="radio" aria-checked="${checked}" data-zone="${z.id}">
@@ -564,4 +668,73 @@ function drawMap(canvas: HTMLCanvasElement, city: CityData, route: RouteDef, leg
     ctx.fillStyle = '#ffb000';
     ctx.fillText(String(i + 1), X(p.x), Z(p.z) + 0.5);
   });
+}
+
+/** The track from above (start green, finish checkered), and under it its profile: how far it falls. */
+function drawTrackMap(canvas: HTMLCanvasElement, city: CityData): void {
+  const t = city.race!;
+  const ctx = canvas.getContext('2d')!;
+  const W = canvas.width;
+  const H = canvas.height;
+  const strip = 84;
+  const pad = 18;
+  const i0 = t.cum.findIndex((c) => c >= t.start);
+  const i1 = t.cum.findIndex((c) => c >= t.finish);
+  const pts = t.points.slice(i0, i1 + 1);
+  const xs = pts.map((p) => p.x);
+  const zs = pts.map((p) => p.z);
+  const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+  const k = Math.min((W - pad * 2) / (x1 - x0), (H - strip - pad * 2) / (z1 - z0));
+  const X = (x: number) => W / 2 + (x - (x0 + x1) / 2) * k;
+  const Z = (z: number) => (H - strip) / 2 + (z - (z0 + z1) / 2) * k;
+  ctx.fillStyle = '#dfe6d3';
+  ctx.fillRect(0, 0, W, H);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [w, c] of [[7, '#1d1a14'], [3.5, '#d98a00']] as const) {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(X(p.x), Z(p.z)) : ctx.moveTo(X(p.x), Z(p.z))));
+    ctx.stroke();
+  }
+  const dot = (p: Vec2, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(X(p.x), Z(p.z), 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  };
+  dot(pts[0], '#2e7d4f');
+  dot(pts[pts.length - 1], '#1d1a14');
+  ctx.font = 'bold 12px system-ui, sans-serif';
+  ctx.fillStyle = '#1d1a14';
+  ctx.textAlign = 'center';
+  // Names over the ends, kept inside the canvas.
+  const label = (text: string, p: Vec2) => {
+    const half = ctx.measureText(text).width / 2 + 4;
+    ctx.fillText(text, Math.max(half, Math.min(W - half, X(p.x))), Z(p.z) - 13);
+  };
+  label(t.from, pts[0]);
+  label(t.to, pts[pts.length - 1]);
+  // The profile: height against distance, from the start line to the finish.
+  const ys = t.y.slice(i0, i1 + 1);
+  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+  const top = H - strip + 22;
+  const bottom = H - 10;
+  const PX = (c: number) => pad + ((c - t.start) / (t.finish - t.start)) * (W - pad * 2);
+  const PY = (y: number) => bottom - ((y - y0) / (y1 - y0 || 1)) * (bottom - top);
+  ctx.fillStyle = '#16283a';
+  ctx.fillRect(0, H - strip, W, strip);
+  ctx.fillStyle = '#8ea88a';
+  ctx.beginPath();
+  ctx.moveTo(PX(t.start), bottom);
+  ys.forEach((y, i) => ctx.lineTo(PX(t.cum[i0 + i]), PY(y)));
+  ctx.lineTo(PX(t.finish), bottom);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'left';
+  ctx.fillText(`${((t.finish - t.start) / 1000).toFixed(1).replace('.', ',')} km · baja ${Math.round(ys[0] - ys[ys.length - 1])} m`, pad, H - strip + 15);
 }

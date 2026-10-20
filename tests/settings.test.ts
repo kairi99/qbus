@@ -63,6 +63,18 @@ describe('settings', () => {
     expect(s.musicVolume).toBe(DEFAULTS.musicVolume);
   });
 
+  it('keeps the race setup, and its defaults for saves from before it or garbage', () => {
+    const store = memory();
+    const race = { track: 'papallacta', rivals: 2, rivalBus: 'same', skill: 'hard' as const, traffic: true };
+    saveSettings({ ...DEFAULTS, mode: 'race', race }, store);
+    expect(loadSettings(store).mode).toBe('race');
+    expect(loadSettings(store).race).toEqual(race);
+    const { race: _, ...old } = DEFAULTS;
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2 }) })).race).toEqual(DEFAULTS.race);
+    const bad = loadSettings(memory({ qbus: JSON.stringify({ ...DEFAULTS, race: { rivals: 9, skill: 'god', traffic: 'yes', rivalBus: 3 } }) })).race;
+    expect(bad).toEqual(DEFAULTS.race);
+  });
+
   it('ignores garbage and out-of-range values', () => {
     const store = memory({ qbus: JSON.stringify({ volume: 7, hills: -3, camera: 'drone', bus: 42, timeOfDay: 'noon', radio: 'salsa', musicVolume: -1 }) });
     const s = loadSettings(store);

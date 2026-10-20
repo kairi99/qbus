@@ -3,6 +3,7 @@ import { type BusPreset, isTrain } from './busPreset';
 import type { BusPhysics } from './bus';
 import { carCockpit, carExterior } from './carBody';
 import { gusanitoCockpit, gusanitoHead, gusanitoWagon } from './gusanitoBody';
+import { mergeParts } from './mergeParts';
 
 const flat = (color: THREE.ColorRepresentation) => new THREE.MeshLambertMaterial({ color, flatShading: true });
 
@@ -65,6 +66,10 @@ export class BusModel {
     else if (art) this.articulatedExterior(preset, art);
     else this.busExterior(preset);
     this.exterior.traverse((o) => (o.castShadow = true));
+    // The body's boxes draw as one mesh per material (each section on its own: they move apart).
+    const sections = new Set<THREE.Object3D>(this.rearGroups);
+    mergeParts(this.exterior, sections);
+    for (const g of this.rearGroups) mergeParts(g, new Set());
 
     // Nitro flames out of two exhausts under the rear bumper, pointing backwards.
     const small = car || worm;
@@ -92,6 +97,7 @@ export class BusModel {
       wheelMount.add(this.steeringWheel);
       this.cockpit.add(...parts, wheelMount);
     } else this.busCockpit(preset);
+    mergeParts(this.cockpit, new Set([this.steeringWheel.parent!]));
     this.cockpit.visible = false;
 
     // Wheels
@@ -116,7 +122,10 @@ export class BusModel {
       const mesh = new THREE.Mesh(tire, tireMat);
       mesh.castShadow = true;
       const hub = new THREE.Mesh(new THREE.BoxGeometry(w.radius * 0.9, w.radius * 0.3, tireWidth + 0.02), hubMat);
+      // Inside the tire's outline: its shadow changes nothing, and with it the wheel is one mesh.
+      hub.castShadow = true;
       spin.add(mesh, hub);
+      mergeParts(spin, new Set());
       pivot.add(spin);
       (section ? this.rearGroups[section - 1] : this.exterior).add(pivot);
       count[section] = (count[section] ?? 0) + 1;

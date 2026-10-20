@@ -7,6 +7,7 @@ import type { BusAudio } from '../core/audio';
 import type { CameraMode } from '../camera/cameraRig';
 import { Rng } from '../core/rng';
 import { RouteGame, type GameEvent } from './routeGame';
+import { trackStartPose } from '../world/track';
 import { type RouteDef, freeStartPose, routeLegs, routeStops, startPose } from './routes';
 import { type StarThresholds, starThresholds, starsFor } from './stars';
 import { Missions, pickMissions, type MissionEvent } from './missions';
@@ -59,7 +60,16 @@ export interface SessionDeps {
   route: RouteDef | null;
   /** Zone id, for the route's saved records. */
   zone: string;
+  /** Where the bus starts (and restarts), instead of the route's or free roam's start (a race's grid slot). */
+  start?: RoadPose;
+  /** Shown in the HUD instead of the route's name or "Paseo libre". */
+  title?: string;
+  /** Cars on a race track (none by default), shared out around the racers (`GameSession.racers`). */
+  trackTraffic?: number;
 }
+
+/** On a track, cars keep this far (m) past the start line: none drives into the grid. */
+const OFF_GRID = 250;
 
 /**
  * One shift on the route: wires the engine-agnostic rules (RouteGame, TrickScorer) to the
@@ -118,28 +128,45 @@ export class GameSession {
   private fpsHighFor = 0;
   private sinceRecycle = 0;
   private obstacleBuf: Obstacle[] = [];
+  /** Other racers' positions (a race), drawn on the minimap. */
+  others: { x: number; z: number }[] = [];
+  private rivals: BusPhysics[] = [];
+  private hitters: RAPIER.Collider[];
+  private spots: Vec2[] = [];
+  /** A traffic car's lane edge and meters along it to meters along the race track. */
+  readonly trackS: (edge: number, s: number) => number;
   private pedObstacles = new Map<number, Obstacle>();
 
   constructor(private d: SessionDeps) {
+    this.hitters = d.bus.colliders;
     this.passengers = new PassengersView(d.scene, d.city);
     this.marker = new StopMarker(d.scene, d.city);
     this.arrow = new NavArrow(d.scene);
-    this.hud = new GameHud(d.hudRoot, d.route?.name ?? 'Paseo libre', !d.route);
+    this.hud = new GameHud(d.hudRoot, d.title ?? d.route?.name ?? 'Paseo libre', !d.route);
     this.nav = new Navigator(d.graph, d.route?.system ? 'brt' : 'general', BRT_GENERAL_COST);
     this.minimap = new MiniMap(d.hudRoot, d.city);
-    this.start0 = d.route ? startPose(d.city, d.graph, d.route) : freeStartPose(d.city, d.graph);
+    this.start0 = d.start ?? (d.city.race ? trackStartPose(d.city.race, 12) : d.route ? startPose(d.city, d.graph, d.route) : freeStartPose(d.city, d.graph));
     if (d.route) this.stars = starThresholds(routeStops(d.city, d.route), routeLegs(d.city, d.route, d.graph), this.start0.pos);
     const spawn = this.start0.pos;
     const graph = d.graph;
     this.lights = new TrafficLights(graph, d.city.signals ?? []);
     this.redLights = new RedLightRunner(this.lights);
-    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: MAX_CARS, brt: brtBusCount(graph), avoid: { pos: spawn, radius: 25 }, lights: this.lights });
+    // A race track has no people on it, and traffic only if asked for: a few cars and trucks
+    // around each racer, both ways, never on the grid, driving off the road's ends.
+    const race = d.city.race;
+    const cars = race ? (d.trackTraffic ?? 0) : MAX_CARS;
+    if (race) this.budget = cars;
+    // The track's road is one edge each way: toward the finish (meters along are the track's) or back.
+    const ahead = graph.edges.map((e) => !!race && Math.hypot(e.center.pts[0].x - race.points[0].x, e.center.pts[0].z - race.points[0].z) < 1);
+    this.trackS = (edge, s) => (ahead[edge] ? s : graph.edges[edge].len - s);
+    const keep = race && ((edge: number, s: number) => this.trackS(edge, s) > race.start + OFF_GRID);
+    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: cars, brt: brtBusCount(graph), avoid: { pos: spawn, radius: 25 }, lights: this.lights, keep: keep || undefined, uturns: !race });
     this.traffic.setBudget(this.budget, spawn);
     this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic, d.world));
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
     this.nearMiss = new NearMissDetector(d.world, d.bus, (c) => this.trafficBodies.isCar(c));
     this.trafficView = new TrafficView(d.scene, this.traffic, this.trafficBodies);
-    this.peds = new PedestrianSim(d.city, graph, { seed: 5, count: PEDESTRIANS, lights: this.lights });
+    this.peds = new PedestrianSim(d.city, graph, { seed: 5, count: race ? 0 : PEDESTRIANS, lights: this.lights });
     const focus = { pos: spawn, heading: this.start0.heading };
     this.traffic.recycle(focus, true);
     this.peds.recycle(focus, true);
@@ -150,6 +177,27 @@ export class GameSession {
     });
     this.metroView = new PedestrianView(d.scene, this.metro, d.city);
     this.restart();
+  }
+
+  /** The other racers' vehicles (a race): traffic stops for them, keeps around them too, and is wrecked by them. */
+  set racers(list: BusPhysics[]) {
+    this.rivals = list;
+    this.hitters = [...this.d.bus.colliders, ...list.flatMap((r) => r.colliders)];
+    this.spots = list.map(() => ({ x: 0, z: 0 }));
+  }
+
+  get racers(): BusPhysics[] {
+    return this.rivals;
+  }
+
+  /** Where the rivals are (the traffic's other bubbles), refreshed in place. */
+  private racerSpots(): Vec2[] {
+    this.rivals.forEach((r, i) => {
+      const p = r.position(this.posC);
+      this.spots[i].x = p.x;
+      this.spots[i].z = p.z;
+    });
+    return this.spots;
   }
 
   set onHudAction(fn: ((a: import('../ui/gameHud').HudAction) => void) | null) {
@@ -212,7 +260,7 @@ export class GameSession {
     this.sinceRecycle += dt;
     if (this.sinceRecycle > RECYCLE_EVERY) {
       this.sinceRecycle = 0;
-      this.traffic.recycle({ pos: busPos, heading: bus.heading });
+      this.traffic.recycle({ pos: busPos, heading: bus.heading }, false, this.racerSpots());
       this.peds.recycle({ pos: busPos, heading: bus.heading });
     }
     // Reused every step (this runs 60 times a second): the bus, wrecks, then people on the street.
@@ -221,6 +269,7 @@ export class GameSession {
     // The bus at its level (in an underpass it doesn't hold up the street over it); an articulated
     // bus is two boxes, each at its own heading.
     bus.sections().forEach((s, i) => obstacles.push({ id: i ? `bus${i}` : 'bus', pos: s.pos, heading: s.heading, length: s.length, width: bus.preset.body.width, lift: bus.roadHeight() - terrainAt(this.d.city, s.pos) }));
+    this.racers.forEach((r, k) => r.sections().forEach((s, i) => obstacles.push({ id: `racer${k}.${i}`, pos: s.pos, heading: s.heading, length: s.length, width: r.preset.body.width, lift: r.roadHeight() - terrainAt(this.d.city, s.pos) })));
     for (const w of this.trafficBodies.obstacles()) obstacles.push(w);
     for (const p of this.peds.peds) {
       if (!p.onRoad) continue;
@@ -248,7 +297,7 @@ export class GameSession {
   physicsStep(dt: number): void {
     const bus = this.d.bus;
     const t0 = bus.position(this.posB);
-    const hits = this.trafficBodies.afterStep(dt, bus.colliders, { x: t0.x, z: t0.z });
+    const hits = this.trafficBodies.afterStep(dt, this.hitters, { x: t0.x, z: t0.z });
     if (hits.length) this.say('carHit', 0.7);
     // Front bumper over a stop line on red (free roam too: it refills the nitro).
     const nose = bus.nose(this.posC);
@@ -323,6 +372,7 @@ export class GameSession {
 
   /** Adapts the number of cars to the frame rate (cars cost physics + AI time). */
   adaptTraffic(fps: number, dt: number): void {
+    if (this.d.city.race) return;
     this.fpsLowFor = fps < 40 ? this.fpsLowFor + dt : 0;
     this.fpsHighFor = fps > 55 ? this.fpsHighFor + dt : 0;
     let next = this.budget;
@@ -468,7 +518,7 @@ export class GameSession {
     if (!this.game) {
       if (this.minimapClock >= 1 / 30) {
         this.minimapClock = 0;
-        this.minimap.update(here, bus.heading, null, null, this.targetColor(), []);
+        this.minimap.update(here, bus.heading, null, null, this.targetColor(), [], this.others);
       }
       return;
     }
@@ -495,6 +545,11 @@ export class GameSession {
   }
 
   /** The weather turned: it started raining, or the underpasses are flooding. */
+  /** A popup in the trick feed (`tone` colors it). */
+  notice(text: string, tone: 'money' | 'time' | 'bad' | 'star' = 'bad'): void {
+    this.hud.popup(text, tone);
+  }
+
   weatherNews(kind: 'rain' | 'flood'): void {
     this.hud.popup(kind === 'rain' ? 'Lluvia: ¡la calle resbala!' : 'Aguacero: pasos deprimidos inundados', 'bad');
     this.say(kind);

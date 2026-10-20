@@ -86,6 +86,11 @@ describe('mix levels', () => {
     expect(LEVELS.horn.bus).toBeGreaterThan(LEVELS.airRelease);
   });
 
+  it("a race rival's engine, right alongside, stays a few dB under the player's own", () => {
+    expect(db(LEVELS.rivalEngine)).toBeLessThan(-2);
+    expect(db(LEVELS.rivalEngine)).toBeGreaterThan(-8);
+  });
+
   it('the turbo only whistles under load, rising with the revs, far under the engine', () => {
     expect(turboWhistle(DIESEL.idleRpm, 1, DIESEL).gain).toBe(0);
     expect(turboWhistle(2000, 0, DIESEL).gain).toBe(0);

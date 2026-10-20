@@ -5,10 +5,22 @@ import { type RadioSetting, parseRadio } from '../core/radioStations';
 import { aliasRouteId } from '../world/osm/operators';
 import { type RainSetting, parseRainSetting } from '../gameplay/weather';
 
+/** How a race is set up: the track, how many rivals, what they drive, how well, and traffic. */
+export interface RaceSetup {
+  /** Track zone id. */
+  track: string;
+  /** 1..3 */
+  rivals: number;
+  /** 'mixed' (each a different vehicle), 'same' (the player's) or a vehicle id. */
+  rivalBus: string;
+  skill: 'easy' | 'normal' | 'hard';
+  traffic: boolean;
+}
+
 /** What the player picked last time, and their preferences. Saved in localStorage. */
 export interface Settings {
-  /** A shift on a route, or free roam. */
-  mode: 'route' | 'free';
+  /** A shift on a route, free roam, or a race on a mountain road. */
+  mode: 'route' | 'free' | 'race';
   /** Vehicle id (in route mode always a bus). */
   bus: string;
   zone: string;
@@ -29,9 +41,12 @@ export interface Settings {
   tutorial: boolean;
   /** Rain: showers at random moments, never, or raining from the start. */
   rain: RainSetting;
+  race: RaceSetup;
 }
 
-export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito', tutorial: true, rain: 'random' };
+export const RACE_DEFAULTS: RaceSetup = { track: 'papallacta', rivals: 3, rivalBus: 'mixed', skill: 'normal', traffic: false };
+
+export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito', tutorial: true, rain: 'random', race: RACE_DEFAULTS };
 export const HILLS_OPTIONS = [
   { value: 1, label: 'Reales' },
   { value: 1.3, label: 'Un poquito más' },
@@ -73,7 +88,7 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     return v < lo ? DEFAULTS[k] : Math.min(hi, v);
   };
   return {
-    mode: raw.mode === 'free' ? 'free' : 'route',
+    mode: raw.mode === 'free' || raw.mode === 'race' ? raw.mode : 'route',
     bus: str('bus'),
     zone: str('zone'),
     route: aliasRouteId(str('route')),
@@ -85,6 +100,19 @@ export function loadSettings(store: KeyValueStore = localStorage): Settings {
     radio: parseRadio(raw.radio) ?? DEFAULTS.radio,
     tutorial: raw.tutorial !== false,
     rain: parseRainSetting(raw.rain) ?? DEFAULTS.rain,
+    race: parseRace(raw.race),
+  };
+}
+
+function parseRace(v: unknown): RaceSetup {
+  const r = v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+  const d = RACE_DEFAULTS;
+  return {
+    track: typeof r.track === 'string' && r.track ? r.track : d.track,
+    rivals: typeof r.rivals === 'number' && r.rivals >= 1 && r.rivals <= 3 ? Math.round(r.rivals) : d.rivals,
+    rivalBus: typeof r.rivalBus === 'string' && r.rivalBus ? r.rivalBus : d.rivalBus,
+    skill: r.skill === 'easy' || r.skill === 'hard' || r.skill === 'normal' ? r.skill : d.skill,
+    traffic: typeof r.traffic === 'boolean' ? r.traffic : d.traffic,
   };
 }
 

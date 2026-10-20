@@ -1007,6 +1007,17 @@ body {
   border-radius: 10px;
 }
 
+/* A race's options under the track card. */
+.mn-race-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 16px 20px;
+  background: rgb(255 255 255 / 85%);
+  border-radius: 10px;
+}
+
 .mn-panel fieldset {
   border: 0;
   padding: 0;
@@ -2053,4 +2064,254 @@ body {
   .gh-results-card .tut-keys {
     grid-template-columns: auto 1fr;
   }
+}
+
+/* ---- Race HUD ------------------------------------------------------------
+   Arcade race overlay: route/place/time top left, the big 3-2-1, the launch
+   tachometer, the progress strip and the results card. */
+
+.rh-panel {
+  position: absolute;
+  top: 88px;
+  left: 20px;
+  font-weight: 800;
+  text-shadow: 0 2px 4px rgb(0 0 0 / 60%);
+  line-height: 1.35;
+}
+
+.rh-route {
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.rh-place {
+  font-size: 22px;
+}
+
+.rh-time {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-count {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 110px;
+  font-weight: 900;
+  color: #ffd21f;
+  -webkit-text-stroke: 3px #1d1a14;
+  text-shadow: 0 6px 0 #1d1a14, 0 10px 18px rgb(0 0 0 / 50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.rh-count.rh-pop {
+  animation: rh-pop 0.9s ease-out both;
+}
+
+.rh-count.rh-go {
+  color: #9dff7a;
+  font-size: 84px;
+  animation: rh-pop 1.6s ease-out both;
+}
+
+@keyframes rh-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(1.8);
+    opacity: 0;
+  }
+  15% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.rh-hint {
+  position: absolute;
+  top: calc(26% + 80px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 45%);
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.rh-hint[hidden] {
+  display: none;
+}
+
+.rh-green {
+  color: #6dff5a;
+}
+
+/* After an R reset: held still for a few seconds, counted down. */
+.rh-wait {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 22px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 55%);
+  font-size: 22px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.rh-wait b {
+  display: inline-block;
+  min-width: 1.2em;
+  margin-left: 6px;
+  color: #ffd21f;
+  font-size: 34px;
+  text-align: center;
+}
+
+.rh-wait[hidden] {
+  display: none;
+}
+
+.rh-strip {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  width: min(46vw, 520px);
+  height: 6px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: rgb(255 255 255 / 55%);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 50%);
+}
+
+.rh-flag {
+  position: absolute;
+  right: -10px;
+  top: -12px;
+  font-size: 20px;
+}
+
+.rh-dot {
+  position: absolute;
+  top: -5px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e0352b;
+}
+
+.rh-dot-me {
+  z-index: 1;
+  background: #2f6fd6;
+  box-shadow: 0 0 0 3px rgb(47 111 214 / 40%);
+}
+
+.rh-tach {
+  position: absolute;
+  left: 50%;
+  bottom: 40px;
+  width: 260px;
+  transform: translateX(-50%);
+  transition: opacity 0.5s, transform 0.5s;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 50%));
+}
+
+.rh-tach.rh-tach-off {
+  opacity: 0;
+  transform: translateX(-50%) scale(0.6) translateY(120px);
+}
+
+.rh-tach svg {
+  width: 100%;
+  overflow: visible;
+}
+
+.rh-tach-dial {
+  fill: none;
+  stroke: #1d1a14;
+  stroke-width: 26;
+}
+
+.rh-tach-red {
+  fill: none;
+  stroke: #e0352b;
+  stroke-width: 14;
+}
+
+.rh-tach-green {
+  fill: none;
+  stroke: #6dff5a;
+  stroke-width: 18;
+}
+
+.rh-tach-num text {
+  fill: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.rh-tach-label {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+  opacity: 0.8;
+}
+
+.rh-needle line {
+  stroke: #ff4d2e;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.rh-hub {
+  fill: #1d1a14;
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.rh-results .rh-table {
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: place;
+  text-align: left;
+}
+
+.rh-table li {
+  display: grid;
+  grid-template-columns: 2em 1fr auto auto;
+  gap: 0 14px;
+  align-items: baseline;
+  padding: 3px 0;
+  counter-increment: place;
+}
+
+.rh-table li::before {
+  content: counter(place) 'º';
+}
+
+.rh-table small {
+  opacity: 0.7;
+}
+
+.rh-table .rh-me {
+  color: #9dff7a;
+}
+
+.rh-results p.rh-record {
+  color: #9dff7a;
 }

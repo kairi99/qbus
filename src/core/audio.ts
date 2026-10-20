@@ -6,7 +6,31 @@ type SoundName = (typeof FILES)[number];
 /** Recordings that loop, and their crossfade length in seconds. */
 const LOOPS: Partial<Record<SoundName, number>> = { 'engine-idle': 0.3, 'engine-load': 0.3, 'car-idle': 0.3, 'horn-bus': 0.12, 'horn-car': 0.08 };
 
-export type AudioCue = 'coin' | 'time' | 'crash' | 'carHorn' | 'nitro';
+export type AudioCue = 'coin' | 'time' | 'crash' | 'carHorn' | 'nitro' | 'beep' | 'go' | 'pickup';
+
+/** A race rival's engine: where the vehicle is, how fast (over its top speed) and how hard it works. */
+export interface RivalVoice {
+  x: number;
+  y: number;
+  z: number;
+  speedFrac: number;
+  load: number;
+  /** A petrol engine (the car's, the gusanito's) rather than the bus's diesel. */
+  car: boolean;
+}
+
+/** Where the sound is heard from (the camera): position, forward and up. */
+export interface Ear {
+  x: number;
+  y: number;
+  z: number;
+  fx: number;
+  fy: number;
+  fz: number;
+  ux: number;
+  uy: number;
+  uz: number;
+}
 
 export interface AudioFrame {
   hornHeld: boolean;
@@ -17,6 +41,8 @@ export interface AudioFrame {
   /** Engine load 0..1 (`engineLoad`). */
   load: number;
   braking: boolean;
+  /** Free revs at a standstill (the race start's launch, 0 idle to 1 redline): overrides the gearbox. */
+  rev?: number;
 }
 
 /**
@@ -37,6 +63,7 @@ export class BusAudio {
   private engine: EngineLayers | null = null;
   private engineSynth!: { osc: OscillatorNode; gain: GainNode };
   private horn: { gain: GainNode; sample: boolean } | null = null;
+  private rivalEngines: { layers: EngineLayers; panner: PannerNode; voice: EngineVoice }[] = [];
   private synthHornGain!: GainNode;
 
   constructor(
@@ -266,6 +293,9 @@ export class BusAudio {
       kind === 'coin' ? [[988, 0], [1319, 0.07]]
       : kind === 'time' ? [[660, 0], [880, 0.09], [1175, 0.18]]
       : kind === 'carHorn' ? [[520, 0], [620, 0], [520, 0.22], [620, 0.22]] // "pi-piii"
+      : kind === 'beep' ? [[660, 0]] // the countdown's 3, 2, 1
+      : kind === 'go' ? [[1320, 0]]
+      : kind === 'pickup' ? [[784, 0], [1175, 0.06], [1568, 0.12]] // a nitro canister on the road
       : [[70, 0]];
     for (const [freq, at] of notes) {
       const o = ctx.createOscillator();
@@ -275,7 +305,7 @@ export class BusAudio {
       if (kind === 'crash') o.frequency.exponentialRampToValueAtTime(35, now + 0.25);
       g.gain.setValueAtTime(0, now + at);
       const peak = (kind === 'crash' ? 0.6 : kind === 'carHorn' ? 0.08 : 0.12) * volume;
-      const len = kind === 'crash' ? 0.3 : kind === 'carHorn' ? (at > 0 ? 0.35 : 0.14) : 0.16;
+      const len = kind === 'crash' ? 0.3 : kind === 'carHorn' ? (at > 0 ? 0.35 : 0.14) : kind === 'go' ? 0.6 : 0.16;
       g.gain.linearRampToValueAtTime(peak, now + at + 0.01);
       g.gain.exponentialRampToValueAtTime(0.001, now + at + len);
       o.connect(g).connect(this.master);
@@ -318,13 +348,60 @@ export class BusAudio {
     src.start(now);
   }
 
+  /**
+   * The race rivals' engines, each from where its vehicle is (a panner per rival: louder close
+   * by, from its side), heard from `ear`. Silent until the recordings are in.
+   */
+  rivals(list: readonly RivalVoice[], ear: Ear): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const l = ctx.listener;
+    if (l.positionX) {
+      l.positionX.value = ear.x;
+      l.positionY.value = ear.y;
+      l.positionZ.value = ear.z;
+      l.forwardX.value = ear.fx;
+      l.forwardY.value = ear.fy;
+      l.forwardZ.value = ear.fz;
+      l.upX.value = ear.ux;
+      l.upY.value = ear.uy;
+      l.upZ.value = ear.uz;
+    } else {
+      // Firefox has no AudioParams on the listener.
+      l.setPosition(ear.x, ear.y, ear.z);
+      l.setOrientation(ear.fx, ear.fy, ear.fz, ear.ux, ear.uy, ear.uz);
+    }
+    list.forEach((v, i) => {
+      let e = this.rivalEngines[i];
+      if (!e) {
+        const b = this.buffers;
+        const [idle, load] = v.car ? [b['car-idle'], b['car-idle']] : [b['engine-idle'], b['engine-load']];
+        if (!idle || !load) return;
+        const panner = new PannerNode(ctx, { panningModel: 'equalpower', distanceModel: 'inverse', refDistance: 8, rolloffFactor: 1.3, maxDistance: 2000 });
+        panner.connect(this.master);
+        const gain = ctx.createGain();
+        gain.gain.value = LEVELS.rivalEngine;
+        gain.connect(panner);
+        e = this.rivalEngines[i] = { layers: new EngineLayers(ctx, gain, idle, load, v.car), panner, voice: v.car ? PETROL : DIESEL };
+      }
+      if (e.panner.positionX) {
+        e.panner.positionX.value = v.x;
+        e.panner.positionY.value = v.y;
+        e.panner.positionZ.value = v.z;
+      } else e.panner.setPosition(v.x, v.y, v.z);
+      const { rpm } = engineRpm(v.speedFrac, v.load, e.voice);
+      e.layers.set(engineMix(rpm, v.load, e.voice), rpm, v.load, now, turboWhistle(rpm, v.load, e.voice));
+    });
+  }
+
   update(f: AudioFrame, dt: number): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     if (this.horn) this.horn.gain.gain.setTargetAtTime(f.hornHeld ? LEVELS.horn[this.kind] : 0, now, f.hornHeld ? 0.01 : 0.04);
     else this.synthHornGain.gain.setTargetAtTime(f.hornHeld ? 0.25 : 0, now, 0.02);
 
-    const { rpm } = engineRpm(f.speedFrac, f.load, this.voice);
+    const rpm = f.rev !== undefined ? this.voice.idleRpm + (this.voice.redlineRpm - this.voice.idleRpm) * f.rev : engineRpm(f.speedFrac, f.load, this.voice).rpm;
     const mix = engineMix(rpm, f.load, this.voice);
     if (this.engine) this.engine.set(mix, rpm, f.load, now, turboWhistle(rpm, f.load, this.voice));
     else {

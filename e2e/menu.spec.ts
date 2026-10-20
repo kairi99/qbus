@@ -166,3 +166,39 @@ test('menu sounds: hover ticks, bus-flavored confirms, slider preview, no errors
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 60_000 });
   expect(errors).toEqual([]);
 });
+
+test('a race from the menu: the track, the rivals and what they drive, traffic, the race tutorial', async ({ page }) => {
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole('button', { name: 'Jugar' }).click();
+  await page.locator('[data-mode="race"]').click();
+  await expect(page.locator('.mn-step-zone')).toBeHidden();
+  await expect(page.locator('.mn-step-route')).toBeHidden();
+  await expect(page.locator('[data-track="papallacta"]')).toContainText('Paso de la Muerte');
+  // Any vehicle can race.
+  await page.locator('[data-bus="buseta"]').click();
+  await page.locator('.mn-race-opts label', { hasText: /^2$/ }).click();
+  await page.locator('.mn-race-opts label', { hasText: 'Lo mismo que yo' }).click();
+  await page.locator('.mn-race-opts label', { hasText: 'Con carros' }).click();
+  await expect(page.locator('.mn-summary')).toHaveText('Buseta, Paso de la Muerte, 2 rivales (lo mismo que usted), con tráfico');
+  // The track's map and profile are drawn once the track loads.
+  await expect.poll(() => page.evaluate(() => document.querySelector<HTMLCanvasElement>('.mn-track-map')!.getContext('2d')!.getImageData(0, 330, 1, 1).data[2]), { timeout: 60_000 }).toBe(58);
+  await page.screenshot({ path: `${shots}/69-setup-race.png`, fullPage: true });
+
+  await page.getByRole('button', { name: '¡Arranca!' }).click();
+  await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 90_000 });
+  expect(new URL(page.url()).search).toContain('mode=race');
+  // The race's own how-to page, then the grid.
+  await expect(page.locator('.tut-page:not([hidden]) h2')).toHaveText('¡A la carrera!');
+  await expect(page.locator('.tut-page:not([hidden])')).toContainText('Tráfico');
+  await page.keyboard.press('Escape');
+  const field = await page.evaluate(() => (window as any).__qbus.racing.rivals.map((r: any) => r.preset.id));
+  expect(field).toEqual(['buseta', 'buseta']);
+  // Traffic is on (it keeps off the grid: the cars show up down the road).
+  expect(await page.evaluate(() => (window as any).__qbus.session.traffic.cars.length)).toBe(9);
+  expect(errors).toEqual([]);
+});

@@ -129,6 +129,8 @@ export const LEVELS = {
   thunder: 0.9,
   /** Water hissing off the wheels, wading flat out. */
   splash: 0.45,
+  /** A race rival's engine at its panner's reference distance (8 m): under the player's own. */
+  rivalEngine: 0.7,
 } as const;
 
 /** Linear gain to decibels. */

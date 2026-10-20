@@ -37,7 +37,7 @@ export interface Basin {
  */
 export function floodBasins(city: CityData): Basin[] {
   const profiles = roadProfiles(city);
-  const cuts = city.roads.map((r, i) => ({ r, p: profiles[i] })).filter((c) => !c.r.access && c.p && c.r.lift!.some((l) => l < DEEP));
+  const cuts = city.roads.map((r, i) => ({ r, p: profiles[i] })).filter((c) => !c.r.access && c.p && !!c.r.lift?.some((l) => l < DEEP));
   // Samples of each cut's floor, then the cuts grouped into underpasses: two whose floors touch
   // at about the same height share their water (the Patria/12 de Octubre ways meet at junctions
   // down in the cut, not end to end).

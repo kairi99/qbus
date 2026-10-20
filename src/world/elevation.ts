@@ -26,7 +26,7 @@ export function roadProfiles(city: CityData): (RoadProfile | null)[] {
   const scale = city.terrain?.scale ?? 1;
   const hit = cache.get(city);
   if (hit && hit.scale === scale) return hit.profiles;
-  const profiles = city.roads.map((r) => (r.lift ? profile(city, r) : null));
+  const profiles = city.roads.map((r) => (r.surface ? graded(city, r) : r.lift ? profile(city, r) : null));
   cache.set(city, { scale, profiles });
   return profiles;
 }
@@ -41,6 +41,16 @@ function profile(city: CityData, r: Road): RoadProfile {
     return terrainAt(city, p) * (1 - w) + smoothGround(city, p) * w + lift[i];
   });
   return { cum, y, lift };
+}
+
+/** A track's graded road: its own surface heights, lifted off the ground carved under it. */
+function graded(city: CityData, r: Road): RoadProfile {
+  const pts = r.points;
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
+  const scale = city.terrain?.scale ?? 1;
+  const y = r.surface!.map((h) => h * scale);
+  return { cum, y, lift: y.map((h, i) => h - terrainAt(city, pts[i])) };
 }
 
 /**

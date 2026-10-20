@@ -21,7 +21,7 @@ import { vehicleClearance } from './physics/clearance';
 import { Hud } from './ui/hud';
 import { TouchControls, isTouchDevice } from './ui/touchControls';
 import { GameSession } from './gameplay/session';
-import { BRT_BUS, busById } from './vehicle/buses';
+import { BRT_BUS, VEHICLES, busById } from './vehicle/buses';
 import { isTrain } from './vehicle/busPreset';
 import { routesFor } from './gameplay/routes';
 import { loadSettings, saveSettings } from './menu/settings';
@@ -30,8 +30,14 @@ import { Tutorial } from './ui/tutorial';
 import { Weather, gripFor, parseRainSetting } from './gameplay/weather';
 import { FloodWater, floodBasins, floodedEdges, waterDepth } from './world/floods';
 import { RainView } from './world/rain';
+import { locateOnTrack, trackPose } from './world/track';
+import { FALL_BACK, FallWatch } from './gameplay/fallWatch';
+import { RaceSession } from './gameplay/raceSession';
+import { MAX_RIVALS, TRAFFIC_PER_RACER, gridSlots, parseRivalChoice, rivalVehicles } from './gameplay/raceField';
 
 const MAX_FRAME = 0.1;
+/** Haze on a mountain track (m), the same in the near scene and the far view. */
+const TRACK_FOG = { near: 150, far: 16000 };
 
 /**
  * Runs a shift (started by `boot.ts`, which shows the menu otherwise). `cityReady` is the city
@@ -76,6 +82,13 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const world = createWorld();
   const city = await cityReady;
   performance.mark('qbus:city-loaded');
+  // Out in the mountains the air is clear: a long, light haze (the far view's too, so the near
+  // terrain and the far one meet without a seam) instead of a city's fog.
+  if (city.race) {
+    const fog = scene.fog as THREE.Fog;
+    fog.near = TRACK_FOG.near;
+    fog.far = TRACK_FOG.far;
+  }
   if (!city.terrain) addGround(world, Math.max(city.bounds.max.x - city.bounds.min.x, city.bounds.max.z - city.bounds.min.z) + 500);
   const graph = buildRoadGraph(city);
   performance.mark('qbus:graph');
@@ -83,9 +96,13 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   performance.mark('qbus:city-built');
   const { min, max } = city.bounds;
   const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))), tod);
+  if (city.race) Object.assign(backdrop.fog as THREE.Fog, TRACK_FOG);
 
-  // Free roam (?mode=free) has no route; a route shift is always driven in a bus.
-  const free = params.get('mode') === 'free';
+  // Free roam (?mode=free) has no route; a route shift is always driven in a bus. A race
+  // (?mode=race on a track: `&rivals=1..3`, `&rivalBus=mixed|same|<vehicle id>`,
+  // `&skill=easy|normal|hard`, `&traffic=1`) has none either, and any vehicle.
+  const raceMode = params.get('mode') === 'race' && !!city.race;
+  const free = params.get('mode') === 'free' || raceMode;
   const routes = free ? [] : routesFor(city);
   const route = free ? null : (routes.find((r) => r.id === params.get('route')) ?? routes[0]);
   // A link without ?bus= to a Trolebús/Ecovía route takes the articulated bus, like the menu.
@@ -105,10 +122,21 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const obstacles = staticObstacles(world);
   const rig = new CameraRig(camera, obstacles);
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
-  const hud = new Hud(hudRoot, city.attribution);
+  const hud = new Hud(hudRoot, city.attribution, !!city.race);
   // Records are kept per zone and route (a generated city other than the default seed is its own zone).
   const zone = params.get('city') ?? (params.has('seed') ? `grid-${params.get('seed')}` : DEFAULT_ZONE);
-  const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone });
+  const rivals = Math.max(1, Math.min(MAX_RIVALS, Number(params.get('rivals') ?? 1) || 1));
+  const skill = (['easy', 'normal', 'hard'] as const).find((k) => k === params.get('skill')) ?? 'normal';
+  const ids = VEHICLES.map((v) => v.preset.id);
+  const field = raceMode ? rivalVehicles(parseRivalChoice(params.get('rivalBus'), ids), preset.id, rivals, ids) : [];
+  const grid = raceMode ? gridSlots(city.race!, [...field.map((id) => busById(id).body.length), preset.body.length]) : null;
+  // Traffic on a track only if asked for (free roam on one too).
+  const trackTraffic = city.race && params.get('traffic') === '1' ? TRAFFIC_PER_RACER * Math.max(2, field.length + 1) : 0;
+  const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone, start: grid?.[grid.length - 1], title: raceMode ? 'Carrera' : undefined, trackTraffic });
+  const racing = raceMode
+    ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null })
+    : null;
+  if (racing) session.racers = racing.buses;
   if (touch) new TouchControls(document.body, input);
   audio.setVolume(settings.volume);
   // The radio keeps its own level (under the engine) and plays straight to the speakers.
@@ -124,17 +152,23 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     session.showPause(paused);
   };
   const toMenu = () => (location.search = '');
+  const again = () => {
+    setPaused(false);
+    session.restart();
+    racing?.restart();
+    fall.reset();
+    trackS = -1;
+  };
   session.onHudAction = (a) => {
     if (a === 'resume') setPaused(false);
     if (a === 'menu') toMenu();
-    if (a === 'again') {
-      setPaused(false);
-      session.restart();
-    }
+    if (a === 'again') again();
   };
+  if (racing) racing.hud.onAction = (a) => (a === 'menu' ? toMenu() : again());
 
-  // How to play, every time a shift or free roam starts (unless turned off, or ?tutorial=0).
-  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system);
+  // How to play, every time a shift, free roam or a race starts (unless turned off, or ?tutorial=0).
+  // A race's grid waits for it to close.
+  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system, racing ? { from: city.race!.from, to: city.race!.to, traffic: trackTraffic > 0 } : null);
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
   if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
 
@@ -156,6 +190,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   let weatherClock = Infinity;
   let rained = false;
   let floodedNews = false;
+  // On a mountain track: going over the edge puts the bus back on the road a little behind.
+  const race = city.race ?? null;
+  const fall = new FallWatch();
+  let trackS = -1;
 
   performance.mark('qbus:session');
   // Weak GPUs: render fewer pixels (and smaller shadows) while the frame rate stays low. Automation
@@ -165,9 +203,12 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { quality, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, weather, basins, timeOfDay: tod, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { quality, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, weather, basins, timeOfDay: tod, fall, racing, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   const scratchPos = { x: 0, y: 0, z: 0 };
+  const earFwd = new THREE.Vector3();
+  const earUp = new THREE.Vector3();
+  const ear = { x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: -1, ux: 0, uy: 1, uz: 0 };
   let acc = 0;
   let last = performance.now();
   let flippedFor = 0;
@@ -202,7 +243,19 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         continue;
       }
       if (action === 'camera') rig.toggle();
-      if (action === 'reset') {
+      if (action === 'reset' && racing && race) {
+        // In a race: back in its lane where it was on the road, then a wait before it may go on
+        // (so R is no shortcut out of a crash). Not on the grid: it would only lose the slot.
+        if (!racing.canReset) continue;
+        const p = bus.position(scratchPos);
+        const at = trackS >= 0 ? locateOnTrack(race, p, trackS, 120) : locateOnTrack(race, p);
+        const s = trackPose(race, Math.max(race.start, trackS >= 0 ? trackS : at.s), at.off < 0 ? -2.1 : 2.1);
+        bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
+        session.trafficBodies.clearSpot({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading }, preset.body.length, preset.body.width);
+        racing.playerReset();
+        fall.reset();
+        trackS = -1;
+      } else if (action === 'reset') {
         const t = bus.position();
         // A road at the level the bus is on, on a spot where it fits (clear of walls and roofs).
         const s = snapToRoad(city, { x: t.x, z: t.z }, bus.heading, bus.roadHeight(), { clear: fits, length: preset.body.length, vehicle: route?.system ? 'brt' : 'general' });
@@ -218,12 +271,14 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       }
       if (paused) continue;
       if (action === 'restart' && session.game?.over) session.restart();
+      if (action === 'restart' && racing?.over) again();
       if (action === 'horn') session.playerHonk();
     }
 
     // Weather: wet tires, floodwater in the underpasses (the bus wades, traffic crawls through).
     const w = weather.update(paused ? 0 : dt);
-    bus.grip = gripFor(w.wet);
+    bus.grip = gripFor(w.wet) * (racing?.playerGrip ?? 1);
+    if (racing) racing.weatherGrip = gripFor(w.wet);
     floodWater.setFlood(w.flood);
     bus.wade = waterDepth(basins, bus.position(scratchPos), bus.roadHeight(), w.flood);
     weatherClock += dt;
@@ -248,7 +303,11 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     let steps = 0;
     while (acc >= PHYSICS_STEP) {
       steps++;
-      bus.update({ ...drive, boost: session.nitro.step(!!drive.boost, PHYSICS_STEP) }, PHYSICS_STEP);
+      if (racing) {
+        // Held on the brakes until GO (the nitro too), then the launch's effect on the input.
+        racing.step(PHYSICS_STEP);
+        bus.update(racing.playerInput(drive, racing.game.green && session.nitro.step(!!drive.boost, PHYSICS_STEP)), PHYSICS_STEP);
+      } else bus.update({ ...drive, boost: session.nitro.step(!!drive.boost, PHYSICS_STEP) }, PHYSICS_STEP);
       session.beforeStep(PHYSICS_STEP);
       world.step();
       session.physicsStep(PHYSICS_STEP);
@@ -260,6 +319,22 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     const upY = 1 - 2 * (q.x * q.x + q.z * q.z);
     flippedFor = upY < 0.3 ? flippedFor + dt : 0;
 
+    if (race && !paused) {
+      const p = bus.position(scratchPos);
+      // Near the last spot (cheap), by position and height; off that stretch of road (a teleport,
+      // an R reset onto another leg), the whole track.
+      let here = locateOnTrack(race, p, trackS, 120);
+      if (Math.hypot(here.off, here.y - p.y) > 25) here = locateOnTrack(race, p);
+      // Down a ravine the nearest bit of road can be a hairpin's other leg: keep the last good spot.
+      if (!fall.falling) trackS = here.s;
+      const ev = fall.update(dt, { roadY: here.y, busY: p.y, off: here.off, halfWidth: race.width / 2, wheelsOnGround: bus.wheelsOnGround });
+      if (ev === 'fell') session.notice('¡Al barranco!');
+      if (ev === 'respawn') {
+        const s = trackPose(race, Math.max(race.start - 12, trackS - FALL_BACK));
+        bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
+        trackS = -1;
+      }
+    }
     props.sync();
     model.sync(bus);
     const lookBack = input.lookBackHeld;
@@ -269,6 +344,32 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     followSun(sun, model.root.position);
     const spray = bus.wade > 0.05 ? Math.min(1, Math.abs(bus.speed) / 10) * Math.min(1, bus.wade / 0.4) : 0;
     model.setSpray(spray);
+    if (racing) {
+      racing.frame(paused ? 0 : dt, drive.throttle, !paused && !tutorial.open);
+      session.others = racing.others as { x: number; z: number }[];
+      if (racing.launchNotice) {
+        session.notice(racing.launchNotice.text, racing.launchNotice.good ? 'money' : 'bad');
+        racing.launchNotice = null;
+      }
+      if (racing.pickupNotice) {
+        session.notice('¡Nitro!', 'money');
+        racing.pickupNotice = false;
+      }
+      // The rivals' engines, heard from the camera.
+      camera.getWorldDirection(earFwd);
+      earUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      const c = camera.position;
+      ear.x = c.x;
+      ear.y = c.y;
+      ear.z = c.z;
+      ear.fx = earFwd.x;
+      ear.fy = earFwd.y;
+      ear.fz = earFwd.z;
+      ear.ux = earUp.x;
+      ear.uy = earUp.y;
+      ear.uz = earUp.z;
+      audio.rivals(racing.voices, ear);
+    }
     session.frame(dt, camera, rig.mode);
     const speedFrac = Math.abs(bus.speed) / (preset.topSpeedKmh / 3.6);
     if (bus.boosting && !wasBoosting) audio.cue('nitro');
@@ -280,6 +381,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         speed: Math.abs(bus.speed),
         load: engineLoad(drive.throttle, bus.speed, bus.boosting),
         braking: isBraking(drive.throttle, bus.speed, drive.handbrake),
+        // On the grid the engine revs freely with the launch's needle.
+        rev: racing && !racing.game.green ? racing.launch.rpm : undefined,
       },
       paused ? 0 : dt,
     );

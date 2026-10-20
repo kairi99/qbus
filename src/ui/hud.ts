@@ -10,14 +10,15 @@ export class Hud {
   private fps: HTMLElement;
   private frameMs = 16;
 
-  constructor(root: HTMLElement, attribution?: string) {
+  /** `road`: on a mountain road (a race track) R puts the bus back on the road, not the street. */
+  constructor(root: HTMLElement, attribution?: string, road = false) {
     root.innerHTML = `
       <div class="hud-speed"><span id="hud-kmh">0</span><small>km/h</small></div>
       <div class="hud-street" id="hud-street"></div>
       <div class="hud-mode"><span id="hud-mode"></span><br><span id="hud-fps"></span></div>
       <div class="hud-help">
         <b>W/S</b> acelerar/frenar · <b>A/D</b> girar · <b>Espacio</b> freno de mano · <b>Shift</b> nitro<br>
-        <b>C</b> cámara · <b>Q</b> mirar atrás · <b>H</b> pito · <b>M</b> radio · <b>R</b> volver a la calle
+        <b>C</b> cámara · <b>Q</b> mirar atrás · <b>H</b> pito · <b>M</b> radio · <b>R</b> volver a la ${road ? 'vía' : 'calle'}
       </div>
       ${attribution ? `<div class="hud-credit">${attribution}</div>` : ''}
       <div class="hud-flipped" id="hud-flipped">¡Ñaño, te viraste! <span class="keys-only">Presiona <b>R</b></span><span class="touch-only">Toca <b>↺</b></span></div>`;

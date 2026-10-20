@@ -43,6 +43,11 @@ export class Nitro {
     this.fill(RED_LIGHT_FILL);
   }
 
+  /** A race's bonus: a perfect launch, a pickup on the road. */
+  bonus(amount: number): void {
+    this.fill(amount);
+  }
+
   reset(): void {
     this.level = 1;
     this.active = false;

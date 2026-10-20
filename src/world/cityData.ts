@@ -33,6 +33,11 @@ export interface Road {
    * their ramps (see osm/grades.ts). Absent means the road lies on the ground.
    */
   lift?: number[];
+  /**
+   * Height of the road's surface at each point, for a mountain track's graded road (it has a deck
+   * of its own over the terrain carved under it: see osm/track.ts). Absent on city streets.
+   */
+  surface?: number[];
 }
 
 /** Raised pedestrian area (sidewalk around a block, or a park). */
@@ -184,6 +189,8 @@ export interface CityData {
   monuments?: Monument[];
   /** Signalized junctions (imported from OSM; generated cities light their avenue crossings). */
   signals?: TrafficSignal[];
+  /** A race track (a mountain highway, `world/track.ts`) instead of a city: one road, no streets. */
+  race?: import('./track').TrackData;
 }
 
 export const SIDEWALK_HEIGHT = 0.15;

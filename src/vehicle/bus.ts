@@ -266,7 +266,8 @@ export class BusPhysics {
 
   /** Signed speed along the bus's forward axis, m/s. */
   get speed(): number {
-    return this.vehicle.currentVehicleSpeed();
+    // Asleep it's standing still, but the controller keeps reporting its last (stale) speed.
+    return this.body.isSleeping() ? 0 : this.vehicle.currentVehicleSpeed();
   }
 
   get wheelsOnGround(): number {
@@ -328,11 +329,12 @@ export class BusPhysics {
       brake = COAST_BRAKE;
     }
     brake *= 1 - (1 - WET_BRAKE) * Math.min(1, this.wetness);
+    if (input.parked) (engine = 0), (brake = p.brakeForce);
 
     for (const i of FRONT) this.vehicle.setWheelBrake(i, brake);
     for (const i of REAR) {
       this.vehicle.setWheelEngineForce(i, engine);
-      this.vehicle.setWheelBrake(i, input.handbrake ? Math.max(brake, p.handbrakeForce) : brake);
+      this.vehicle.setWheelBrake(i, input.handbrake && !input.parked ? Math.max(brake, p.handbrakeForce) : brake);
     }
 
     // Drift: the handbrake drops rear grip below what the turn needs, so the tail slides out.

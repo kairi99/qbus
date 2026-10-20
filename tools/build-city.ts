@@ -4,10 +4,11 @@
  *   data/raw/copernicus-*.tif  (Copernicus GLO-30 DEM tile)
  * Usage: npx tsx tools/build-city.ts [zone]
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { fromFile } from 'geotiff';
 import { HORIZON_HALF, importOsm, makeProjection, type Dem } from '../src/world/osm/import';
 import { sameWayStretches } from '../src/world/osm/carriageways';
+import { importTrack } from '../src/world/osm/track';
 import { ZONES } from './zones';
 
 const zone = ZONES[process.argv[2] ?? 'mariscal'];
@@ -40,6 +41,29 @@ const [far] = (await img.readRasters({ window: [h0, v0, h1, v1] })) as unknown a
 const horizonDem: Dem = { lon0: ox + h0 * rx, lat0: oy + v0 * ry, dLon: rx, dLat: ry, cols: h1 - h0, rows: v1 - v0, values: far };
 
 const osm = JSON.parse(readFileSync(zone.osm, 'utf8'));
+const readExtra = (kind: string) => {
+  const file = zone.osm.replace('.osm.json', `.${kind}.json`);
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : undefined;
+};
+// A race track: its highway, the valley around it and the far view, nothing of a city.
+if (zone.track) {
+  const t0 = performance.now();
+  const city = importTrack(osm, dem, { name: zone.name, bbox: zone.bbox, from: zone.track.from, to: zone.track.to }, horizonDem, readExtra('scenery'));
+  const out = `data/cities/${zone.id}.json`;
+  writeFileSync(out, JSON.stringify(city));
+  const r = city.race!;
+  const t = city.terrain!;
+  const open = r.drops.reduce((a, d) => a + d.s1 - d.s0, 0);
+  const railed = r.rails.reduce((a, d) => a + d.s1 - d.s0, 0);
+  const ys = r.y.slice(Math.round(r.start / 3), Math.round(r.finish / 3));
+  console.log(
+    `${out}: track ${r.from} → ${r.to}, ${((r.finish - r.start) / 1000).toFixed(2)} km raced, road ${Math.max(...ys).toFixed(0)} → ${ys[ys.length - 1].toFixed(0)} m (relative), ` +
+      `${r.rails.length} rails (${railed.toFixed(0)} m), ${r.drops.length} open drops (${open.toFixed(0)} m), ${r.pickups.length} pickups, ` +
+      `${r.scenery?.rivers.length ?? 0} rivers, ${r.scenery?.pipes.length ?? 0} pipe runs, ${r.scenery?.buildings.length ?? 0} buildings (${r.scenery?.buildings.filter((b) => b.sign).length ?? 0} signed), ` +
+      `terrain ${t.cols}x${t.rows}@${t.cell}m, built in ${(performance.now() - t0).toFixed(0)} ms, ${(statSync(out).size / 1e6).toFixed(1)} MB`,
+  );
+  process.exit(0);
+}
 const t0 = performance.now();
 const routesFile = zone.osm.replace('.osm.json', '.routes.json');
 const routes = existsSync(routesFile) ? JSON.parse(readFileSync(routesFile, 'utf8')) : undefined;

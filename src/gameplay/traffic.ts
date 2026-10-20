@@ -176,6 +176,10 @@ export class TrafficSim {
   /** Speed caps (m/s) by edge id: lanes under floodwater, which cars crawl through. */
   slowEdges = new Map<number, number>();
   private lights: TrafficLights | null;
+  /** Where cars may be (edge, meters along it): a race track keeps them off its grid. */
+  private keep: ((edge: number, s: number) => boolean) | null;
+  /** Cars turn round at a dead end (a city's); on a highway they drive off it instead. */
+  private uturns: boolean;
   private rng: Rng;
   /** Per junction: cars inside it, where each came from and where it's going. */
   private occupants = new Map<number, Map<number, { from: number; lane: number; next: number; nextLane: number; dir?: Vec2 }>>();
@@ -195,10 +199,23 @@ export class TrafficSim {
   constructor(
     private graph: RoadGraph,
     city: CityData,
-    opts: { seed: number; count: number; /** Busway buses on top of `count` (0 when the city has no busway). */ brt?: number; avoid?: { pos: Vec2; radius: number }; lights?: TrafficLights },
+    opts: {
+      seed: number;
+      count: number;
+      /** Busway buses on top of `count` (0 when the city has no busway). */
+      brt?: number;
+      avoid?: { pos: Vec2; radius: number };
+      lights?: TrafficLights;
+      /** Where cars may be: never placed elsewhere, and one about to leave it is recycled (out of sight) or waits. */
+      keep?: (edge: number, s: number) => boolean;
+      /** False: no U-turns, not even at a dead end (it's the end of the map). */
+      uturns?: boolean;
+    },
   ) {
     this.rng = new Rng(opts.seed);
     this.lights = opts.lights ?? null;
+    this.keep = opts.keep ?? null;
+    this.uturns = opts.uturns ?? true;
     this.humps = graph.edges.map((e) =>
       city.features
         .filter((f) => f.kind === 'hump')
@@ -298,16 +315,27 @@ export class TrafficSim {
   /**
    * Moves driving cars that fell out of the bubble around the bus to hidden spots near it.
    * `fill` spreads them over the whole bubble instead (at startup, before anyone is looking).
+   * `also`: more bubbles (a race's rivals): a car in any of them stays, and a recycled one goes
+   * to one of them at random, near it but still out of the player's sight.
    */
-  recycle(focus: { pos: Vec2; heading: number }, fill = false): void {
+  recycle(focus: { pos: Vec2; heading: number }, fill = false, also: readonly Vec2[] = []): void {
     this.focus = focus;
+    const dist = (p: Vec2, q: Vec2) => Math.hypot(p.x - q.x, p.z - q.z);
+    const elsewhere = (c: Car) => {
+      const k = this.rng.int(0, also.length);
+      if (k === also.length) this.place(c, focus.pos, 0, (p) => hiddenFrom(focus, p));
+      else this.place(c, also[k], SPAWN_BEHIND_DIST, (p) => dist(p, also[k]) < SPAWN_MAX_DIST && outOfSight(focus, p));
+    };
     for (const c of this.cars) {
       // A busway bus parked for lack of a corridor in range comes back when one is.
       if (c.state === 'parked' && c.kind === BRT_KIND) this.place(c, focus.pos, 0, fill ? () => true : (p) => hiddenFrom(focus, p));
+      // On a track (no budget to keep) a car is only parked for want of a spot: it tries again.
+      else if (c.state === 'parked' && this.keep && !fill) elsewhere(c);
       if (c.state !== 'driving') continue;
-      const d = Math.hypot(c.pos.x - focus.pos.x, c.pos.z - focus.pos.z);
-      if (fill) this.place(c, focus.pos, 20, (p) => Math.hypot(p.x - focus.pos.x, p.z - focus.pos.z) < RECYCLE_RADIUS * 0.8);
-      else if (d >= RECYCLE_RADIUS) this.place(c, focus.pos, 0, (p) => hiddenFrom(focus, p));
+      let d = dist(c.pos, focus.pos);
+      for (const a of also) d = Math.min(d, dist(c.pos, a));
+      if (fill) this.place(c, focus.pos, 20, (p) => dist(p, focus.pos) < RECYCLE_RADIUS * 0.8);
+      else if (d >= RECYCLE_RADIUS) elsewhere(c);
     }
   }
 
@@ -339,13 +367,22 @@ export class TrafficSim {
     }
     if (car.tail !== null && !car.turn && car.s > car.kind.length / 2 + 2) this.clearTail(car);
     const e = this.graph.edges[car.edge];
+    // About to leave where cars may be (a track's grid ahead): gone if nobody sees it, else it stops short.
+    let fenced = false;
+    if (this.keep && !car.turn && !this.keep(car.edge, Math.min(e.len, car.s + (car.speed * car.speed) / (2 * DECEL) + 3))) {
+      if (outOfSight(this.focus, car.pos)) {
+        this.place(car, this.focus.pos, 0, (p) => hiddenFrom(this.focus, p));
+        return;
+      }
+      fenced = true;
+    }
     const cap = this.slowEdges.get(car.edge);
     const vmax = Math.min(cap ?? Infinity, car.kind.vmax * (car.hurry > 0 ? 1.15 : 1) * this.speedScale);
     car.hurry = Math.max(0, car.hurry - dt);
     car.honkCooldown = Math.max(0, car.honkCooldown - dt);
 
     // Whatever lies on the path we're about to drive (lane, turn curve, next lane).
-    let vTarget = vmax;
+    let vTarget = fenced ? 0 : vmax;
     let blocker: string | null = null;
     const reach = Math.min(LOOKAHEAD, Math.max(14, (car.speed * car.speed) / (2 * DECEL) + 12));
     const path = this.futurePath(car, reach);
@@ -807,7 +844,12 @@ export class TrafficSim {
     }
     const isUturn = (id: number) => id === e.reverse || dot(e.endDir, this.graph.edges[id].dir) < -0.8;
     let options = drivable.filter((id) => !isUturn(id));
-    if (!options.length) options = drivable;
+    if (!options.length && this.uturns) options = drivable;
+    if (!options.length) {
+      car.next = -1; // the end of the road
+      car.nextLane = 0;
+      return;
+    }
     const kind = (id: number) => {
       const o = this.graph.edges[id];
       if (isUturn(id)) return 'uturn';
@@ -851,7 +893,7 @@ export class TrafficSim {
       const lane = this.rng.int(0, e.lanes - 1);
       const s = this.rng.range(3, e.len - 10);
       const p = lanePoint(e, s, lane);
-      if (Math.hypot(p.x - avoid.x, p.z - avoid.z) < radius || !accept(p)) continue;
+      if (Math.hypot(p.x - avoid.x, p.z - avoid.z) < radius || !accept(p) || (this.keep && !this.keep(e.id, s))) continue;
       const lift = edgeLift(e, s);
       const free = this.cars.every(
         (c) =>
