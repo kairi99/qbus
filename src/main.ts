@@ -40,6 +40,8 @@ import { loadSession } from './net/connection';
 import { MAX_RIVALS, TRACK_TRAFFIC, gridSlots, parseRivalChoice, rivalVehicles } from './gameplay/raceField';
 
 const MAX_FRAME = 0.1;
+/** Online the weather's clock starts this long before GO (s): when the countdown starts. */
+const COUNTDOWN_LEAD = 4.5;
 /** Haze on a mountain track (m), the same in the near scene and the far view. */
 const TRACK_FOG = { near: 150, far: 16000 };
 /** A river is heard from this far off (m), loudest within RIVER_NEAR. */
@@ -216,6 +218,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   rain.onThunder = (d) => audio.thunder(d);
   let covered = false;
   let weatherClock = Infinity;
+  /** Weather seconds run so far (online: on the room's clock). */
+  let weatherTime = 0;
   let rained = false;
   let floodedNews = false;
   // On a mountain track: going over the edge puts the bus back on the road a little behind.
@@ -310,7 +314,14 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     }
 
     // Weather: wet tires, floodwater in the underpasses (the bus wades, traffic crawls through).
-    const w = weather.update(paused ? 0 : dt);
+    // Online the showers follow the room's clock (from the countdown's start), not this page's:
+    // a page that loaded later, or a tab left in the background, catches up in short steps.
+    let w = weather.state;
+    if (net) {
+      const due = Math.max(0, COUNTDOWN_LEAD - net.goIn()) - weatherTime;
+      for (let left = due; left > 0; left -= MAX_FRAME) w = weather.update(Math.min(left, MAX_FRAME));
+      weatherTime += Math.max(0, due);
+    } else w = weather.update(paused ? 0 : dt);
     bus.grip = gripFor(w.wet) * (racing?.playerGrip ?? 1);
     if (racing) {
       racing.weatherGrip = gripFor(w.wet);

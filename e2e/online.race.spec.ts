@@ -27,6 +27,11 @@ test('two players race online: shared start, each sees the other, results from t
   await b.page.getByRole('button', { name: 'Unirse' }).click();
   await expect(a.page.locator('.mn-seat[data-seat]')).toHaveCount(2);
   await a.page.locator('input[name="ai"][value="0"]').check();
+  // The host picks the light and the rain: the same for everyone, whatever each one's own Ajustes say.
+  await a.page.locator('input[name="tod"][value="sunset"]').check();
+  await a.page.locator('input[name="rain"][value="always"]').check();
+  await expect(b.page.locator('.mn-sum')).toContainText('Atardecer');
+  await expect(b.page.locator('.mn-sum')).toContainText('Siempre');
   await b.page.getByRole('button', { name: '¡Listo!' }).click();
   const start = a.page.getByRole('button', { name: '¡Arrancar!' });
   await expect(start).toBeEnabled();
@@ -42,6 +47,10 @@ test('two players race online: shared start, each sees the other, results from t
   const goB = (await q(b.page, 'q.online.goIn()')) as number;
   expect(Math.abs(goA - goB)).toBeLessThan(3);
   await expect(b.page.locator('.rh-place')).toContainText('/ 2');
+  for (const p of [a.page, b.page]) {
+    expect(await q(p, 'q.timeOfDay')).toBe('sunset');
+    expect(await q(p, 'q.weather.state.rain')).toBeGreaterThan(0);
+  }
 
   // Ana drives off: on Beto's screen her bus moves.
   const remoteX = () => q(b.page, '(() => { const t = q.online.remotes[0].remote.bus.body.translation(); return t.x + t.z; })()') as Promise<number>;

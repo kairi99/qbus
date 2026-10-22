@@ -18,6 +18,12 @@ export interface TrackOptions {
   from: TrackEnd;
   to: TrackEnd;
   seed?: number;
+  /** Absent = páramo. */
+  biome?: TrackData['biome'];
+  /** The highway's name, shown as the street label (absent: the Vía Interoceánica). */
+  road?: string;
+  /** Hairpins tighter than this radius (m) are eased out to it (absent: OSM's line as drawn). */
+  minRadius?: number;
 }
 
 /** Asphalt width: one lane each way plus a strip of shoulder (m). */
@@ -39,6 +45,11 @@ const FILL = 1.5;
 /** The drop below the road is this much deeper right at its edge, fading out DEEPEN_REACH m away. */
 const DEEPEN = 1.3;
 const DEEPEN_REACH = 90;
+/** Valley shaping per biome: the cloud forest's quebradas fall away harder (steeper bank, deeper drop, farther out). */
+export const SHAPING = {
+  paramo: { fill: FILL, deepen: DEEPEN, reach: DEEPEN_REACH },
+  cloudforest: { fill: 2.3, deepen: 2.4, reach: 150 },
+} as const;
 /** Terrain under the asphalt sits this far under the deck (hidden, never poking through). */
 const UNDER = 0.08;
 /** A drop deeper than this, measured `DROP_AT` m past the asphalt's edge, is a ravine side. */
@@ -70,7 +81,8 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
   const nodes = chainWays(osm, opts.from).map((g) => proj.toXZ(g.lat, g.lon));
   const from = proj.toXZ(opts.from.lat, opts.from.lon);
   const to = proj.toXZ(opts.to.lat, opts.to.lon);
-  const smooth = resample(catmullRom(dedupe(nodes, 2), STEP), STEP);
+  const drawn = resample(catmullRom(dedupe(nodes, 2), STEP), STEP);
+  const smooth = opts.minRadius ? resample(easeBends(drawn, opts.minRadius), STEP) : drawn;
   const s0 = nearestAlong(smooth, from);
   const s1 = nearestAlong(smooth, to);
   if (s1 <= s0) throw new Error('track runs the wrong way: `to` is before `from` along the chained road');
@@ -104,16 +116,17 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
   // ditch, a hairpin's other leg too, rising at CUT), steepened downhill (a mountain road is
   // benched into the slope: the fill and cliff below it are steeper than the 30 m DEM's average).
   const carved = new Array<number>(cols * rows);
+  const shape = SHAPING[opts.biome ?? 'paramo'];
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
       const k = r * cols + c;
       const p = { x: minX + c * CELL, z: minZ + r * CELL };
       const q = segs.nearest(p);
       const below = q.y - ground[k];
-      const deepen = below > 0 ? 1 + DEEPEN * (1 - smoothstep(0, DEEPEN_REACH, q.d - hw)) : 1;
+      const deepen = below > 0 ? 1 + shape.deepen * (1 - smoothstep(0, shape.reach, q.d - hw)) : 1;
       // Off the downhill edge a fill bank comes down at FILL first (the road's own embankment), so
       // the slope begins at the road instead of a sheer wall under its edge.
-      const fill = q.y - UNDER - FILL * Math.max(0, q.d - hw - SHOULDER);
+      const fill = q.y - UNDER - shape.fill * Math.max(0, q.d - hw - SHOULDER);
       carved[k] = Math.min(Math.max(q.y - below * deepen, fill), segs.cap(p, hw + 0.5, CUT, UNDER));
     }
   // Then under the asphalt it must lie below the deck: wherever a terrain triangle still pokes
@@ -171,7 +184,7 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
   const pickups: TrackData['pickups'] = [];
   for (let s = start + 300; s < finish - 150; s += PICKUP_EVERY) for (const off of [-1.9, 1.9]) pickups.push({ s: round(s, 1), off });
 
-  const road: Road = { name: 'Vía Interoceánica (E20)', kind: 'street', points: pts, width: TRACK_WIDTH, lanes: 2, surface };
+  const road: Road = { name: opts.road ?? 'Vía Interoceánica (E20)', kind: 'street', points: pts, width: TRACK_WIDTH, lanes: 2, surface };
   const offRoad = (p: Vec2, pad: number) => segs.nearest(p).d > hw + pad;
   const scenery: TrackScenery | undefined = sceneryOsm
     ? {
@@ -181,6 +194,7 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
       }
     : undefined;
   const race: TrackData = { from: opts.from.name, to: opts.to.name, points: pts, y: surface, cum: cum.map((v) => round(v, 2)), width: TRACK_WIDTH, start, finish: round(finish, 1), rails, drops, pickups, scenery };
+  if (opts.biome && opts.biome !== 'paramo') race.biome = opts.biome;
   const heading = Math.atan2(-(pts[1].z - pts[0].z), pts[1].x - pts[0].x);
   const horizon = horizonDem ? buildHorizon(horizonDem, proj.toLatLon, base) : undefined;
   const landmarks = horizonDem
@@ -440,6 +454,39 @@ export function catmullRom(pts: Vec2[], step: number): Vec2[] {
 }
 
 /** Evenly spaced points along a polyline. */
+/** Bend radius at `i` (m), through the points `k` either side. */
+function radiusAt(pts: Vec2[], i: number, k: number): number {
+  const a = pts[i - k], b = pts[i], c = pts[i + k];
+  const ab = Math.hypot(b.x - a.x, b.z - a.z), bc = Math.hypot(c.x - b.x, c.z - b.z), ca = Math.hypot(a.x - c.x, a.z - c.z);
+  const cross = Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x));
+  return cross < 1e-9 ? Infinity : (ab * bc * ca) / (2 * cross);
+}
+
+/**
+ * Hairpins tighter than `minRadius` eased out: each point of such a bend moves halfway to its
+ * neighbors' midpoint, again and again, until every bend is at least that wide. A long bus
+ * steering round OSM's 16 m hairpins (the Silante's) runs wide into the bank whatever its speed;
+ * the real road is wider there anyway. Moves a hairpin's apex a few meters, nothing elsewhere.
+ */
+function easeBends(drawn: Vec2[], minRadius: number): Vec2[] {
+  const pts = drawn.map((p) => ({ ...p }));
+  const k = 3;
+  for (let pass = 0; pass < 400; pass++) {
+    let tight = false;
+    for (let i = k; i < pts.length - k; i++) {
+      if (radiusAt(pts, i, k) >= minRadius) continue;
+      tight = true;
+      for (let j = Math.max(1, i - k); j <= Math.min(pts.length - 2, i + k); j++) {
+        const m = { x: (pts[j - 1].x + pts[j + 1].x) / 2, z: (pts[j - 1].z + pts[j + 1].z) / 2 };
+        pts[j].x += (m.x - pts[j].x) / 2;
+        pts[j].z += (m.z - pts[j].z) / 2;
+      }
+    }
+    if (!tight) break;
+  }
+  return pts;
+}
+
 function resample(pts: Vec2[], step: number): Vec2[] {
   const cum = cumulative(pts);
   const len = cum[cum.length - 1];

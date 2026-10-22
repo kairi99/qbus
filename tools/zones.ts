@@ -22,7 +22,7 @@ export const ZONES: Record<
      * A race track instead of a city: the stretch of highway `ref` from `from` to `to` (see
      * src/world/osm/track.ts). Only its ways are fetched (`track` query).
      */
-    track?: { ref: string; from: TrackEnd; to: TrackEnd };
+    track?: { ref: string; from: TrackEnd; to: TrackEnd; biome?: 'paramo' | 'cloudforest'; road?: string; minRadius?: number };
   }
 > = {
   mariscal: {
@@ -55,5 +55,15 @@ export const ZONES: Record<
     osm: 'data/raw/papallacta.osm.json',
     dem: 'data/raw/copernicus-S01-W079.tif',
     track: { ref: 'E20', from: { lat: -0.3796, lon: -78.139, name: 'Papallacta' }, to: { lat: -0.3697, lon: -78.106, name: 'Cuyuja' } },
+  },
+  // E20 Alóag to Santo Domingo, the cloud-forest descent past Río Silante: 5 km raced from Arrayán
+  // (2590 m) down to the bridge at the river (2320 m), single carriageway all the way, very twisty.
+  silante: {
+    id: 'silante',
+    name: 'Bajada del Silante',
+    bbox: [-0.4505, -78.7165, -0.434, -78.685],
+    osm: 'data/raw/silante.osm.json',
+    dem: 'data/raw/copernicus-S01-W079.tif',
+    track: { ref: 'E20', from: { lat: -0.4463, lon: -78.6882, name: 'Arrayán' }, to: { lat: -0.4418, lon: -78.7127, name: 'Río Silante' }, biome: 'cloudforest', road: 'Vía Alóag–Santo Domingo (E20)', minRadius: 24 },
   },
 };

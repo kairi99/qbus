@@ -27,6 +27,8 @@ export interface TrackData {
   pickups: { s: number; off: number }[];
   /** What's beside the road, from OSM: rivers, the oil pipelines, the town's buildings. */
   scenery?: TrackScenery;
+  /** What grows and how the valley looks (trackBuilder's BIOMES); absent = páramo. */
+  biome?: 'paramo' | 'cloudforest';
 }
 
 /** The real things along a track (osm/track.ts), drawn by trackBuilder. */

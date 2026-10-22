@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { biomeOf } from './biomes';
 import type { CityData, Horizon, Landmark } from './cityData';
 import { buildMountains } from './mountains';
 import { type Puff, MIST_LOOK, mistMesh } from './mist';
 import { LIGHTING, type TimeOfDay, skyDome } from './sky';
+import type { TrackData } from './track';
 
 /**
  * The Virgen is drawn this many times life size (≈45 m with her base): from La Mariscal, 4 km
@@ -28,7 +30,7 @@ export function buildBackdrop(city: CityData, cityRadius: number, tod: TimeOfDay
 
   const scale = city.terrain?.scale ?? 1;
   if (city.horizon) {
-    scene.add(horizonMesh(city.horizon, scale, light.horizon, !!city.race));
+    scene.add(horizonMesh(city.horizon, scale, light.horizon, city.race));
     // Quito's lights around a city zone; out on a mountain road the valley is dark.
     if (tod === 'night' && !city.race) scene.add(cityLights(city.horizon, scale));
     for (const l of city.landmarks ?? []) scene.add(l.kind === 'virgen' ? virgen(l, scale) : volcano(l, scale));
@@ -86,15 +88,10 @@ const BANDS: [number, THREE.Color][] = [
   [1850, new THREE.Color('#8d877a')],
 ];
 
-/** Out in the mountains (a race track; heights over its valley floor): forest, páramo, rock, the snow on Antisana. */
-const WILD_BANDS: [number, THREE.Color][] = [
-  [0, new THREE.Color('#4d6f37')],
-  [600, new THREE.Color('#5c7b43')],
-  [1100, new THREE.Color('#98985d')],
-  [1700, new THREE.Color('#8a857a')],
-  [2300, new THREE.Color('#7d7a74')],
-  [2500, new THREE.Color('#eef0f3')],
-];
+/** Out in the mountains (a race track; heights over its valley floor): the biome's forest, rock, the snow on Antisana. */
+function wildBands(race: TrackData | undefined): [number, THREE.Color][] {
+  return biomeOf(race).far.map(([h, c]) => [h, new THREE.Color(c)]);
+}
 
 function bandColor(h: number, out: THREE.Color, bands = BANDS): THREE.Color {
   if (h <= bands[0][0]) return out.copy(bands[0][1]);
@@ -108,10 +105,12 @@ function bandColor(h: number, out: THREE.Color, bands = BANDS): THREE.Color {
  * The far terrain as one low-poly grid. Low ground near the city fades into the same haze as
  * the city's own fog, so the two meet without a seam; hills stand clear of it.
  */
-function horizonMesh(h: Horizon, scale: number, haze: THREE.Color, wild = false): THREE.Mesh {
+function horizonMesh(h: Horizon, scale: number, haze: THREE.Color, race?: TrackData): THREE.Mesh {
   const pos = new Float32Array(h.cols * h.rows * 3);
   const col = new Float32Array(h.cols * h.rows * 3);
   const c = new THREE.Color();
+  const wild = !!race;
+  const bands = wild ? wildBands(race) : BANDS;
   for (let r = 0; r < h.rows; r++)
     for (let k = 0; k < h.cols; k++) {
       const i = r * h.cols + k;
@@ -121,7 +120,7 @@ function horizonMesh(h: Horizon, scale: number, haze: THREE.Color, wild = false)
       pos.set([x, y * scale - 2, z], i * 3);
       // A little variation so the city floor doesn't read as a flat sheet.
       const n = Math.sin(x * 0.013 + z * 0.021) * Math.sin(x * 0.007 - z * 0.017);
-      bandColor(y, c, wild ? WILD_BANDS : BANDS).multiplyScalar(1 + n * 0.08);
+      bandColor(y, c, bands).multiplyScalar(1 + n * 0.08);
       // Haze lies over the low city near the zone (matching the city's own fog); hills rising
       // out of it, like El Panecillo, stay clear.
       const near = Math.max(0, Math.min(1, 1 - (Math.hypot(x, z) - 1400) / 2200));

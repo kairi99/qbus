@@ -88,3 +88,15 @@ test('R in a race puts the bus back on the road and holds it there a few seconds
   await page.keyboard.up('KeyW');
   expect(errors).toEqual([]);
 });
+
+test('a race on the Silante track: the grid, the countdown and the cloud-forest road', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?play=1&mode=race&city=silante&tutorial=0&rain=0&rivals=1');
+  await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 90_000 });
+  await expect(page.locator('.rh-count')).toHaveText(/[321]/, { timeout: 60_000 });
+  expect(await page.evaluate(() => (window as any).__qbus.city.race.to)).toBe('Río Silante');
+  await expect(page.locator('.rh-place')).toContainText('/ 2');
+  await page.screenshot({ path: `${shots}/b9-silante-grid.png` });
+  expect(errors).toEqual([]);
+});

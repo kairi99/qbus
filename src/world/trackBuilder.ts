@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RAPIER, addTerrainCollider, markStatic } from '../physics/world';
 import type { CityData, Vec2 } from './cityData';
 import { terrainAt } from './cityData';
+import { type Biome, biomeOf, terrainColors } from './biomes';
 import { ChunkedMeshBuilder, InstancedTiles, MeshBuilder, hash2, vertexColorMaterial, withinRange } from './meshBuilder';
 import type { RoadGraph } from './roadGraph';
 import type { Terrain } from './terrain';
@@ -31,11 +32,6 @@ const CHEVRON = '#f3c418';
 const CHEVRON_LIT = '#b08c10';
 const SIGN_BACK = '#6d7075';
 /** Terrain colors: páramo grass, cloud-forest green, bare cut earth, rock, the gravel shoulder. */
-const PARAMO = new THREE.Color('#a39f58');
-const FOREST = new THREE.Color('#4d7337');
-const EARTH = new THREE.Color('#8a7660');
-const ROCK = new THREE.Color('#77736d');
-const GRAVEL = new THREE.Color('#9a907f');
 /** Guardrail: beam from BEAM_LO to BEAM_HI over the road, posts every POST_EVERY m, this far past the asphalt. */
 const RAIL_OUT = 0.45;
 const BEAM_LO = 0.42;
@@ -64,6 +60,7 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   const fixed = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
   addTerrainCollider(world, t);
+  const biome = biomeOf(race);
   for (const m of trackTerrain(t, race, layer(6))) scene.add(m);
 
   const deck = new ChunkedMeshBuilder(300);
@@ -88,7 +85,7 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
     for (const pipe of sc.pipes) pipeline(race, pipe, solid, ground, world, fixed);
     for (const b of sc.buildings) house(race, b, solid, ground, texts, world, fixed);
   }
-  const zones = mistZones(race);
+  const zones = mistZones(race, biome);
   roadSigns(race, zones, solid, ground, texts);
   const plants = scatter(race, t, ground, world, fixed, (p) => !!sc && blocked(sc, p));
 
@@ -113,7 +110,7 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   // A crowd at the start and at the finish.
   const clear = (p: Vec2) => !!sc && blocked(sc, p);
   scene.add(crowdMesh([...crowdSpots(race, race.start - 70, race.start + 25, ground, clear), ...crowdSpots(race, race.finish - 40, race.finish + 15, ground, clear)]));
-  scene.add(mistMesh(mistPuffs(race, t, zones), MIST_LOOK[tod], 2600));
+  scene.add(mistMesh(mistPuffs(race, t, zones, biome), MIST_LOOK[tod], 2600));
 
   // No traffic lights or props on a track, but the session expects both.
   const signals = new SignalLamps({
@@ -428,6 +425,7 @@ function trackTerrain(t: Terrain, race: TrackData, material: THREE.Material): TH
   const TILE = 80;
   const meshes: THREE.Mesh[] = [];
   const col = new THREE.Color();
+  const pal = terrainColors(biomeOf(race));
   for (let r0 = 0; r0 < t.rows - 1; r0 += TILE)
     for (let c0 = 0; c0 < t.cols - 1; c0 += TILE) {
       const r1 = Math.min(t.rows - 1, r0 + TILE);
@@ -445,9 +443,9 @@ function trackTerrain(t: Terrain, race: TrackData, material: THREE.Material): TH
           // Higher up it's páramo, lower down forest (with patches of each by noise).
           const alt = (y - lo) / (hi - lo || 1);
           const noise = hash2(Math.floor(x / 40), Math.floor(z / 40), 3) * 0.5 + hash2(x, z, 9) * 0.15;
-          col.copy(FOREST).lerp(PARAMO, Math.max(0, Math.min(1, alt * 1.2 - 0.25 + noise * 0.6)));
-          if (slope > 0.9) col.lerp(slope > 1.3 ? ROCK : EARTH, Math.min(1, (slope - 0.9) * 2));
-          if (nearRoad[r * t.cols + c] < race.width / 2 + 3) col.copy(GRAVEL);
+          col.copy(pal.low).lerp(pal.high, Math.max(0, Math.min(1, alt * 1.2 - 0.25 + noise * 0.6)));
+          if (slope > 0.9) col.lerp(slope > 1.3 ? pal.rock : pal.earth, Math.min(1, (slope - 0.9) * 2));
+          if (nearRoad[r * t.cols + c] < race.width / 2 + 3) col.copy(pal.gravel);
           cols.push(col.r, col.g, col.b);
         }
       const idx: number[] = [];
@@ -471,7 +469,7 @@ function trackTerrain(t: Terrain, race: TrackData, material: THREE.Material): TH
 
 /** A tree, shrub or rock beside the track: where, how big, which way it's turned, its tint. */
 export interface Plant {
-  kind: 'tree' | 'shrub' | 'rock';
+  kind: 'tree' | 'canopy' | 'fern' | 'bamboo' | 'shrub' | 'rock';
   p: Vec2;
   y: number;
   size: number;
@@ -486,6 +484,11 @@ export interface Plant {
 
 /** Keeps every plant's middle this far past the asphalt's edge: a tree's crown or a boulder never overhangs a lane. */
 export const PLANT_CLEAR = 3.5;
+/** A canopy crown's underside is at least this far over the road (m): the tallest vehicle is ~3.5 m, plus the chase camera. */
+export const CANOPY_CLEAR = 7;
+/** Canopy trunk (local height of the lowest crown vertex, before size and stretch) and the tallest stretch it gets. */
+export const CANOPY_BOTTOM = 8;
+const CANOPY_MAX_STRETCH = 2.4;
 
 /**
  * Where trees, shrubs and rocks grow on the valley sides: thicker lower down (cloud forest),
@@ -501,46 +504,84 @@ export function plantSpots(race: TrackData, t: Terrain, ground: (p: Vec2) => num
   const len = race.cum[race.cum.length - 1];
   const hw = race.width / 2;
   const out: Plant[] = [];
+  const biome = biomeOf(race);
+  const pc = biome.plants;
+  const near = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
   for (let s = 0; s < len; s += TREE_STEP)
     for (const side of [-1, 1]) {
       trackPoint(race, s, at);
       const alt = (at.y - lo) / (hi - lo || 1);
-      for (let k = 0; k < 3; k++) {
+      for (let k = 0; k < pc.tries; k++) {
         // Denser near the road (what you see), out to ~240 m.
-        const off = side * (hw + 4 + 240 * rng.next() ** 1.8);
+        const off = side * (hw + 4 + pc.reach * rng.next() ** 1.8);
         const p = { x: at.x - at.dz * off + rng.range(-3, 3), z: at.z + at.dx * off + rng.range(-3, 3) };
         if (p.x < t.minX + 10 || p.z < t.minZ + 10 || p.x > t.minX + (t.cols - 2) * t.cell || p.z > t.minZ + (t.rows - 2) * t.cell) continue;
         const where = locateOnTrack(race, p);
         if (Math.abs(where.off) < hw + PLANT_CLEAR || blockedAt(p)) continue;
         const g = ground(p);
         const slope = Math.hypot(ground({ x: p.x + 2, z: p.z }) - ground({ x: p.x - 2, z: p.z }), ground({ x: p.x, z: p.z + 2 }) - ground({ x: p.x, z: p.z - 2 })) / 4;
-        const forest = 1 - alt * 0.75;
+        const forest = 1 - alt * pc.altFade;
         let kind: Plant['kind'];
         if (slope > 1.1) kind = 'rock';
-        else if (rng.next() < forest * 0.8) kind = 'tree';
-        else if (rng.next() < 0.75) kind = 'shrub';
+        else if (rng.next() < forest * pc.treeProb) kind = 'tree';
+        else if (pc.fernProb && rng.next() < pc.fernProb) kind = 'fern';
+        else if (pc.bambooProb && rng.next() < pc.bambooProb) kind = 'bamboo';
+        else if (rng.next() < pc.shrubProb) kind = 'shrub';
         else kind = 'rock';
         if (kind === 'rock' && rng.next() < 0.5) continue;
-        const size = kind === 'tree' ? rng.range(0.8, 1.5) : kind === 'shrub' ? rng.range(0.6, 1.3) : rng.range(0.5, 1.6);
+        const size = rng.range(...pc.size[kind as 'tree']);
         const turn = rng.range(0, Math.PI * 2);
-        const stretch = kind === 'tree' ? rng.range(0.85, 1.25) : 1;
+        const stretch = kind === 'tree' ? rng.range(...pc.stretch) : 1;
         const hsl: Plant['hsl'] = [
-          kind === 'rock' ? 0.08 : 0.22 + rng.range(-0.04, 0.05),
-          kind === 'rock' ? 0.05 : 0.45,
-          kind === 'rock' ? rng.range(0.42, 0.55) : rng.range(0.42, 0.58),
+          kind === 'rock' ? pc.stone.h : pc.leaf.h + rng.range(-0.04, 0.05),
+          kind === 'rock' ? pc.stone.s : pc.leaf.s,
+          kind === 'rock' ? rng.range(...pc.stone.l) : rng.range(...pc.leaf.l),
         ];
-        out.push({ kind, p, y: g, size, stretch, turn, hsl, solid: Math.abs(where.off) < hw + 30 && kind !== 'shrub' });
+        out.push({ kind, p, y: g, size, stretch, turn, hsl, solid: Math.abs(where.off) < hw + 30 && kind !== 'shrub' && kind !== 'fern' && kind !== 'bamboo' });
       }
     }
+  // The cloud forest's roof: giants just past the clearance, crowns leaning over the road. Their own
+  // random stream, so adding them never moves the other plants.
+  const cn = biome.canopy;
+  if (cn) {
+    const crng = new Rng(23);
+    for (let s = 0; s < len; s += cn.every)
+      for (const side of [-1, 1]) {
+        trackPoint(race, s + crng.range(0, cn.every), at);
+        const off = side * (hw + PLANT_CLEAR + 0.3 + crng.range(0, cn.reach));
+        const p = { x: at.x - at.dz * off, z: at.z + at.dx * off };
+        if (p.x < t.minX + 10 || p.z < t.minZ + 10 || p.x > t.minX + (t.cols - 2) * t.cell || p.z > t.minZ + (t.rows - 2) * t.cell) continue;
+        const where = locateOnTrack(race, p);
+        if (Math.abs(where.off) < hw + PLANT_CLEAR || blockedAt(p)) continue;
+        const g = ground(p);
+        if (Math.hypot(ground({ x: p.x + 2, z: p.z }) - ground({ x: p.x - 2, z: p.z }), ground({ x: p.x, z: p.z + 2 }) - ground({ x: p.x, z: p.z - 2 })) / 4 > 1.1) continue;
+        const size = crng.range(...pc.size.tree);
+        // The trunk stretches so the crown's underside stays CANOPY_CLEAR over the asphalt even where
+        // the ground falls away; a tree that would need an absurd trunk is left out.
+        const lift = (CANOPY_CLEAR + where.y - g) / (CANOPY_BOTTOM * size);
+        if (lift > CANOPY_MAX_STRETCH) continue;
+        // The crown leans toward the road: local +X turned to point along the way in from the tree's side.
+        trackPoint(race, where.s, near);
+        const sign = Math.sign(where.off);
+        const turn = Math.atan2(sign * near.dx, sign * near.dz);
+        const hsl: Plant['hsl'] = [pc.leaf.h + crng.range(-0.04, 0.05), pc.leaf.s, crng.range(...pc.leaf.l)];
+        out.push({ kind: 'canopy', p, y: g, size, stretch: Math.max(1, lift), turn, hsl, solid: true });
+      }
+  }
   return out;
 }
 
 /** The plants as instanced meshes in tiles, and colliders for the solid ones. */
 function scatter(race: TrackData, t: Terrain, ground: (p: Vec2) => number, world: RAPIER.World, fixed: RAPIER.RigidBody, blockedAt: (p: Vec2) => boolean): THREE.InstancedMesh[] {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const wild = !!biomeOf(race).canopy;
+  // One instanced draw per kind per tile in range; the cloud forest's extra kinds are only added there.
   const tiles = new InstancedTiles(
     {
-      tree: { geometry: treeGeometry(), material, shadow: true },
+      tree: { geometry: wild ? tallTreeGeometry() : treeGeometry(), material, shadow: true },
+      canopy: { geometry: canopyGeometry(biomeOf(race).canopy?.lean ?? 0), material, shadow: true },
+      fern: { geometry: fernGeometry(), material, shadow: true },
+      bamboo: { geometry: bambooGeometry(), material, shadow: true },
       shrub: { geometry: shrubGeometry(), material, shadow: true },
       rock: { geometry: rockGeometry(), material, shadow: true },
     },
@@ -561,7 +602,7 @@ function scatter(race: TrackData, t: Terrain, ground: (p: Vec2) => number, world
     tiles.add(pl.kind, m, tint);
     if (pl.solid)
       world.createCollider(
-        pl.kind === 'tree'
+        pl.kind === 'tree' || pl.kind === 'canopy'
           ? RAPIER.ColliderDesc.cylinder(1.6 * pl.size, 0.28 * pl.size).setTranslation(pl.p.x, pl.y + 1.4 * pl.size, pl.p.z)
           : RAPIER.ColliderDesc.ball(0.7 * pl.size).setTranslation(pl.p.x, pl.y + 0.2, pl.p.z),
         fixed,
@@ -580,6 +621,90 @@ function treeGeometry(): THREE.BufferGeometry {
   const top = new THREE.IcosahedronGeometry(1.3, 0).translate(0.4, 5.6, -0.2);
   paint(top, '#f2f2f2');
   parts.push(trunk, crown, top);
+  return merge(parts);
+}
+
+/** A taller, rangier forest tree: a long trunk and three lumps of crown. */
+function tallTreeGeometry(): THREE.BufferGeometry {
+  const trunk = new THREE.CylinderGeometry(0.16, 0.3, 4.6, 5).translate(0, 2.3, 0);
+  paint(trunk, '#4f3d2e');
+  const a = new THREE.IcosahedronGeometry(1.9, 0).scale(1, 1.2, 1).translate(0, 5.6, 0);
+  paint(a, '#ffffff');
+  const b = new THREE.IcosahedronGeometry(1.4, 0).translate(1.0, 7.2, 0.4);
+  paint(b, '#f0f0f0');
+  const c = new THREE.IcosahedronGeometry(1.2, 0).translate(-0.8, 6.6, -0.8);
+  paint(c, '#e6e6e6');
+  return merge([trunk, a, b, c]);
+}
+
+/**
+ * A forest giant beside the road: a bare trunk to `CANOPY_BOTTOM` and a broad crown leaning along
+ * local +X (the instance is turned so that points at the road), nothing of it under that height.
+ * The crown is visual only; the trunk gets the usual collider.
+ */
+export function canopyGeometry(lean: number): THREE.BufferGeometry {
+  const trunk = new THREE.CylinderGeometry(0.26, 0.45, CANOPY_BOTTOM + 1, 5).translate(0, (CANOPY_BOTTOM + 1) / 2, 0);
+  paint(trunk, '#4f3d2e');
+  const lump = (r: number, sy: number, x: number, y: number, z: number, shade: string) => {
+    const g = new THREE.IcosahedronGeometry(r, 0).scale(1, sy, 1).translate(x, y, z);
+    paint(g, shade);
+    return g;
+  };
+  // Every vertex of the crown is above CANOPY_BOTTOM (the lowest lump's center minus its depth).
+  return merge([
+    trunk,
+    lump(4.2, 0.6, lean, CANOPY_BOTTOM + 2.7, 0, '#ffffff'),
+    lump(3.2, 0.6, lean + 2.6, CANOPY_BOTTOM + 3.3, 1.8, '#e8e8e8'),
+    lump(3.0, 0.6, lean - 1.2, CANOPY_BOTTOM + 3.6, -2.4, '#f2f2f2'),
+    lump(2.4, 0.6, lean + 0.4, CANOPY_BOTTOM + 5.4, 0.6, '#dcdcdc'),
+  ]);
+}
+
+/** A tree fern: a thin trunk and a ring of drooping fronds (flat, drawn from both sides). */
+function fernGeometry(): THREE.BufferGeometry {
+  const trunk = new THREE.CylinderGeometry(0.09, 0.15, 2.6, 5).translate(0, 1.3, 0);
+  paint(trunk, '#5a4a38');
+  const pos: number[] = [];
+  const fronds = 9;
+  const top = 2.6;
+  for (let i = 0; i < fronds; i++) {
+    const a = (i / fronds) * Math.PI * 2 + (i % 2) * 0.2;
+    const dx = Math.cos(a);
+    const dz = Math.sin(a);
+    // Base at the trunk's top, widest a third of the way out, the tip drooping.
+    const len = i % 2 ? 2.1 : 2.6;
+    const at = (u: number, w: number, y: number) => [dx * u - dz * w, y, dz * u + dx * w];
+    const base = at(0.1, 0, top);
+    const L = at(len * 0.4, -0.38, top + 0.55);
+    const R = at(len * 0.4, 0.38, top + 0.55);
+    const tip = at(len, 0, top - 0.25);
+    for (const v of [base, L, R, R, L, base, L, tip, R, R, tip, L]) pos.push(...v);
+  }
+  const fr = new THREE.BufferGeometry();
+  fr.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  paint(fr, '#ffffff');
+  return merge([trunk, fr]);
+}
+
+/** A guadua clump: leaning canes with a tuft of leaves at each top. */
+function bambooGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const canes = 5;
+  for (let i = 0; i < canes; i++) {
+    const a = (i / canes) * Math.PI * 2 + i * 0.7;
+    const h = 7 + (i * 5) % 4;
+    const lean = 0.1 + (i % 3) * 0.05;
+    const cane = new THREE.CylinderGeometry(0.05, 0.08, h, 4).translate(0, h / 2, 0);
+    paint(cane, '#9fae5a');
+    const tuft = new THREE.ConeGeometry(0.9, 1.7, 5).translate(0, h - 0.4, 0);
+    paint(tuft, '#ffffff');
+    for (const g of [cane, tuft]) {
+      g.rotateZ(Math.cos(a) * lean);
+      g.rotateX(Math.sin(a) * lean);
+      g.translate(Math.cos(a) * 0.45, 0, Math.sin(a) * 0.45);
+      parts.push(g);
+    }
+  }
   return merge(parts);
 }
 
@@ -878,9 +1003,9 @@ function house(race: TrackData, b: TrackScenery['buildings'][number], solid: Chu
 }
 
 /** Two stretches of thick mist on the road (Papallacta's páramo is in the clouds most afternoons). */
-function mistZones(race: TrackData): { s0: number; s1: number }[] {
+function mistZones(race: TrackData, biome: Biome): { s0: number; s1: number }[] {
   const len = race.finish - race.start;
-  return [0.32, 0.7].map((f) => ({ s0: race.start + len * f, s1: race.start + len * f + 320 }));
+  return biome.mist.zones.map((f) => ({ s0: race.start + len * f, s1: race.start + len * f + biome.mist.length }));
 }
 
 /** The town's name sign and "ZONA DE NEBLINA" ahead of each misty stretch, on the right. */
@@ -956,13 +1081,14 @@ function textSigns(signs: TextSign[]): THREE.Mesh | null {
  * the road (the páramo lives in its clouds), and thick, low puffs over the asphalt along the
  * misty stretches, thinning out at their ends.
  */
-function mistPuffs(race: TrackData, t: Terrain, zones: { s0: number; s1: number }[]): Puff[] {
+function mistPuffs(race: TrackData, t: Terrain, zones: { s0: number; s1: number }[], biome: Biome): Puff[] {
+  const m = biome.mist;
   const rng = new Rng(41);
   const out: Puff[] = [];
   const q = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
   const len = race.cum[race.cum.length - 1];
   const tAt = (x: number, z: number) => terrainAt({ terrain: t } as CityData, { x, z });
-  for (let s = 0; s < len; s += 45) {
+  for (let s = 0; s < len; s += m.bankStep) {
     trackPoint(race, s, q);
     const side = rng.chance(0.5) ? 1 : -1;
     const off = side * rng.range(120, 650);
@@ -970,17 +1096,17 @@ function mistPuffs(race: TrackData, t: Terrain, zones: { s0: number; s1: number 
     const z = q.z + q.dx * off + rng.range(-40, 40);
     const size = rng.range(90, 220);
     // Lying against the slope: a bit over the ground there, up to ~250 m over the road.
-    const y = Math.max(tAt(x, z) + size * 0.2, q.y + rng.range(40, 250));
-    out.push({ x, y, z, size, alpha: rng.range(0.35, 0.65) });
+    const y = Math.max(tAt(x, z) + size * 0.2, q.y + rng.range(...m.bankRise));
+    out.push({ x, y, z, size, alpha: rng.range(...m.bankAlpha) });
   }
   for (const zn of zones)
     for (let s = zn.s0; s < zn.s1; s += 7) {
       trackPoint(race, s, q);
       // Thickest in the middle of the stretch.
       const k = Math.sin(((s - zn.s0) / (zn.s1 - zn.s0)) * Math.PI);
-      for (let j = 0; j < 2; j++) {
+      for (let j = 0; j < m.perStep; j++) {
         const off = rng.range(-16, 16);
-        out.push({ x: q.x - q.dz * off, y: q.y + rng.range(1.5, 6), z: q.z + q.dx * off, size: rng.range(18, 34), alpha: 0.18 + 0.32 * k });
+        out.push({ x: q.x - q.dz * off, y: q.y + rng.range(1.5, 6), z: q.z + q.dx * off, size: rng.range(18, 34), alpha: 0.18 + m.roadAlpha * k });
       }
     }
   return out;

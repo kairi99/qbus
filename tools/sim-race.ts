@@ -108,6 +108,7 @@ while (t < 900) {
   t += PHYSICS_STEP;
   // As the race does: wedged for good, back on the road where it was.
   if (driver.needsRescue) {
+    console.log(`rescue at ${driver.s.toFixed(0)} m, ${t.toFixed(1)} s`);
     const pose = trackPose(race, driver.s, driver.lane);
     bus.reset({ x: pose.pos.x, y: pose.y, z: pose.pos.z, heading: pose.heading, pitch: pose.pitch });
     driver.rescued();

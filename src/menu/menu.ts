@@ -144,8 +144,9 @@ export class Menu {
             <p>Calles, edificios, paradas y rutas: © colaboradores de ${link('https://www.openstreetmap.org/copyright', 'OpenStreetMap')},
             bajo la licencia ${link('https://opendatacommons.org/licenses/odbl/1-0/', 'ODbL 1.0')}. Los datos de la ciudad del juego
             (<code>data/cities/*.json</code>) son una base de datos derivada y se comparten bajo la misma licencia. La pista
-            Paso de la Muerte es un tramo real de la Vía Interoceánica (E20) entre Papallacta y Cuyuja: la vía, sus ríos, el
-            oleoducto y las casas también salen de OpenStreetMap; los letreros de los negocios solo dicen lo que venden.</p>
+            Paso de la Muerte es un tramo real de la Vía Interoceánica (E20) entre Papallacta y Cuyuja, y la pista Bajada del
+            Silante, un tramo real de la Vía Alóag–Santo Domingo (E20) entre Arrayán y el Río Silante: las vías, sus ríos, los
+            oleoductos y las casas también salen de OpenStreetMap; los letreros de los negocios solo dicen lo que venden.</p>
           </section>
           <section>
             <h2>Relieve</h2>
@@ -489,7 +490,9 @@ export class Menu {
         if (m.phase === 'loading') {
           offs.forEach((f) => f());
           conn.onState = null;
-          location.search = `?play=1&mode=online&city=${encodeURIComponent(m.settings.track)}&room=${code}`;
+          // The room's light and weather ride in the link, so every page starts the same race.
+          const sky = `&tod=${m.settings.tod ?? 'day'}&rain=${m.settings.rain ?? 'random'}`;
+          location.search = `?play=1&mode=online&city=${encodeURIComponent(m.settings.track)}&room=${code}${sky}`;
           return;
         }
         render();
@@ -518,6 +521,8 @@ export class Menu {
     const track = TRACK_LIST.find((t) => t.id === st.track)?.name ?? st.track;
     const skill = SKILL_OPTIONS.find((o) => o.value === st.skill)?.label ?? st.skill;
     const who = st.rivalBus === 'mixed' ? 'De todo un poco' : st.rivalBus === 'same' ? 'Lo mismo que los panas' : busById(st.rivalBus).name;
+    const rain = RAIN_OPTIONS.find((o) => o.value === st.rain)?.label ?? RAIN_OPTIONS[0].label;
+    const time = TIME_OPTIONS.find((o) => o.value === st.tod)?.label ?? TIME_OPTIONS[0].label;
     let options: string;
     if (host) {
       const aiChoices = Array.from({ length: maxAi + 1 }, (_, n) => n);
@@ -529,13 +534,17 @@ export class Menu {
           ${choice('rivalBus', 'mixed', 'De todo un poco', st.rivalBus === 'mixed', 'rb-mixed')}
           ${choice('rivalBus', 'same', 'Lo mismo que los panas', st.rivalBus === 'same', 'rb-same')}
           ${VEHICLES.map((v) => choice('rivalBus', v.preset.id, v.preset.name, st.rivalBus === v.preset.id, `rb-${v.preset.id}`)).join('')}
-        </fieldset>`;
+        </fieldset>
+        <fieldset><legend>Hora</legend>${TIME_OPTIONS.map((o) => choice('tod', o.value, o.label, st.tod === o.value, `tod-${o.value}`)).join('')}</fieldset>
+        <fieldset><legend>Lluvia</legend>${RAIN_OPTIONS.map((o) => choice('rain', o.value, o.label, st.rain === o.value, `rain-${o.value}`)).join('')}</fieldset>`;
     } else {
       options = `<dl class="mn-sum">
         <div><dt>Pista</dt><dd>${esc(track)}</dd></div>
         <div><dt>Rivales de la IA</dt><dd>${ai}</dd></div>
         <div><dt>Choferes</dt><dd>${esc(skill)}</dd></div>
-        <div><dt>Qué manejan</dt><dd>${esc(who)}</dd></div></dl>`;
+        <div><dt>Qué manejan</dt><dd>${esc(who)}</dd></div>
+        <div><dt>Hora</dt><dd>${esc(time)}</dd></div>
+        <div><dt>Lluvia</dt><dd>${esc(rain)}</dd></div></dl>`;
     }
     const others = room.seats.filter((x) => !x.host && x.online);
     const mine = room.seats.find((x) => x.id === me);
@@ -562,6 +571,8 @@ export class Menu {
         if (el.name === 'ai') next.ai = Number(el.value);
         if (el.name === 'skill') next.skill = el.value as RoomSettings['skill'];
         if (el.name === 'rivalBus') next.rivalBus = el.value;
+        if (el.name === 'tod') next.tod = el.value as RoomSettings['tod'];
+        if (el.name === 'rain') next.rain = el.value as RoomSettings['rain'];
         conn.send({ t: 'set', settings: next });
       }),
     );
@@ -690,7 +701,11 @@ export class Menu {
     if (!this.cities.has(id)) this.cities.set(id, loadZone(id));
     const city = await this.cities.get(id)!;
     const canvas = this.root.querySelector<HTMLCanvasElement>('.mn-track-map');
-    if (canvas && city.race && this.settings.race.track === id) drawTrackMap(canvas, city);
+    if (canvas && city.race && this.settings.race.track === id) {
+      drawTrackMap(canvas, city);
+      // Which track the map shows (tests wait for it).
+      canvas.dataset.drawn = id;
+    }
   }
 
   // ---- helpers ---------------------------------------------------------------

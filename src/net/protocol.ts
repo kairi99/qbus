@@ -41,6 +41,9 @@ export function cleanName(s: string): string {
 }
 
 export type RaceSkillId = 'easy' | 'normal' | 'hard';
+/** The room's weather and light, the same for everyone (the game's own settings' values). */
+export type RoomRain = 'random' | 'always' | 'off';
+export type RoomTime = 'day' | 'sunset' | 'night';
 
 export interface Seat {
   id: number;
@@ -58,9 +61,11 @@ export interface RoomSettings {
   skill: RaceSkillId;
   /** `mixed`, `same` or a vehicle id: what the AI drive. */
   rivalBus: string;
+  rain: RoomRain;
+  tod: RoomTime;
 }
 
-export const DEFAULT_ROOM_SETTINGS: RoomSettings = { track: 'papallacta', ai: 2, skill: 'normal', rivalBus: 'mixed' };
+export const DEFAULT_ROOM_SETTINGS: RoomSettings = { track: 'papallacta', ai: 2, skill: 'normal', rivalBus: 'mixed', rain: 'random', tod: 'day' };
 
 export type GridEntry = { kind: 'human'; seat: number; vehicle: string } | { kind: 'ai'; idx: number; vehicle: string; crew: number };
 
@@ -128,6 +133,8 @@ const S2C_TAGS = ['welcome', 'room', 'go', 'st', 'result', 'pong', 'error'];
 const ERRORS = ['full', 'racing', 'version', 'nohost', 'unknown', 'notready', 'bad'];
 const PHASES = ['lobby', 'loading', 'racing', 'results'];
 const SKILLS = ['easy', 'normal', 'hard'];
+const RAINS: readonly RoomRain[] = ['random', 'always', 'off'];
+const TIMES: readonly RoomTime[] = ['day', 'sunset', 'night'];
 
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const isNum = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
@@ -141,7 +148,11 @@ export function isRacer(x: unknown): x is Racer {
 /** A valid RoomSettings (copied), or null. */
 export function validSettings(x: unknown): RoomSettings | null {
   if (!isObj(x) || !isId(x.track) || !isInt(x.ai) || x.ai < 0 || x.ai > MAX_SEATS - 1 || !SKILLS.includes(x.skill as string) || !isId(x.rivalBus)) return null;
-  return { track: x.track, ai: x.ai, skill: x.skill as RaceSkillId, rivalBus: x.rivalBus };
+  // Rain and light came later: a client from before sends neither, and gets the defaults.
+  const rain = x.rain === undefined ? DEFAULT_ROOM_SETTINGS.rain : RAINS.find((r) => r === x.rain);
+  const tod = x.tod === undefined ? DEFAULT_ROOM_SETTINGS.tod : TIMES.find((t) => t === x.tod);
+  if (!rain || !tod) return null;
+  return { track: x.track, ai: x.ai, skill: x.skill as RaceSkillId, rivalBus: x.rivalBus, rain, tod };
 }
 
 function validGrid(x: unknown): x is GridEntry[] {

@@ -3,13 +3,13 @@ import { test, expect } from '@playwright/test';
 const shots = 'e2e/screenshots';
 test.describe.configure({ timeout: 240_000 });
 
-test('the Papallacta track: free roam on the mountain road, rails and drops, start gantry', async ({ page }) => {
+for (const track of ['papallacta', 'silante']) test(`the ${track} track: free roam on the mountain road, rails and drops, start gantry`, async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/?play=1&mode=free&city=papallacta&tutorial=0&rain=0');
+  await page.goto(`/?play=1&mode=free&city=${track}&tutorial=0&rain=0`);
   await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 90_000 });
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: `${shots}/a0-track-start.png` });
+  await page.screenshot({ path: `${shots}/a0-${track}-start.png` });
 
   const onRoad = await page.evaluate(() => {
     const q = (window as any).__qbus;
@@ -30,7 +30,7 @@ test('the Papallacta track: free roam on the mountain road, rails and drops, sta
   for (const s of [175, 900, 2400, 4200, 1640, 710, 1840, 3520]) {
     await goTo(s);
     await page.waitForTimeout(1800);
-    await page.screenshot({ path: `${shots}/a1-track-${s}.png` });
+    await page.screenshot({ path: `${shots}/a1-${track}-${s}.png` });
   }
   // Draw calls stay well under La Mariscal's chase view (~380): 52 to 155 measured by view.
   const perf = await page.evaluate(() => (window as any).__qbus.perf);
@@ -59,11 +59,11 @@ test('the Papallacta track: free roam on the mountain road, rails and drops, sta
   expect(placed).toBe(true);
   // (Polled on the game's state: at a couple of frames a second the popup can come and go between polls.)
   await expect.poll(() => page.evaluate(() => (window as any).__qbus.fall.falling), { timeout: 20_000 }).toBe(true);
-  await page.screenshot({ path: `${shots}/a2-track-fell.png` });
+  await page.screenshot({ path: `${shots}/a2-${track}-fell.png` });
   await expect
     .poll(async () => page.evaluate(() => { const q = (window as any).__qbus; return !q.fall.falling && q.bus.wheelsOnGround === 4; }), { timeout: 60_000 })
     .toBe(true);
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${shots}/a3-track-respawned.png` });
+  await page.screenshot({ path: `${shots}/a3-${track}-respawned.png` });
   expect(errors).toEqual([]);
 });

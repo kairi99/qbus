@@ -58,6 +58,9 @@ const RESCUE_DIST = 6;
 const RESCUE_TIME = 8;
 /** Curvature is measured over this stretch (m). */
 const CURVE_SPAN = 24;
+const G = 9.81;
+/** Bends tighter than this radius (m) are planned with less than the measured grip (by the square of how much tighter). */
+const TIGHT_BEND = 30;
 /** Speed profile sample spacing (m). */
 const STEP = 3;
 
@@ -258,13 +261,19 @@ export function speedProfile(t: TrackData, corner: number, brake: number, cruise
   const v = new Float32Array(n);
   const a = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
   const b = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
+  const y = new Float32Array(n);
   for (let i = 0; i < n; i++) {
+    y[i] = trackPoint(t, i * STEP, a).y;
     trackPoint(t, i * STEP - CURVE_SPAN / 2, a);
     trackPoint(t, i * STEP + CURVE_SPAN / 2, b);
     const k = Math.abs(Math.asin(Math.max(-1, Math.min(1, a.dx * b.dz - a.dz * b.dx)))) / CURVE_SPAN;
-    v[i] = Math.min(cruise, Math.sqrt(corner / Math.max(k, 1e-4)));
+    // A hairpin tighter than TIGHT_BEND (the Silante's) takes less than the measured grip: the
+    // lane's line round it runs out of steering, and the bus runs wide into the bank.
+    const tight = Math.min(1, 1 / (Math.max(k, 1e-4) * TIGHT_BEND)) ** 2;
+    v[i] = Math.min(cruise, Math.sqrt((corner * tight) / Math.max(k, 1e-4)));
   }
-  for (let i = n - 2; i >= 0; i--) v[i] = Math.min(v[i], Math.sqrt(v[i + 1] * v[i + 1] + 2 * brake * STEP));
+  // Braking downhill takes longer (gravity pulls on), uphill shorter: the Silante drops 11%.
+  for (let i = n - 2; i >= 0; i--) v[i] = Math.min(v[i], Math.sqrt(v[i + 1] * v[i + 1] + 2 * Math.max(1, brake + (G * (y[i + 1] - y[i])) / STEP) * STEP));
   return v;
 }
 

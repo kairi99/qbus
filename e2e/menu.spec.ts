@@ -189,9 +189,18 @@ test('a race from the menu: the track, the rivals and what they drive, traffic, 
   await expect.poll(() => page.evaluate(() => document.querySelector<HTMLCanvasElement>('.mn-track-map')!.getContext('2d')!.getImageData(0, 330, 1, 1).data[2]), { timeout: 60_000 }).toBe(58);
   await page.screenshot({ path: `${shots}/69-setup-race.png`, fullPage: true });
 
+  // The second track: its card, its own map, saved choice, and the race URL names it.
+  await expect(page.locator('[data-track="silante"]')).toContainText('Bajada del Silante');
+  await page.locator('[data-track="silante"]').click();
+  await expect(page.locator('[data-track="silante"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[data-track="papallacta"]')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator('.mn-summary')).toContainText('Bajada del Silante');
+  await expect(page.locator('.mn-track-map')).toHaveAttribute('data-drawn', 'silante', { timeout: 60_000 });
+  await page.screenshot({ path: `${shots}/69b-setup-race-silante.png`, fullPage: true });
   await page.getByRole('button', { name: '¡Arranca!' }).click();
   await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 90_000 });
   expect(new URL(page.url()).search).toContain('mode=race');
+  expect(new URL(page.url()).searchParams.get('city')).toBe('silante');
   // The race's own how-to page, then the grid.
   await expect(page.locator('.tut-page:not([hidden]) h2')).toHaveText('¡A la carrera!');
   await expect(page.locator('.tut-page:not([hidden])')).toContainText('Tráfico');

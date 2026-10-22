@@ -151,3 +151,27 @@ test('perf: La Mariscal draw calls, triangles, frame time, startup', async ({ pa
   writeFileSync(`${dir}/perf-${tag}.json`, JSON.stringify(out, null, 2));
   console.log(JSON.stringify(out, null, 2));
 });
+
+/** Mountain tracks: draw calls and triangles in chase view at a few spots along the road, plus a screenshot of each. */
+for (const track of ['papallacta', 'silante'])
+  test(`perf: ${track} track draw calls, triangles`, async ({ page }) => {
+    test.setTimeout(600_000);
+    mkdirSync(dir, { recursive: true });
+    await page.goto(`/?tutorial=0&play=1&mode=free&city=${track}&rain=0`);
+    await page.waitForFunction(() => (window as any).__qbus?.session, null, { timeout: 120_000 });
+    const results: Record<string, unknown> = {};
+    for (const s of [175, 900, 2400, 3520]) {
+      await page.evaluate((s) => {
+        const q = (window as any).__qbus;
+        const r = q.city.race;
+        const i = Math.min(r.points.length - 2, Math.round(s / 3));
+        const [a, b] = [r.points[i], r.points[i + 1]];
+        q.bus.reset({ x: a.x, y: r.y[i], z: a.z, heading: Math.atan2(-(b.z - a.z), b.x - a.x) });
+      }, s);
+      await frames(page, 15);
+      results[s] = await sample(page, 6);
+      console.log(track, s, JSON.stringify(results[s]));
+      await page.locator('#game').screenshot({ path: `${dir}/perf-${tag}-${track}-${s}.png` });
+    }
+    writeFileSync(`${dir}/perf-${tag}-${track}.json`, JSON.stringify(results, null, 2));
+  });

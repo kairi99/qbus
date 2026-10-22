@@ -48,7 +48,7 @@ const readExtra = (kind: string) => {
 // A race track: its highway, the valley around it and the far view, nothing of a city.
 if (zone.track) {
   const t0 = performance.now();
-  const city = importTrack(osm, dem, { name: zone.name, bbox: zone.bbox, from: zone.track.from, to: zone.track.to }, horizonDem, readExtra('scenery'));
+  const city = importTrack(osm, dem, { name: zone.name, bbox: zone.bbox, from: zone.track.from, to: zone.track.to, biome: zone.track.biome, road: zone.track.road, minRadius: zone.track.minRadius }, horizonDem, readExtra('scenery'));
   const out = `data/cities/${zone.id}.json`;
   writeFileSync(out, JSON.stringify(city));
   const r = city.race!;

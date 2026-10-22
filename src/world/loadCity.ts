@@ -5,6 +5,7 @@ import { generateCity } from './procCity';
 const ZONES: Record<string, () => Promise<{ default: unknown }>> = {
   mariscal: () => import('../../data/cities/mariscal.json'),
   papallacta: () => import('../../data/cities/papallacta.json'),
+  silante: () => import('../../data/cities/silante.json'),
 };
 
 /** Zones shown in the menu. */
@@ -16,6 +17,7 @@ export const ZONE_LIST = [
 /** Race tracks shown in the menu (zones with `city.race`). */
 export const TRACK_LIST = [
   { id: 'papallacta', name: 'Paso de la Muerte', blurb: 'Vía Interoceánica, de Papallacta a Cuyuja: barrancos, neblina y curvas cerradas' },
+  { id: 'silante', name: 'Bajada del Silante', blurb: 'Vía Alóag–Santo Domingo: bosque nublado, quebradas profundas, derrumbes y curvas sin fin hasta el río' },
 ];
 
 export const DEFAULT_ZONE = 'mariscal';
