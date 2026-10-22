@@ -37,8 +37,10 @@ export interface TrackScenery {
   rivers: { points: Vec2[]; y: number[]; width: number }[];
   /** Pipes on low stands over the ground, broken where they pass under the road. */
   pipes: { points: Vec2[]; diameter: number }[];
-  /** Block walls and tin roofs; `sign` names a roadside business's trade ("TRUCHAS"). */
-  buildings: { footprint: Vec2[]; floors: number; wall: string; roof: string; sign?: string }[];
+  /** Block walls and tin roofs; `sign` names a roadside business's trade ("TRUCHAS"); a place of worship is a `chapel`. */
+  buildings: { footprint: Vec2[]; floors: number; wall: string; roof: string; sign?: string; kind?: 'chapel' }[];
+  /** High-voltage lines: the towers mapped inside the terrain, in order, and the circuits they carry. */
+  powerLines?: { towers: Vec2[]; circuits: number }[];
 }
 
 /** A point `s` meters along the track and its direction (unit, toward the finish). */

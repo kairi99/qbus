@@ -191,6 +191,7 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
         rivers: rivers.map((rv) => ({ points: rv.points, y: rv.y.map((h) => round(h - base, 2)), width: rv.width })),
         pipes: importPipes(sceneryOsm, proj.toXZ, (p) => inGrid(p, 16) && segs.nearest(p).d < PIPE_REACH, (p) => offRoad(p, 3)),
         buildings: importHouses(sceneryOsm, proj.toXZ, (p) => inGrid(p, 16) && offRoad(p, 2.5), (p) => segs.nearest(p)),
+        ...powerOf(sceneryOsm, proj.toXZ, (p) => inGrid(p, 16)),
       }
     : undefined;
   const race: TrackData = { from: opts.from.name, to: opts.to.name, points: pts, y: surface, cum: cum.map((v) => round(v, 2)), width: TRACK_WIDTH, start, finish: round(finish, 1), rails, drops, pickups, scenery };
@@ -346,6 +347,7 @@ function importHouses(
       wall: HOUSE_WALLS[Math.floor(hash * 997) % HOUSE_WALLS.length],
       roof: HOUSE_ROOFS[Math.floor(hash * 7919) % HOUSE_ROOFS.length],
       sign,
+      ...(e.tags?.amenity === 'place_of_worship' ? { kind: 'chapel' as const } : {}),
     });
   }
   const signed = out.filter((b) => b.sign);
@@ -367,6 +369,33 @@ function importHouses(
     const sign = TRADE_SIGNS[trade][Math.floor(hash * TRADE_SIGNS[trade].length)];
     out.push({ footprint, floors: 1, wall: HOUSE_WALLS[Math.floor(hash * 997) % HOUSE_WALLS.length], roof: HOUSE_ROOFS[Math.floor(hash * 7919) % HOUSE_ROOFS.length], sign });
     signed.push(out[out.length - 1]);
+  }
+  return out;
+}
+
+/** `{ powerLines }` when the scenery has any (an absent key keeps old city files byte-identical). */
+function powerOf(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, inside: (p: Vec2) => boolean): { powerLines?: NonNullable<TrackScenery['powerLines']> } {
+  const powerLines = importPowerLines(osm, toXZ, inside);
+  return powerLines.length ? { powerLines } : {};
+}
+
+/**
+ * The high-voltage lines (power=line; the pole lines of power=minor_line aren't lattice towers and
+ * stay out): the towers along each way that lie inside the terrain, in order. A node counts as a
+ * tower when a power=tower node sits on it (when the data has any); the line is cut where it leaves
+ * the terrain, so no tower stands outside and cables never run off into nothing. One run of towers
+ * per stretch inside (two at least: a lone tower has nothing to hang a cable from).
+ */
+export function importPowerLines(osm: OsmJson, toXZ: (lat: number, lon: number) => Vec2, inside: (p: Vec2) => boolean): NonNullable<TrackScenery['powerLines']> {
+  const marked = osm.elements.filter((e) => e.type === 'node' && e.lat !== undefined && e.tags?.power === 'tower').map((e) => toXZ(e.lat!, e.lon!));
+  const isTower = (p: Vec2) => !marked.length || marked.some((m) => Math.hypot(m.x - p.x, m.z - p.z) < 2);
+  const out: NonNullable<TrackScenery['powerLines']> = [];
+  for (const e of osm.elements) {
+    if (e.type !== 'way' || !e.geometry || e.tags?.power !== 'line') continue;
+    const circuits = Math.max(1, Math.round(Number(e.tags.circuits) || (Number(e.tags.cables) || 3) / 3));
+    // (`out geom(bbox)` leaves the nodes outside the box null.)
+    const pts = e.geometry.map((g) => (g ? toXZ(g.lat, g.lon) : null));
+    for (const run of insideRuns(pts, (p) => inside(p) && isTower(p))) out.push({ towers: run.map((p) => ({ x: round(p.x, 2), z: round(p.z, 2) })), circuits });
   }
   return out;
 }

@@ -7,8 +7,8 @@
  * - <zone>.areas.json: campus grounds (universities, schools, hospitals) that get walls
  * The public servers are often overloaded; mirrors are tried in order.
  * A race track zone (`track` in zones.ts) gets only its highway's ways, into <zone>.osm.json, and
- * what's beside it (buildings, rivers, pipelines, roadside businesses) into <zone>.scenery.json.
- * Usage: npx tsx tools/fetch-osm.ts [zone] [osm|routes|stations|areas ...]
+ * what's beside it (buildings, rivers, pipelines, power lines, roadside businesses) into <zone>.scenery.json.
+ * Usage: npx tsx tools/fetch-osm.ts [zone] [osm|routes|stations|areas|scenery ...]
  */
 import { writeFileSync } from 'node:fs';
 import { ZONES } from './zones';
@@ -74,7 +74,7 @@ way["highway"~"^(motorway|trunk|primary|secondary)$"]["ref"~"(^|;)${zone.track.r
 out geom;`,
   };
   // What's beside it: the town's buildings, the river and streams, the oil pipelines along the
-  // road, and the roadside businesses (named in the game by their trade only, never their name).
+  // road, the power lines (their towers), and the roadside businesses (named in the game by their trade only, never their name).
   QUERIES.scenery = {
     file: zone.osm.replace('.osm.json', '.scenery.json'),
     query: `[out:json][timeout:120];
@@ -84,6 +84,8 @@ out geom;`,
   way["man_made"="pipeline"](${b});
   node["amenity"~"^(restaurant|cafe|pharmacy)$"](${b});
   node["tourism"~"^(hostel|hotel|guest_house)$"](${b});
+  way["power"~"^(line|minor_line)$"](${wide});
+  node["power"~"^(tower|pole)$"](${wide});
 );
 out tags geom(${wide});`,
   };

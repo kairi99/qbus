@@ -19,6 +19,7 @@ import { type Puff, MIST_LOOK, mistMesh } from './mist';
 import type { TrackScenery } from './track';
 import { distToPolyline, pointInPolygon } from './geom';
 import { crowdMesh, crowdSpots } from './spectators';
+import { TOWER_CLEAR, nearTower, powerLines } from './powerLines';
 
 const ASPHALT = '#4a4c52';
 const MARK_WHITE = '#eceae0';
@@ -80,10 +81,12 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   const sc = race.scenery;
   const water = new ChunkedMeshBuilder(400);
   const texts: TextSign[] = [];
+  let cables: THREE.LineSegments | null = null;
   if (sc) {
     for (const rv of sc.rivers) river(rv, water);
     for (const pipe of sc.pipes) pipeline(race, pipe, solid, ground, world, fixed);
-    for (const b of sc.buildings) house(race, b, solid, ground, texts, world, fixed);
+    for (const b of sc.buildings) (b.kind === 'chapel' ? chapel : house)(race, b, solid, ground, texts, world, fixed);
+    if (sc.powerLines) cables = powerLines(race, sc.powerLines, solid, ground, world, fixed);
   }
   const zones = mistZones(race, biome);
   roadSigns(race, zones, solid, ground, texts);
@@ -102,6 +105,7 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
     m.receiveShadow = true;
     scene.add(withinRange(m, PLANTS_RANGE * 1.6));
   }
+  if (cables) scene.add(cables);
   const signs = textSigns(texts);
   if (signs) scene.add(signs);
   const tod = timeOfDayOf(scene);
@@ -110,7 +114,7 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   // A crowd at the start and at the finish.
   const clear = (p: Vec2) => !!sc && blocked(sc, p);
   scene.add(crowdMesh([...crowdSpots(race, race.start - 70, race.start + 25, ground, clear), ...crowdSpots(race, race.finish - 40, race.finish + 15, ground, clear)]));
-  scene.add(mistMesh(mistPuffs(race, t, zones, biome), MIST_LOOK[tod], 2600));
+  scene.add(mistMesh(mistPuffs(race, t, zones, biome, sc?.powerLines), MIST_LOOK[tod], 2600));
 
   // No traffic lights or props on a track, but the session expects both.
   const signals = new SignalLamps({
@@ -650,9 +654,19 @@ export function canopyGeometry(lean: number): THREE.BufferGeometry {
     paint(g, shade);
     return g;
   };
+  // The crown leans out further than its own width: a bough from the trunk's top runs up into
+  // it and a small lump sits on the trunk, so no crown floats beside its trunk.
+  const top = new THREE.Vector3(0, CANOPY_BOTTOM + 0.7, 0);
+  const into = new THREE.Vector3(lean * 0.8, CANOPY_BOTTOM + 2.6, 0);
+  const bough = new THREE.CylinderGeometry(0.16, 0.24, top.distanceTo(into), 5)
+    .rotateZ(-Math.atan2(into.x - top.x, into.y - top.y))
+    .translate((top.x + into.x) / 2, (top.y + into.y) / 2, 0);
+  paint(bough, '#4f3d2e');
   // Every vertex of the crown is above CANOPY_BOTTOM (the lowest lump's center minus its depth).
   return merge([
     trunk,
+    bough,
+    lump(1.8, 0.7, 0.3, CANOPY_BOTTOM + 2.1, 0, '#e8e8e8'),
     lump(4.2, 0.6, lean, CANOPY_BOTTOM + 2.7, 0, '#ffffff'),
     lump(3.2, 0.6, lean + 2.6, CANOPY_BOTTOM + 3.3, 1.8, '#e8e8e8'),
     lump(3.0, 0.6, lean - 1.2, CANOPY_BOTTOM + 3.6, -2.4, '#f2f2f2'),
@@ -781,11 +795,12 @@ function unit(a: Vec2, b: Vec2): Vec2 {
   return { x: (b.x - a.x) / l, z: (b.z - a.z) / l };
 }
 
-/** No plant in a river, a building or on a pipeline. */
+/** No plant in a river, a building, on a pipeline or at a tower's feet. */
 export function blocked(sc: TrackScenery, p: Vec2): boolean {
   return (
     sc.rivers.some((rv) => distToPolyline(p, rv.points) < rv.width / 2 + 2) ||
     sc.pipes.some((pp) => distToPolyline(p, pp.points) < 2.5) ||
+    nearTower(sc.powerLines, p) ||
     sc.buildings.some((b) => pointInPolygon(p, b.footprint) || distToPolyline(p, [...b.footprint, b.footprint[0]]) < 3)
   );
 }
@@ -1002,6 +1017,89 @@ function house(race: TrackData, b: TrackScenery['buildings'][number], solid: Chu
   if (desc) world.createCollider(desc.setFriction(0.6), fixed);
 }
 
+/**
+ * A roadside chapel on its OSM footprint (a rectangle): whitewashed walls, a gable roof of clay
+ * tile with the ridge along the long side, a door and a window each side, and a belfry wall
+ * (espadaña) over the front gable with an open arch, a bell and a cross. The front is the short
+ * end that faces the road. Solid like a house (the footprint's hull); any other shape is a house.
+ */
+function chapel(race: TrackData, b: TrackScenery['buildings'][number], solid: ChunkedMeshBuilder, ground: (p: Vec2) => number, texts: TextSign[], world: RAPIER.World, fixed: RAPIER.RigidBody): void {
+  const fp = b.footprint;
+  if (fp.length !== 4) return house(race, b, solid, ground, texts, world, fixed);
+  const c = { x: fp.reduce((s, p) => s + p.x, 0) / 4, z: fp.reduce((s, p) => s + p.z, 0) / 4 };
+  // Axes: the long side is the nave. `a` runs along it, `w` across.
+  const e0 = { x: fp[1].x - fp[0].x, z: fp[1].z - fp[0].z };
+  const e1 = { x: fp[2].x - fp[1].x, z: fp[2].z - fp[1].z };
+  const [long, short] = Math.hypot(e0.x, e0.z) >= Math.hypot(e1.x, e1.z) ? [e0, e1] : [e1, e0];
+  const L = Math.hypot(long.x, long.z);
+  const W = Math.hypot(short.x, short.z);
+  let a = { x: long.x / L, z: long.z / L };
+  const w = { x: -a.z, z: a.x };
+  // The front (+a) is the short end toward the road.
+  const q = trackPoint(race, locateOnTrack(race, c).s);
+  if ((q.x - c.x) * a.x + (q.z - c.z) * a.z < 0) a = { x: -a.x, z: -a.z };
+  const hs = fp.map(ground);
+  const y0 = Math.min(...hs) - 0.3;
+  const base = Math.max(...hs);
+  const wall = 3.3;
+  const ridge = wall + W * 0.32;
+  const mb = solid.at(c.x, c.z);
+  const P = (u: number, v: number, y: number) => ({ x: c.x + a.x * u + w.x * v, y, z: c.z + a.z * u + w.z * v });
+  const [hl, hw] = [L / 2, W / 2];
+  const WHITE = '#f1ece0';
+  const TILE = '#a8503a';
+  // Walls, front and back gables included (the gable's triangle rises to the ridge).
+  mb.quad(P(hl, -hw, y0), P(hl, hw, y0), P(hl, hw, base + wall), P(hl, -hw, base + wall), WHITE);
+  mb.quad(P(-hl, hw, y0), P(-hl, -hw, y0), P(-hl, -hw, base + wall), P(-hl, hw, base + wall), WHITE);
+  mb.quad(P(hl, -hw, base + wall), P(hl, hw, base + wall), P(hl, 0, base + ridge), P(hl, 0, base + ridge), WHITE);
+  mb.quad(P(-hl, hw, base + wall), P(-hl, -hw, base + wall), P(-hl, 0, base + ridge), P(-hl, 0, base + ridge), WHITE);
+  for (const side of [-1, 1]) mb.quad(P(-hl, side * hw, y0), P(hl, side * hw, y0), P(hl, side * hw, base + wall), P(-hl, side * hw, base + wall), WHITE);
+  // The roof: two slopes with a little overhang, a darker ridge cap.
+  const ov = 0.4;
+  for (const side of [-1, 1]) {
+    mb.quad(P(-hl - ov, side * (hw + ov), base + wall - 0.25), P(hl + ov, side * (hw + ov), base + wall - 0.25), P(hl + ov, 0, base + ridge + 0.15), P(-hl - ov, 0, base + ridge + 0.15), TILE);
+    const cap = 0.12;
+    mb.quad(P(-hl - ov, side * cap, base + ridge + 0.1), P(hl + ov, side * cap, base + ridge + 0.1), P(hl + ov, side * cap, base + ridge + 0.3), P(-hl - ov, side * cap, base + ridge + 0.3), '#7d3a2a');
+  }
+  // Openings stand a few centimeters out of the walls (the material is double-sided).
+  const out = 0.04;
+  const front = (v0: number, v1: number, y0_: number, y1: number, color: string) => mb.quad(P(hl + out, v0, y0_), P(hl + out, v1, y0_), P(hl + out, v1, y1), P(hl + out, v0, y1), color);
+  const doorY = Math.max(ground(P(hl, 0, 0)), base - 0.1);
+  front(-0.6, 0.6, doorY, doorY + 2.1, '#5a4636');
+  front(-0.5, 0.5, doorY + 2.1, doorY + 2.45, '#5a4636');
+  // A low step at the door.
+  mb.quad(P(hl + 0.9, -0.9, doorY + 0.12), P(hl + 0.9, 0.9, doorY + 0.12), P(hl, 0.9, doorY + 0.12), P(hl, -0.9, doorY + 0.12), '#a9a39a');
+  for (const side of [-1, 1]) {
+    const sw = (u: number) => mb.quad(P(u - 0.4, side * (hw + out), base + 1.2), P(u + 0.4, side * (hw + out), base + 1.2), P(u + 0.4, side * (hw + out), base + 2.4), P(u - 0.4, side * (hw + out), base + 2.4), '#2d3a44');
+    sw(-hl * 0.3);
+    sw(hl * 0.3);
+  }
+  // The belfry: a thin wall over the front gable, an arch for the bell, a cross on top.
+  const bw = Math.min(1.6, W * 0.45);
+  const bt = 0.35;
+  const top = base + ridge + 1.9;
+  const wallY = base + wall;
+  const frontU = hl - bt / 2;
+  const slab = (u: number, v0: number, v1: number, y1: number, y2: number, color: string) => mb.quad(P(u, v0, y1), P(u, v1, y1), P(u, v1, y2), P(u, v0, y2), color);
+  for (const u of [hl + 0.02, hl - bt]) {
+    slab(u, -bw / 2, bw / 2, wallY, top, WHITE);
+    slab(u, -bw / 2, bw / 2, top, top, WHITE);
+  }
+  for (const v of [-bw / 2, bw / 2]) mb.quad(P(hl - bt, v, wallY), P(hl + 0.02, v, wallY), P(hl + 0.02, v, top), P(hl - bt, v, top), WHITE);
+  mb.quad(P(hl - bt, -bw / 2, top), P(hl + 0.02, -bw / 2, top), P(hl + 0.02, bw / 2, top), P(hl - bt, bw / 2, top), '#d8d1c1');
+  const archY = base + ridge + 0.6;
+  slab(hl + 0.05, -0.4, 0.4, archY, archY + 0.9, '#262424');
+  slab(hl + 0.05, -0.25, 0.25, archY + 0.9, archY + 1.15, '#262424');
+  slab(hl + 0.07, -0.12, 0.12, archY + 0.4, archY + 0.9, '#8a6a2a');
+  // Cross.
+  const crossBase = top;
+  slab(frontU, -0.05, 0.05, crossBase, crossBase + 0.9, '#e8e2d2');
+  slab(frontU, -0.3, 0.3, crossBase + 0.55, crossBase + 0.65, '#e8e2d2');
+  const hull = new Float32Array([...fp.flatMap((p) => [p.x, y0, p.z, p.x, base + wall, p.z]), ...[P(hl, 0, top).x, top, P(hl, 0, top).z]]);
+  const desc = RAPIER.ColliderDesc.convexHull(hull);
+  if (desc) world.createCollider(desc.setFriction(0.6), fixed);
+}
+
 /** Two stretches of thick mist on the road (Papallacta's páramo is in the clouds most afternoons). */
 function mistZones(race: TrackData, biome: Biome): { s0: number; s1: number }[] {
   const len = race.finish - race.start;
@@ -1081,7 +1179,7 @@ function textSigns(signs: TextSign[]): THREE.Mesh | null {
  * the road (the páramo lives in its clouds), and thick, low puffs over the asphalt along the
  * misty stretches, thinning out at their ends.
  */
-function mistPuffs(race: TrackData, t: Terrain, zones: { s0: number; s1: number }[], biome: Biome): Puff[] {
+function mistPuffs(race: TrackData, t: Terrain, zones: { s0: number; s1: number }[], biome: Biome, towers?: TrackScenery['powerLines']): Puff[] {
   const m = biome.mist;
   const rng = new Rng(41);
   const out: Puff[] = [];
@@ -1097,7 +1195,10 @@ function mistPuffs(race: TrackData, t: Terrain, zones: { s0: number; s1: number 
     const size = rng.range(90, 220);
     // Lying against the slope: a bit over the ground there, up to ~250 m over the road.
     const y = Math.max(tAt(x, z) + size * 0.2, q.y + rng.range(...m.bankRise));
-    out.push({ x, y, z, size, alpha: rng.range(...m.bankAlpha) });
+    // (After the dice, so the other banks keep theirs.) A bank never swallows a tower.
+    const alpha = rng.range(...m.bankAlpha);
+    if (nearTower(towers, { x, z }, size * 0.5 + TOWER_CLEAR)) continue;
+    out.push({ x, y, z, size, alpha });
   }
   for (const zn of zones)
     for (let s = zn.s0; s < zn.s1; s += 7) {

@@ -2,11 +2,250 @@
   "version": 0.6,
   "generator": "Overpass API 0.7.62.11 87bfad18",
   "osm3s": {
-    "timestamp_osm_base": "2026-10-22T12:54:24Z",
+    "timestamp_osm_base": "2026-10-22T14:25:32Z",
     "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
   },
   "elements": [
 
+{
+  "type": "node",
+  "id": 2615458889,
+  "lat": -0.4372771,
+  "lon": -78.7039525,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458910,
+  "lat": -0.4375332,
+  "lon": -78.7077687,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458918,
+  "lat": -0.4376459,
+  "lon": -78.7097082,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458933,
+  "lat": -0.4381376,
+  "lon": -78.7129756,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458956,
+  "lat": -0.4383631,
+  "lon": -78.7212491,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458962,
+  "lat": -0.4384063,
+  "lon": -78.7228219,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458972,
+  "lat": -0.4393344,
+  "lon": -78.6992494,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458989,
+  "lat": -0.4393424,
+  "lon": -78.6940418,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615458998,
+  "lat": -0.4414396,
+  "lon": -78.6851498,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "node",
+  "id": 2615459010,
+  "lat": -0.4437191,
+  "lon": -78.6783632,
+  "tags": {
+    "power": "tower",
+    "source": "bing"
+  }
+},
+{
+  "type": "way",
+  "id": 188294825,
+  "bounds": {
+    "minlat": -0.4460039,
+    "minlon": -78.7269668,
+    "maxlat": -0.4372771,
+    "maxlon": -78.6698878
+  },
+  "geometry": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    { "lat": -0.4382521, "lon": -78.7269668 },
+    { "lat": -0.4384063, "lon": -78.7228219 },
+    { "lat": -0.4383631, "lon": -78.7212491 },
+    { "lat": -0.4381376, "lon": -78.7129756 },
+    { "lat": -0.4376459, "lon": -78.7097082 },
+    { "lat": -0.4375332, "lon": -78.7077687 },
+    { "lat": -0.4372771, "lon": -78.7039525 },
+    { "lat": -0.4393344, "lon": -78.6992494 },
+    { "lat": -0.4393424, "lon": -78.6940418 },
+    { "lat": -0.4414396, "lon": -78.6851498 },
+    { "lat": -0.4437191, "lon": -78.6783632 },
+    { "lat": -0.4460039, "lon": -78.6698878 },
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "tags": {
+    "cables": "6",
+    "circuits": "2",
+    "frequency": "60",
+    "operator": "CELEC-Transelectric",
+    "power": "line",
+    "ref": "ROS2DOM",
+    "voltage": "230000",
+    "wires": "single"
+  }
+},
 {
   "type": "way",
   "id": 255822940,

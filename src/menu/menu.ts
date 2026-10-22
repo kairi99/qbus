@@ -146,7 +146,7 @@ export class Menu {
             (<code>data/cities/*.json</code>) son una base de datos derivada y se comparten bajo la misma licencia. La pista
             Paso de la Muerte es un tramo real de la Vía Interoceánica (E20) entre Papallacta y Cuyuja, y la pista Bajada del
             Silante, un tramo real de la Vía Alóag–Santo Domingo (E20) entre Arrayán y el Río Silante: las vías, sus ríos, los
-            oleoductos y las casas también salen de OpenStreetMap; los letreros de los negocios solo dicen lo que venden.</p>
+            oleoductos, la línea de alta tensión, la capilla y las casas también salen de OpenStreetMap; los letreros de los negocios solo dicen lo que venden.</p>
           </section>
           <section>
             <h2>Relieve</h2>

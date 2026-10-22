@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { CityData } from '../src/world/cityData';
@@ -53,5 +54,11 @@ describe('biomes', () => {
     let crownBelow = 0;
     for (let i = 0; i < pos.count; i++) if (pos.getY(i) < CANOPY_BOTTOM && Math.hypot(pos.getX(i), pos.getZ(i)) > 0.5) crownBelow++;
     expect(crownBelow).toBe(0);
+  });
+  it('the canopy crown is joined to its trunk (it leans out further than it is wide)', () => {
+    // Straight up from the trunk's top (CANOPY_BOTTOM + 1) the crown starts at once, not open air.
+    const mesh = new THREE.Mesh(canopyGeometry(5), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+    const ray = new THREE.Raycaster(new THREE.Vector3(0, CANOPY_BOTTOM + 1.05, 0), new THREE.Vector3(0, 1, 0), 0, 4);
+    expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);
   });
 });
