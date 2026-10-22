@@ -7,11 +7,12 @@ import { type TrackData, locateOnTrack } from '../world/track';
 import { CREWS, gridSlots } from '../gameplay/raceField';
 import type { RaceSession, RemoteEntry } from '../gameplay/raceSession';
 import { RoomConnection, clearSession } from './connection';
-import { type CarState, type GridEntry, type Racer, type S2C, type Seat, racerKey } from './protocol';
+import { type CarState, type GridEntry, type Racer, type ResultRow, type S2C, type Seat, racerKey } from './protocol';
 import { RemoteBus } from './remoteBus';
 import { carState } from './snapshots';
 import { gridKeys, mySlot, racerOf } from './onlineGrid';
 import { AI_COLOR, seatColor } from './colors';
+import { HornLatch } from './horn';
 import { type Life, remoteLife } from './live';
 
 /** Snapshots sent per second (the player's bus, and the host's AI). */
@@ -24,12 +25,17 @@ export interface Joined {
   go: Go;
   /** The room's seats when the race started (names, who is host). */
   seats: Seat[];
+  /** Back in a running race: the times the room already had. */
+  rows?: ResultRow[];
 }
 
 const FAILED: Record<string, string> = {
   rejected: 'No se pudo volver a la sala',
   closed: 'Se perdió la conexión con la sala',
 };
+
+/** The loading page keeps trying to reach the room (a dead network, a sleeping phone) until the player gives up. */
+const GIVE_UP_MS = Infinity;
 
 /**
  * The game page's way into an online race: reconnects to the room with the seat's token (the
@@ -40,34 +46,60 @@ const FAILED: Record<string, string> = {
 export function joinOnline(code: string, hello: { name: string; vehicle: string; token: string }, root: HTMLElement): Promise<Joined> {
   const card = document.createElement('div');
   card.className = 'ol-wait';
-  card.innerHTML = `<p data-k="text">Esperando a los panas…</p><button class="gh-btn" data-act="menu" hidden>Volver al menú</button>`;
+  card.innerHTML = `<p data-k="text">Esperando a los panas…</p><button class="gh-btn" data-act="retry" hidden>Reconectar</button><button class="gh-btn" data-act="menu">Volver al menú</button>`;
   root.appendChild(card);
   const text = card.querySelector<HTMLElement>('[data-k="text"]')!;
   const back = card.querySelector<HTMLElement>('[data-act="menu"]')!;
+  const retry = card.querySelector<HTMLElement>('[data-act="retry"]')!;
   back.addEventListener('click', () => {
     clearSession();
     location.search = '';
   });
-  const conn = new RoomConnection(code, hello);
+  const conn = new RoomConnection(code, hello, { giveUpMs: GIVE_UP_MS });
+  retry.addEventListener('click', () => conn.retry());
   let seats: Seat[] = [];
   let done = false;
+  let rows: ResultRow[] | undefined;
   return new Promise((resolve) => {
     conn.on('welcome', () => conn.send({ t: 'loaded' }));
-    conn.on('room', (m) => (seats = m.seats));
-    conn.on('go', (go) => {
-      // The server sends `go` again when a seat is reclaimed mid-race: the first one is the one.
-      if (done) return;
+    conn.on('room', (m) => {
+      seats = m.seats;
+      // The race is over (or called off) while this page was away: the room's lobby, not a race to wait for.
+      if (!done && (m.phase === 'results' || m.phase === 'lobby')) {
+        done = true;
+        conn.onState = null;
+        location.search = `?lobby=${code}`;
+      }
+    });
+    conn.on('result', (m) => (rows = m.rows));
+    // A page that reloads mid-race gets `go` right after its welcome, before the clock has a
+    // sample: it starts once the shared clock is known.
+    let pending: Go | null = null;
+    const ready = () => {
+      if (done || !pending || !conn.clock.ready) return;
       done = true;
       card.remove();
       conn.onState = null;
-      resolve({ conn, go, seats });
+      resolve({ conn, go: pending, seats, rows });
+    };
+    conn.on('go', (go) => {
+      // The server sends `go` again when a seat is reclaimed mid-race: the first one is the one.
+      pending ??= go;
+      ready();
     });
+    conn.on('pong', ready);
     conn.onState = (st) => {
-      if (st === 'connecting') text.textContent = 'Reconectando…';
-      if (st === 'open') text.textContent = 'Esperando a los panas…';
+      if (st === 'connecting') {
+        text.textContent = 'Reconectando…';
+        retry.hidden = false;
+      }
+      if (st === 'open') {
+        text.textContent = pending ? 'Volviendo a la carrera…' : 'Esperando a los panas…';
+        retry.hidden = true;
+      }
       if (FAILED[st]) {
-        text.textContent = FAILED[st];
-        back.hidden = false;
+        text.textContent = conn.replaced ? 'Otra pestaña tomó tu lugar en la sala' : FAILED[st];
+        retry.hidden = st === 'rejected';
       }
     };
   });
@@ -100,13 +132,16 @@ export class OnlineRace {
   /** Per remote (in `remotes` order): whose seat it hangs on and when its last snapshot came (ms). */
   private live: { key: string; seat: number; human: boolean; lastAt: number; life: Life }[] = [];
   private seats: Seat[];
+  private resume: Record<string, number> | undefined;
   private linkAt = performance.now();
   private linkState: string = 'open';
-  /** The connection is gone for good (closed or rejected): racing alone. */
+  /** The connection is gone for good (the seat is no longer in the room, or the player left): racing alone. */
   offline = false;
   private race: RaceSession | null = null;
   private clockAcc = 0;
   private mine: CarState | undefined;
+  /** The player's horn since the last snapshot. */
+  private horn = new HornLatch();
   private ai: (CarState | undefined)[] = [];
   private cars: CarState[] = [];
   /** GO on the server's clock (ms). */
@@ -121,6 +156,7 @@ export class OnlineRace {
   ) {
     const { go, seats } = joined;
     this.seats = seats;
+    this.resume = go.resume;
     const hostSeat = seats.find((s) => s.host)?.id ?? -1;
     this.grid = go.grid;
     this.goAt = go.goAt;
@@ -167,6 +203,19 @@ export class OnlineRace {
   /** The race this feeds (made after the grid is known). */
   attach(race: RaceSession): void {
     this.race = race;
+    race.hud.onRetry = () => this.conn.retry();
+  }
+
+  /**
+   * A page that comes back to a race already running (a reload, a reopened tab): where the room
+   * last saw this player's bus and the AI simulated here, as track meters (null: no snapshot yet,
+   * stay on the grid). Undefined when this is a fresh start.
+   */
+  resumeAt(): { player: number | null; ai: (number | null)[] } | undefined {
+    const at = this.resume;
+    if (!at) return undefined;
+    const get = (key: string) => (Number.isFinite(at[key]) ? at[key] : null);
+    return { player: get(this.keys[0]), ai: this.keys.slice(1, 1 + this.localAi.length).map(get) };
   }
 
   /** Seconds to GO on the shared clock (negative after). */
@@ -210,9 +259,10 @@ export class OnlineRace {
   }
 
   /** Each physics step: snapshots out at SNAP_HZ (the player's bus, the host's AI), finish times out. */
-  tick(dt: number, bus: BusPhysics, throttle: number): void {
+  tick(dt: number, bus: BusPhysics, throttle: number, hornHeld: boolean): void {
     const race = this.race;
     if (!race) return;
+    this.horn.feed(hornHeld);
     for (const f of race.finishes) this.conn.send({ t: 'fin', who: racerFromKey(f.key), time: f.time });
     race.finishes.length = 0;
     this.clockAcc += dt;
@@ -221,6 +271,8 @@ export class OnlineRace {
     const cars = this.cars;
     cars.length = 0;
     this.mine = carState(bus, racerOf(this.grid[this.me]), race.trackS(0), throttle, this.mine);
+    if (this.horn.take()) this.mine.h = 1;
+    else delete this.mine.h;
     cars.push(this.mine);
     race.rivals.forEach((r, i) => {
       this.ai[i] = carState(r.bus, racerFromKey(this.keys[i + 1]), race.trackS(i + 1), r.throttle, this.ai[i]);

@@ -16,9 +16,11 @@ import {
 } from '../../src/net/protocol';
 
 /** Milliseconds a dropped seat keeps its place in the lobby. */
-export const LOBBY_GRACE = 30_000;
-/** ... and once the room has started loading or racing. */
-export const RACE_GRACE = 20_000;
+export const LOBBY_GRACE = 60_000;
+/** ... while the room loads the track (a page on its way from the menu to the game). */
+export const LOAD_GRACE = 20_000;
+/** ... and in a race (or its results): long enough to last the race, so a seat can always come back to it. */
+export const RACE_GRACE = 300_000;
 /** Longest wait for every `loaded`; laggards are dropped. */
 export const LOAD_TIMEOUT = 30_000;
 /** From the last `loaded` to the green light (goAt). */
@@ -44,6 +46,8 @@ export interface SeatState extends Seat {
   droppedAt: number | null;
   /** Has sent `loaded` for this start. */
   loaded: boolean;
+  /** When it first joined (ms): the oldest connected seat inherits the host. Seats stored before this existed count by id. */
+  since?: number;
 }
 
 /** Plain JSON, so a Durable Object can store it as is. */
@@ -60,6 +64,8 @@ export interface RoomState {
   firstFin: number | null;
   /** racerKey -> seconds, first report only. */
   times: Record<string, number>;
+  /** racerKey -> last track position (m) its snapshots reported: where a page that reloads mid-race puts its bus back. */
+  last?: Record<string, number>;
   lastActivity: number;
 }
 
@@ -89,6 +95,7 @@ export class RoomLogic {
         loadStart: 0,
         firstFin: null,
         times: {},
+        last: {},
         lastActivity: 0,
       };
   }
@@ -122,14 +129,19 @@ export class RoomLogic {
       if (s.seats.length >= MAX_SEATS) return reject('full');
       let id = 0;
       while (s.seats.some((x) => x.id === id)) id++;
-      seat = { id, name: cleanName(msg.name), vehicle: msg.vehicle.slice(0, 24), ready: false, host: false, online: true, token: this.makeToken(), droppedAt: null, loaded: false };
+      seat = { id, name: cleanName(msg.name), vehicle: msg.vehicle.slice(0, 24), ready: false, host: false, online: true, token: this.makeToken(), droppedAt: null, loaded: false, since: now };
       s.seats.push(seat);
       s.seats.sort((a, b) => a.id - b.id);
     }
     this.ensureHost();
     const out: Out[] = [{ to: seat.id, msg: { t: 'welcome', v: PROTO, you: seat.id, token: seat.token, code: s.code } }, this.roomMsg()];
-    // A seat back mid-race gets the start again; the client skips what it already has.
-    if (back && s.phase === 'racing') out.push({ to: seat.id, msg: { t: 'go', grid: s.grid, seed: s.seed, goAt: s.goAt } });
+    // A seat back mid-race gets the start again (with where the room last saw everyone), and the times
+    // so far; the client skips what it already has. Back after the end: the final results.
+    if (back && s.phase === 'racing') {
+      if (Object.keys(s.times).length) out.push({ to: seat.id, msg: { t: 'result', rows: this.rows(), final: false } });
+      out.push({ to: seat.id, msg: { t: 'go', grid: s.grid, seed: s.seed, goAt: s.goAt, resume: { ...s.last } } });
+    }
+    if (back && s.phase === 'results') out.push({ to: seat.id, msg: { t: 'result', rows: this.rows(), final: true } });
     return { seat: seat.id, out };
   }
 
@@ -164,7 +176,10 @@ export class RoomLogic {
         return this.checkGo(now);
       }
       case 'st':
-        if (s.phase !== 'racing' || msg.cars.length > 8) return [];
+        if (s.phase !== 'racing' || msg.cars.length > 2 * MAX_SEATS) return [];
+        // Where each racer was: its own seat's (the host's for the AI).
+        s.last ??= {};
+        for (const c of msg.cars) if ('seat' in c.who ? c.who.seat === seat : me.host) s.last[racerKey(c.who)] = c.s;
         return [{ to: 'others', from: seat, msg: { t: 'st', from: seat, at: msg.at, cars: msg.cars } }];
       case 'fin':
         return this.fin(me, msg.who, msg.time, now);
@@ -215,7 +230,7 @@ export class RoomLogic {
   }
 
   private grace(): number {
-    return this.s.phase === 'lobby' ? LOBBY_GRACE : RACE_GRACE;
+    return this.s.phase === 'lobby' ? LOBBY_GRACE : this.s.phase === 'loading' ? LOAD_GRACE : RACE_GRACE;
   }
 
   private makeToken(): string {
@@ -229,12 +244,18 @@ export class RoomLogic {
     return { to: 'all', msg: { t: 'room', phase: this.s.phase, seats, settings: this.s.settings } };
   }
 
-  /** Exactly one host while any seat is online: the current one if online, else the lowest online seat. */
+  /**
+   * One host: the current one stays while its seat exists, online or not (a dropped link or a
+   * reload is not leaving). Only when the seat is gone (grace over, or it left) the oldest
+   * connected seat takes over; with nobody connected the room waits for a seat to come back.
+   */
   private ensureHost(): void {
     const seats = this.s.seats;
-    const online = seats.filter((x) => x.online);
-    if (!online.length) return;
-    const host = online.find((x) => x.host) ?? online[0];
+    let host = seats.find((x) => x.host);
+    if (!host) {
+      host = seats.filter((x) => x.online).sort((a, b) => (a.since ?? a.id) - (b.since ?? b.id) || a.id - b.id)[0];
+      if (!host) return;
+    }
     for (const x of seats) x.host = x === host;
   }
 
@@ -259,6 +280,7 @@ export class RoomLogic {
     s.phase = 'lobby';
     s.grid = [];
     s.times = {};
+    s.last = {};
     s.firstFin = null;
     s.seats = s.seats.filter((x) => x.online);
     for (const x of s.seats) x.ready = false;
@@ -297,6 +319,7 @@ export class RoomLogic {
     s.phase = 'loading';
     s.loadStart = now;
     s.times = {};
+    s.last = {};
     s.firstFin = null;
     return [this.roomMsg()];
   }

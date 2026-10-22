@@ -100,3 +100,15 @@ test('a race on the Silante track: the grid, the countdown and the cloud-forest 
   await page.screenshot({ path: `${shots}/b9-silante-grid.png` });
   expect(errors).toEqual([]);
 });
+
+test('a race with five rivals: six on the grid, the countdown runs, nobody starts early', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?play=1&mode=race&city=papallacta&tutorial=0&rain=0&rivals=9&rivalBus=gusanito');
+  await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 90_000 });
+  await expect(page.locator('.rh-count')).toHaveText(/[321]/, { timeout: 60_000 });
+  expect(await page.evaluate(() => (window as any).__qbus.racing.rivals.length)).toBe(5);
+  await expect(page.locator('.rh-place')).toContainText('/ 6');
+  await page.screenshot({ path: `${shots}/b10-six-on-the-grid.png` });
+  expect(errors).toEqual([]);
+});

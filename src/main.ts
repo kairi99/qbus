@@ -196,6 +196,14 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   };
   if (racing) racing.hud.onAction = (a) => (a === 'menu' ? (net ? net.leave() : toMenu()) : a === 'lobby' ? net?.toLobby() : again());
   if (net && racing) net.attach(racing);
+  // A page back in a race already running (reload, reopened tab): the bus goes where the room last saw it.
+  if (net && racing) {
+    const back = net.resumeAt();
+    if (back) {
+      racing.resume(back.player, back.ai);
+      if (joined?.rows) racing.applyResults(joined.rows, false);
+    }
+  }
   if (racing) racing.camera = camera;
 
   // How to play, every time a shift, free roam or a race starts (unless turned off, or ?tutorial=0).
@@ -369,7 +377,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       } else bus.update({ ...drive, boost: session.nitro.step(!!drive.boost, PHYSICS_STEP) }, PHYSICS_STEP);
       if (net) {
         net.beforeStep(acc - PHYSICS_STEP, PHYSICS_STEP);
-        net.tick(PHYSICS_STEP, bus, drive.throttle);
+        net.tick(PHYSICS_STEP, bus, drive.throttle, input.hornHeld);
       }
       session.beforeStep(PHYSICS_STEP);
       world.step();

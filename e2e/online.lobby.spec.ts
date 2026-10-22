@@ -22,7 +22,7 @@ test('two players meet in an online lobby', async ({ browser }) => {
   const codeEl = a.page.locator('[data-room-code]');
   await expect(codeEl).toHaveText(/^[A-Z0-9]{4}$/, { timeout: 20_000 });
   const code = (await codeEl.textContent())!;
-  await expect(a.page.locator('.mn-seat')).toHaveCount(4);
+  await expect(a.page.locator('.mn-seat')).toHaveCount(6);
 
   // B joins by code (a wrong one first).
   await b.page.locator('input[name="name"]').fill('Beto');
@@ -54,6 +54,28 @@ test('two players meet in an online lobby', async ({ browser }) => {
   await expect(a.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('Listo');
   await a.page.screenshot({ path: `${shots}/online-lobby-host.png` });
   await b.page.screenshot({ path: `${shots}/online-lobby-guest.png` });
+
+  // B reloads the page: back in the same room, same seat (still ready), the host unchanged.
+  await b.page.reload();
+  await expect(b.page.locator('[data-room-code]')).toHaveText(code, { timeout: 20_000 });
+  await expect(b.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('(tú)');
+  await expect(b.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('Listo');
+  await expect(a.page.locator('.mn-seat[data-seat]')).toHaveCount(2);
+  await expect(a.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Ana' })).toContainText('Anfitrión');
+  await expect(start).toBeEnabled();
+
+  // B closes the tab and opens the link again (a new tab: no sessionStorage): "Volver a la sala" takes the seat back.
+  const b2 = await b.ctx.newPage();
+  b2.on('pageerror', (e) => errors.push(e.message));
+  await b.page.close();
+  await b2.goto('/?tutorial=0');
+  await b2.getByRole('button', { name: 'En línea' }).click();
+  await expect(a.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('Desconectado');
+  await b2.getByRole('button', { name: `Volver a la sala ${code}` }).click();
+  await expect(b2.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('(tú)');
+  await expect(a.page.locator('.mn-seat[data-seat]')).toHaveCount(2);
+  await expect(a.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('Listo');
+  b.page = b2;
 
   // B leaves: A sees one seat.
   await b.page.getByRole('button', { name: 'Salir de la sala' }).click();

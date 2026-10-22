@@ -14,6 +14,8 @@ export const CREWS: (Crew & { bus: string })[] = [
   { name: 'Chulla Vida', bus: 'interparroquial', color: '#f5d21c', stripe: '#d0281f', roof: '#f2f2ee' },
   { name: 'Ñaño Veloz', bus: 'buseta', color: '#ef7d1a', stripe: '#1d1a14', roof: '#efefef' },
   { name: 'Trans Guambra', bus: 'popular', color: '#2e9b52', stripe: '#f2f2ee', roof: '#e8e8e8' },
+  { name: 'Longo Rayo', bus: 'articulado', color: '#2f6fd0', stripe: '#f2f2ee', roof: '#dfe6f2' },
+  { name: 'Cuy Turbo', bus: 'ae86', color: '#a63fcf', stripe: '#f5d21c', roof: '#ececec' },
 ];
 export const MAX_RIVALS = CREWS.length;
 /**
@@ -56,10 +58,10 @@ export function rivalVehicles(choice: RivalChoice, player: string, n: number, po
 }
 
 /** Grid slots: fronts this far apart along the road, in alternate lanes (m off the middle, + right). */
-const SLOT_GAP = 9.75;
+const SLOT_GAP = 3.5;
 const LANE = 2.1;
 /** Room left behind a vehicle in the same lane (m). */
-const SLOT_ROOM = 4;
+const SLOT_ROOM = 3;
 
 /**
  * The grid for vehicles of these lengths (rivals first, pole first; the player last, at the back

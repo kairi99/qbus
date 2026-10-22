@@ -36,6 +36,41 @@ export interface OnlineSession {
   name: string;
 }
 const SESSION_KEY = 'qbus.online';
+/** Seats by room code, kept past the tab (localStorage): a closed tab's link still gets its seat back. */
+const SEATS_KEY = 'qbus.online.seats';
+/** A saved seat is forgotten after this long (ms): the rooms themselves are gone long before. */
+export const SEAT_TTL = 3 * 3600_000;
+
+type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+const local = (): Store | null => {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+};
+
+const okSession = (j: any): boolean => j && typeof j.code === 'string' && typeof j.token === 'string' && typeof j.name === 'string' && !!j.code && !!j.token;
+
+function loadSeats(s: Store | null, now: number): Record<string, OnlineSession & { at: number }> {
+  const out: Record<string, OnlineSession & { at: number }> = {};
+  try {
+    const j = JSON.parse(s?.getItem(SEATS_KEY) ?? 'null');
+    if (j && typeof j === 'object') for (const v of Object.values<any>(j)) if (okSession(v) && typeof v.at === 'number' && now - v.at < SEAT_TTL) out[v.code] = { code: v.code, token: v.token, name: v.name, at: v.at };
+  } catch {
+    /* corrupt or unavailable */
+  }
+  return out;
+}
+
+function storeSeats(s: Store | null, seats: Record<string, unknown>): void {
+  try {
+    if (Object.keys(seats).length) s?.setItem(SEATS_KEY, JSON.stringify(seats));
+    else s?.removeItem(SEATS_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 export function saveSession(s: OnlineSession): void {
   try {
@@ -43,26 +78,52 @@ export function saveSession(s: OnlineSession): void {
   } catch {
     /* storage unavailable */
   }
+  const store = local();
+  const now = Date.now();
+  storeSeats(store, { ...loadSeats(store, now), [s.code]: { ...s, at: now } });
 }
 
+/** This tab's seat (survives a reload). */
 export function loadSession(): OnlineSession | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const j = JSON.parse(raw);
-    if (j && typeof j.code === 'string' && typeof j.token === 'string' && typeof j.name === 'string' && j.code && j.token) return { code: j.code, token: j.token, name: j.name };
+    if (okSession(j)) return { code: j.code, token: j.token, name: j.name };
   } catch {
     /* corrupt or unavailable */
   }
   return null;
 }
 
-export function clearSession(): void {
+/** The seat this browser held in room `code`: this tab's, else the last saved one (a reopened tab), if not expired. */
+export function savedSeat(code: string): OnlineSession | null {
+  const mine = loadSession();
+  if (mine && mine.code === code) return mine;
+  const v = loadSeats(local(), Date.now())[code];
+  return v ? { code: v.code, token: v.token, name: v.name } : null;
+}
+
+/** The most recently saved seat of any room (for "Volver a la sala"), if not expired. */
+export function lastSavedSeat(): OnlineSession | null {
+  const all = Object.values(loadSeats(local(), Date.now())).sort((a, b) => b.at - a.at);
+  return all[0] ? { code: all[0].code, token: all[0].token, name: all[0].name } : null;
+}
+
+/** Forgets this tab's seat and the saved one of its room (or of `code`). */
+export function clearSession(code?: string): void {
+  const mine = loadSession();
   try {
     sessionStorage.removeItem(SESSION_KEY);
   } catch {
     /* storage unavailable */
   }
+  const c = code ?? mine?.code;
+  if (!c) return;
+  const store = local();
+  const seats = loadSeats(store, Date.now());
+  delete seats[c];
+  storeSeats(store, seats);
 }
 
 export type ConnState = 'connecting' | 'open' | 'closed' | 'rejected';
@@ -73,6 +134,8 @@ export interface ConnOptions {
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
+  /** Keep retrying a lost link this long (ms) before the state turns `closed` (Infinity: until `close()` or a rejection). */
+  giveUpMs?: number;
 }
 
 const QUICK_PINGS = 5;
@@ -82,12 +145,16 @@ const BACKOFF = [500, 1000, 2000, 4000];
 const GIVE_UP_MS = 30_000;
 const FATAL = ['version', 'full', 'racing', 'unknown'];
 const OPEN = 1;
+/** The room's close code for a socket whose seat another socket took. */
+const REPLACED = 4001;
 
 export class RoomConnection {
   readonly clock = new ClockSync();
   seat: number | null = null;
   token: string | null = null;
   state: ConnState = 'connecting';
+  /** Rejected because another page took this seat over. */
+  replaced = false;
   onState: ((s: ConnState) => void) | null = null;
 
   private ws: WebSocket | null = null;
@@ -99,6 +166,7 @@ export class RoomConnection {
   private pingTimer: unknown = null;
   private retryTimer: unknown = null;
   private listeners = new Map<string, Set<(m: any) => void>>();
+  private readonly giveUpMs: number;
   private readonly url: string;
   private readonly Impl: typeof WebSocket;
   private readonly now: () => number;
@@ -116,6 +184,7 @@ export class RoomConnection {
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
     this.token = hello.token ?? null;
+    this.giveUpMs = opts.giveUpMs ?? GIVE_UP_MS;
     this.connect();
   }
 
@@ -133,6 +202,29 @@ export class RoomConnection {
     if (!ws || ws.readyState !== OPEN) return;
     if (m.t !== 'hello' && !this.welcomed) return;
     ws.send(JSON.stringify(m));
+  }
+
+  /** "Reconectar": try again now (also after the connection gave up), starting the backoff over. */
+  retry(): void {
+    if (this.stopped && this.state === 'rejected') return;
+    if (this.ws && this.welcomed) return;
+    this.stopped = false;
+    this.attempt = 0;
+    this.offlineSince = -1;
+    if (this.retryTimer !== null) this.clearTimer(this.retryTimer);
+    this.retryTimer = null;
+    const ws = this.ws;
+    this.ws = null;
+    if (ws) {
+      ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null;
+      try {
+        ws.close();
+      } catch {
+        /* already closed */
+      }
+    }
+    this.setState('connecting');
+    this.connect();
   }
 
   /** Leave the room and stop for good. */
@@ -170,8 +262,16 @@ export class RoomConnection {
       const m = typeof e.data === 'string' ? parseS2C(e.data) : null;
       if (m) this.handle(m);
     };
-    ws.onclose = () => {
+    ws.onclose = (e: CloseEvent) => {
       if (ws !== this.ws) return;
+      // The room gave this seat to another page (a second tab, a reopened one): this page must not take it back.
+      if (e?.code === REPLACED) {
+        this.replaced = true;
+        this.stopped = true;
+        this.teardown();
+        this.setState('rejected');
+        return;
+      }
       this.dropped();
     };
     ws.onerror = () => {};
@@ -231,7 +331,7 @@ export class RoomConnection {
     }
   }
 
-  /** The socket went away on its own: retry with backoff, give up after 30 s offline. */
+  /** The socket went away on its own: retry with backoff, give up after `giveUpMs` offline. */
   private dropped(): void {
     if (this.stopped) return;
     this.stopPings();
@@ -241,7 +341,7 @@ export class RoomConnection {
     if (this.offlineSince < 0) this.offlineSince = t;
     const delay = BACKOFF[Math.min(this.attempt, BACKOFF.length - 1)];
     this.attempt++;
-    if (t + delay - this.offlineSince > GIVE_UP_MS) {
+    if (t + delay - this.offlineSince > this.giveUpMs) {
       this.stopped = true;
       this.setState('closed');
       return;

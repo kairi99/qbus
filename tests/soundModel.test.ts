@@ -91,6 +91,13 @@ describe('mix levels', () => {
     expect(db(LEVELS.rivalEngine)).toBeGreaterThan(-8);
   });
 
+  it("another player's horn, 8 m off, is under their own horn at the wheel and over a rival's engine", () => {
+    for (const k of ['bus', 'car'] as const) {
+      expect(LEVELS.remoteHorn[k]).toBeLessThanOrEqual(LEVELS.horn[k]);
+      expect(LEVELS.remoteHorn[k]).toBeGreaterThan(LEVELS.rivalEngine);
+    }
+  });
+
   it('a river below the road is background, under the rain and well under the engine', () => {
     expect(LEVELS.river).toBeLessThan(LEVELS.rain);
     expect(db(LEVELS.river)).toBeLessThan(-8);

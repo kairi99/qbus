@@ -5,7 +5,7 @@ test.describe.configure({ timeout: 480_000 });
 
 const q = (page: Page, fn: string) => page.evaluate(`(() => { const q = window.__qbus; return ${fn}; })()`);
 
-test('a player closes the page mid-race: ghost, then gone; the host finishes with them "retirado"', async ({ browser }) => {
+test('a player closes the page mid-race: ghost (his seat is kept); the host finishes, the final results hold him as "retirado"', async ({ browser }) => {
   const errors: string[] = [];
   const open = async (name: string) => {
     const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
@@ -35,11 +35,10 @@ test('a player closes the page mid-race: ghost, then gone; the host finishes wit
   for (const p of [a.page, b.page]) await expect.poll(() => q(p, 'q.racing.game.green'), { timeout: 60_000 }).toBe(true);
   expect(await q(a.page, '!!q.racing.tags?.of("Beto")')).toBe(true);
 
-  // Beto closes his tab: on Ana's screen his bus turns ghost, with the tag saying so, then goes (the room's grace is 20 s).
+  // Beto closes his tab: on Ana's screen his bus turns ghost, with the tag saying so. His seat is kept for the whole race (he may come back).
   await b.page.close();
   await expect.poll(() => q(a.page, 'q.online.remotes[0].remote.bus.ghost'), { timeout: 30_000 }).toBe(true);
-  await expect.poll(() => q(a.page, '!q.racing.tags.of("Beto")'), { timeout: 60_000 }).toBe(true);
-  expect(await q(a.page, 'Number.isNaN(q.racing.others[0].x)')).toBe(true);
+  expect(await q(a.page, '!!q.racing.tags.of("Beto")')).toBe(true);
   await expect(a.page.locator('.rh-net')).toBeHidden();
 
   // Ana still finishes; the room's final results hold Beto as out.
@@ -52,7 +51,8 @@ test('a player closes the page mid-race: ghost, then gone; the host finishes wit
   });
   await a.page.keyboard.down('KeyW');
   await expect(a.page.locator('.rh-results')).toBeVisible({ timeout: 150_000 });
-  await expect(a.page.locator('.rh-results')).toContainText('retirado', { timeout: 60_000 });
+  // The room waits 90 s past the first finish for a seat that never came back.
+  await expect(a.page.locator('.rh-results')).toContainText('retirado', { timeout: 150_000 });
 
   expect(errors).toEqual([]);
   await a.ctx.close();

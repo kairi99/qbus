@@ -10,7 +10,7 @@ import { terrainHeight } from '../src/world/terrain';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { snapToRoad } from '../src/world/roadSnap';
 import { locateOnTrack, trackPoint, trackPose, trackStartPose } from '../src/world/track';
-import { RaceDriver, SKILLS, vehicleLimits } from '../src/gameplay/raceDriver';
+import { RaceDriver, SKILLS, chooseLane, vehicleLimits } from '../src/gameplay/raceDriver';
 import { gridSlots } from '../src/gameplay/raceField';
 import { TrafficSim } from '../src/gameplay/traffic';
 import { FALL_AIR, FALL_SHOW, FallWatch } from '../src/gameplay/fallWatch';
@@ -42,13 +42,16 @@ describe.each(ZONES)('$name', (zone) => {
   });
 
   describe('the grid and the traffic', () => {
-    it('fits four of the longest vehicles one behind the other, behind the start line, none overlapping', () => {
-      const lengths = [19.6, 18.4, 19.6, 19.6];
+    it.each([
+      ['four of the longest', [19.6, 18.4, 19.6, 19.6]],
+      ['six gusanitos', [19.6, 19.6, 19.6, 19.6, 19.6, 19.6]],
+    ])('fits %s one behind the other, behind the start line, on the road, none overlapping', (_, lengths) => {
       const slots = gridSlots(race, lengths);
       const at = slots.map((p) => locateOnTrack(race, p.pos));
       at.forEach((a, k) => {
         expect(a.s + lengths[k] / 2).toBeLessThanOrEqual(race.start + 0.1);
         expect(a.s - lengths[k] / 2).toBeGreaterThan(0);
+        expect(Math.abs(a.off)).toBeLessThan(2.5);
         for (let j = 0; j < k; j++)
           if (Math.sign(at[j].off) === Math.sign(a.off)) expect(at[j].s - lengths[j] / 2 - (a.s + lengths[k] / 2)).toBeGreaterThan(2);
       });
@@ -211,15 +214,30 @@ describe.each(ZONES)('$name', (zone) => {
       expect(deepest).toBeLessThan(0.5);
     });
 
-    it('two AI buses race from the grid to the finish together without getting stuck on each other', () => {
-      const ids = ['interparroquial', 'popular'];
+    it.each([
+      ['two', ['interparroquial', 'popular'], 4],
+      ['six (all the vehicles)', ['interparroquial', 'buseta', 'popular', 'articulado', 'gusanito', 'ae86'], 8],
+    ])('%s AI vehicles race from the grid to the finish together without getting stuck on each other', (_, ids, maxRescues) => {
       const slots = gridSlots(race, ids.map((id) => busById(id).body.length));
       const buses = slots.map((sl, k) => new BusPhysics(world, busById(ids[k]), { x: sl.pos.x, y: sl.y, z: sl.pos.z, heading: sl.heading, pitch: sl.pitch }));
-      const drivers = slots.map((_, k) => new RaceDriver(race, SKILLS.hard, vehicleLimits(busById(ids[k])), (k % 2 ? 1 : -1) * 0.6));
+      const homes = slots.map((_, k) => (k % 2 ? 1 : -1) * 0.6);
+      const drivers = slots.map((_, k) => new RaceDriver(race, SKILLS.hard, vehicleLimits(busById(ids[k])), homes[k]));
+      const users = ids.map((id) => ({ s: 0, off: 0, v: 0, len: busById(id).body.length }));
+      const p = { x: 0, y: 0, z: 0 };
       let t = 0;
       let rescues = 0;
       for (; t < 700 && drivers.some((d) => d.s < race.finish); t += PHYSICS_STEP) {
-        buses.forEach((b, k) => b.update(drivers[k].drive(b, PHYSICS_STEP), PHYSICS_STEP));
+        // As the race does: each picks its lane and speed limit against the others.
+        buses.forEach((b, k) => {
+          users[k].s = drivers[k].s;
+          users[k].off = locateOnTrack(race, b.position(p), drivers[k].s).off;
+          users[k].v = b.speed;
+        });
+        buses.forEach((b, k) => {
+          const way = chooseLane(users[k], users.filter((_, j) => j !== k), [], homes[k], SKILLS.hard.passClear);
+          drivers[k].lane = way.lane;
+          b.update(drivers[k].drive(b, PHYSICS_STEP, 1, false, way.limit), PHYSICS_STEP);
+        });
         world.step();
         // As the race does: a bus wedged for good goes back on the road where it was.
         drivers.forEach((d, k) => {
@@ -230,8 +248,8 @@ describe.each(ZONES)('$name', (zone) => {
           rescues++;
         });
       }
-      // Rarely needed.
-      expect(rescues).toBeLessThanOrEqual(2);
+      // Rarely needed (six on a road 8.4 m wide get in each other's way now and then).
+      expect(rescues).toBeLessThanOrEqual(maxRescues);
       for (const b of buses) for (const body of b.bodies) world.removeRigidBody(body);
       for (const d of drivers) expect(d.s).toBeGreaterThanOrEqual(race.finish);
     });

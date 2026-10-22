@@ -122,7 +122,7 @@ function parseRace(v: unknown): RaceSetup {
   const d = RACE_DEFAULTS;
   return {
     track: typeof r.track === 'string' && r.track ? r.track : d.track,
-    rivals: typeof r.rivals === 'number' && r.rivals >= 1 && r.rivals <= 3 ? Math.round(r.rivals) : d.rivals,
+    rivals: typeof r.rivals === 'number' && r.rivals >= 1 && r.rivals <= 5 ? Math.round(r.rivals) : d.rivals,
     rivalBus: typeof r.rivalBus === 'string' && r.rivalBus ? r.rivalBus : d.rivalBus,
     skill: r.skill === 'easy' || r.skill === 'hard' || r.skill === 'normal' ? r.skill : d.skill,
     traffic: typeof r.traffic === 'boolean' ? r.traffic : d.traffic,

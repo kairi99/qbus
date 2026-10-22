@@ -5,8 +5,8 @@ import { AI_COLOR, SEAT_COLORS, seatColor } from '../src/net/colors';
 
 describe('online name tags', () => {
   it('each seat its own color, the AI grey', () => {
-    expect(new Set([0, 1, 2, 3].map(seatColor)).size).toBe(4);
-    expect(seatColor(5)).toBe(SEAT_COLORS[1]);
+    expect(new Set([0, 1, 2, 3, 4, 5].map(seatColor)).size).toBe(6);
+    expect(seatColor(7)).toBe(SEAT_COLORS[1]);
     expect(SEAT_COLORS).not.toContain(AI_COLOR);
   });
 

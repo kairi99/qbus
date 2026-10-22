@@ -1,6 +1,6 @@
 /** Wire protocol of the online races, pure: shared by the game and the room server (relative import). */
 export const PROTO = 1;
-export const MAX_SEATS = 4;
+export const MAX_SEATS = 6;
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const CODE_LENGTH = 4;
 const NAME_MAX = 16;
@@ -56,7 +56,7 @@ export interface Seat {
 
 export interface RoomSettings {
   track: string;
-  /** AI rivals, 0..3 (humans + AI fit in MAX_SEATS). */
+  /** AI rivals, 0..5 (humans + AI fit in MAX_SEATS). */
   ai: number;
   skill: RaceSkillId;
   /** `mixed`, `same` or a vehicle id: what the AI drive. */
@@ -92,6 +92,8 @@ export interface CarState {
   boost: 0 | 1;
   /** 1 while the vehicle is a ghost after a respawn (see-through, nothing to hit); absent otherwise. */
   g?: 1;
+  /** 1 while the player's horn was held (or tapped) since the last snapshot; absent otherwise (older clients never send it). */
+  h?: 1;
 }
 
 export interface ResultRow {
@@ -116,7 +118,8 @@ export type ErrorCode = 'full' | 'racing' | 'version' | 'nohost' | 'unknown' | '
 export type S2C =
   | { t: 'welcome'; v: number; you: number; token: string; code: string }
   | { t: 'room'; phase: RoomPhase; seats: Seat[]; settings: RoomSettings }
-  | { t: 'go'; grid: GridEntry[]; seed: number; goAt: number }
+  /** `resume`: only to a seat that comes back to a race already running: racer key -> last track position (m) the room saw. */
+  | { t: 'go'; grid: GridEntry[]; seed: number; goAt: number; resume?: Record<string, number> }
   | { t: 'st'; from: number; at: number; cars: CarState[] }
   | { t: 'result'; rows: ResultRow[]; final: boolean }
   | { t: 'pong'; c: number; s: number }
@@ -170,16 +173,18 @@ function validCar(c: unknown): c is CarState {
   if (!isObj(c) || !isRacer(c.who) || !isNum(c.s) || !nums(c.p, 3) || !nums(c.q, 4) || !nums(c.v, 3)) return false;
   if (!isNum(c.steer) || !isNum(c.speed) || !isNum(c.thr) || (c.boost !== 0 && c.boost !== 1)) return false;
   if (c.g !== undefined && c.g !== 0 && c.g !== 1) return false;
+  if (c.h !== undefined && c.h !== 0 && c.h !== 1) return false;
   return c.rears === undefined || (Array.isArray(c.rears) && c.rears.length <= 6 && c.rears.every((r) => nums(r, 7)));
 }
 
-const validCars = (x: unknown): boolean => Array.isArray(x) && x.length <= 8 && x.every(validCar);
+const validCars = (x: unknown): boolean => Array.isArray(x) && x.length <= 2 * MAX_SEATS && x.every(validCar);
 
 /** A car with only the protocol's fields (a client can't smuggle extra data through the relay). */
 export function cleanCar(c: CarState): CarState {
   const out: CarState = { who: 'seat' in c.who ? { seat: c.who.seat } : { ai: c.who.ai }, s: c.s, p: c.p, q: c.q, v: c.v, steer: c.steer, speed: c.speed, thr: c.thr, boost: c.boost };
   if (c.rears) out.rears = c.rears;
   if (c.g) out.g = 1;
+  if (c.h) out.h = 1;
   return out;
 }
 
@@ -237,7 +242,7 @@ export function parseS2C(raw: string): S2C | null {
     case 'room':
       return PHASES.includes(m.phase as string) && Array.isArray(m.seats) && m.seats.length <= MAX_SEATS && m.seats.every(isObj) && validSettings(m.settings) ? (m as unknown as S2C) : null;
     case 'go':
-      return validGrid(m.grid) && isInt(m.seed) && isNum(m.goAt) ? (m as unknown as S2C) : null;
+      return validGrid(m.grid) && isInt(m.seed) && isNum(m.goAt) && (m.resume === undefined || (isObj(m.resume) && Object.values(m.resume).every(isNum))) ? (m as unknown as S2C) : null;
     case 'st':
       return isInt(m.from) && isNum(m.at) && validCars(m.cars) ? (m as unknown as S2C) : null;
     case 'result':

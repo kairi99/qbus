@@ -20,6 +20,7 @@ import type { TrackScenery } from './track';
 import { distToPolyline, pointInPolygon } from './geom';
 import { crowdMesh, crowdSpots } from './spectators';
 import { TOWER_CLEAR, nearTower, powerLines } from './powerLines';
+import { railSolid } from './railSolid';
 
 const ASPHALT = '#4a4c52';
 const MARK_WHITE = '#eceae0';
@@ -209,6 +210,9 @@ function guardrail(race: TrackData, r: TrackData['rails'][number], solid: Chunke
   };
   const len = r.s1 - r.s0;
   const n = Math.max(1, Math.round(len / POST_EVERY));
+  const first = point(r.s0);
+  // Solid: one smooth slab along the whole rail, from the road to the top of the beam (a bus scrapes along it).
+  const line = [{ x: first.p.x, z: first.p.z, y: first.y }];
   for (let k = 0; k < n; k++) {
     const a = point(r.s0 + (len * k) / n);
     const b = point(r.s0 + (len * (k + 1)) / n);
@@ -216,18 +220,9 @@ function guardrail(race: TrackData, r: TrackData['rails'][number], solid: Chunke
     strip(mb, a.p, b.p, a.y + BEAM_LO, b.y + BEAM_LO, BEAM_HI - BEAM_LO, 0.1, STEEL);
     post(mb, a.p, a.y - 0.6, a.y + BEAM_HI + 0.02, 0.14, POST);
     if (k === n - 1) post(mb, b.p, b.y - 0.6, b.y + BEAM_HI + 0.02, 0.14, POST);
-    // Solid: a thin slab from the road to the top of the beam (a bus scrapes along it).
-    const d = unit(a.p, b.p);
-    const o = { x: -d.z * 0.15, z: d.x * 0.15 };
-    const corners = [-1, 1].flatMap((s) => [
-      a.p.x + o.x * s, a.y - 0.3, a.p.z + o.z * s,
-      a.p.x + o.x * s, a.y + BEAM_HI + 0.15, a.p.z + o.z * s,
-      b.p.x + o.x * s, b.y - 0.3, b.p.z + o.z * s,
-      b.p.x + o.x * s, b.y + BEAM_HI + 0.15, b.p.z + o.z * s,
-    ]);
-    const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(corners));
-    if (desc) world.createCollider(desc.setFriction(0.3), fixed);
+    line.push({ x: b.p.x, z: b.p.z, y: b.y });
   }
+  railSolid(line, BEAM_HI, world, fixed);
 }
 
 /** Yellow chevron boards along the outside of each tight bend, facing the racers coming into it. */

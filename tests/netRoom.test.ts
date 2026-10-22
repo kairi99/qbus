@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CODE_ALPHABET,
+  MAX_SEATS,
   PROTO,
   cleanName,
   isCode,
@@ -11,10 +12,11 @@ import {
   racerKey,
   sameRacer,
   type C2S,
+  type CarState,
   type GridEntry,
   type S2C,
 } from '../src/net/protocol';
-import { EXPIRE_AFTER, FINISH_TIMEOUT, GO_DELAY, LOAD_TIMEOUT, LOBBY_GRACE, RACE_GRACE, RoomLogic, type Out, type RoomState } from '../server/src/room';
+import { EXPIRE_AFTER, FINISH_TIMEOUT, GO_DELAY, LOAD_GRACE, LOAD_TIMEOUT, LOBBY_GRACE, RACE_GRACE, RoomLogic, type Out, type RoomState } from '../server/src/room';
 
 const hello = (name = 'A', token?: string): Extract<C2S, { t: 'hello' }> => ({ t: 'hello', v: PROTO, name, vehicle: 'bus', ...(token ? { token } : {}) });
 const SET = { track: 'papallacta', ai: 3, skill: 'hard', rivalBus: 'same', rain: 'always', tod: 'night', slides: true } as const;
@@ -65,6 +67,8 @@ describe('protocol', () => {
     expect(parseC2S(JSON.stringify({ ...hello(), vehicle: 'v'.repeat(25) }))).toBeNull();
     expect(parseC2S(JSON.stringify({ ...hello(), name: 'n'.repeat(17) }))).toBeNull();
     expect(parseC2S(JSON.stringify({ t: 'set', settings: { ...SET, ai: 9 } }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: 'set', settings: { ...SET, ai: 5 } }))).not.toBeNull();
+    expect(parseC2S(JSON.stringify({ t: 'set', settings: { ...SET, ai: 6 } }))).toBeNull();
     expect(parseC2S(JSON.stringify({ t: 'st', at: 1, cars: Array(9).fill({ who: { seat: 0 } }) }))).toBeNull();
     const car = { who: { seat: 0 }, s: 10, p: [1, 2, 3], q: [0, 0, 0, 1], v: [0, 0, 0], steer: 0, speed: 5, thr: 1, boost: 0 };
     expect(parseC2S(JSON.stringify({ t: 'st', at: 1, cars: [car] }))).toEqual({ t: 'st', at: 1, cars: [car] });
@@ -95,7 +99,8 @@ describe('room join', () => {
     expect(r.empty).toBe(false);
   });
   it('rejects version, full, racing', () => {
-    const r = room(4);
+    const r = room(MAX_SEATS);
+    expect(MAX_SEATS).toBe(6);
     expect(r.join({ ...hello(), v: 99 }, 0)).toMatchObject({ seat: null, out: [{ msg: { t: 'error', code: 'version' } }] });
     expect(r.join(hello(), 0)).toMatchObject({ seat: null, out: [{ msg: { t: 'error', code: 'full' } }] });
     const q = racing(2);
@@ -119,16 +124,38 @@ describe('room join', () => {
     // reclaim of a still-online seat takes it over
     expect(r.join(hello('X', token), 3100).seat).toBe(1);
   });
-  it('host migrates to the lowest online seat', () => {
+  it('host stays while offline, passes to the oldest connected seat only when gone', () => {
     const r = room(3);
-    const out = r.handle(0, { t: 'leave' }, 0);
-    expect(last(out, 'room').seats.find((s) => s.host)?.id).toBe(1);
+    const token = r.state.seats[0].token;
+    // dropped: still the host (its seat is kept), nobody else is
+    r.drop(0, 0);
+    expect(r.state.seats.map((x) => x.host)).toEqual([true, false, false]);
+    expect(last(r.handle(1, { t: 'me', ready: true }, 1), 'room').seats.find((x) => x.host)?.id).toBe(0);
+    expect(r.handle(1, { t: 'set', settings: { ...SET } }, 1)[0].msg).toEqual({ t: 'error', code: 'nohost' });
+    // it comes back: nothing changed
+    r.join(hello('P0', token), 2);
+    expect(r.state.seats.find((x) => x.host)?.id).toBe(0);
+    // grace over: the oldest connected seat (not the lowest id) takes over
+    r.state.seats[2].since = 1;
+    r.state.seats[1].since = 5;
+    r.drop(0, 10);
+    const out = r.tick(10 + LOBBY_GRACE);
+    expect(last(out, 'room').seats.find((x) => x.host)?.id).toBe(2);
+    // a seat that leaves gives the host up at once
+    const out2 = r.handle(2, { t: 'leave' }, 11 + LOBBY_GRACE);
+    expect(last(out2, 'room').seats.find((x) => x.host)?.id).toBe(1);
+  });
+  it('a host gone with nobody connected: the next seat to come back is host', () => {
+    const r = room(2);
+    const t1 = r.state.seats[1].token;
+    r.drop(0, 0);
     r.drop(1, 0);
-    expect(r.state.seats.find((s) => s.host)?.id).toBe(2);
-    // the old host coming back is a guest
-    const token = r.state.seats.find((s) => s.id === 1)!.token;
-    r.join(hello('B', token), 1);
-    expect(r.state.seats.find((s) => s.host)?.id).toBe(2);
+    r.tick(LOBBY_GRACE);
+    expect(r.state.seats).toHaveLength(0);
+    const j = r.join(hello('N'), LOBBY_GRACE + 1);
+    expect(j.seat).toBe(0);
+    expect(r.state.seats[0].host).toBe(true);
+    expect(t1).toBeTruthy();
   });
 });
 
@@ -170,11 +197,11 @@ describe('lobby', () => {
     expect(start([...humans(0, 1, 2), ...humans(2)])[0].msg).toEqual({ t: 'error', code: 'bad' }); // dup
     expect(start(humans(0, 1, 5))[0].msg).toEqual({ t: 'error', code: 'bad' }); // unknown
     expect(r.phase).toBe('lobby');
-    // 3 humans leave room for 1 AI: extras are clamped
-    start([...humans(0, 1, 2), ...ais(3)]);
+    // 3 humans leave room for 3 AI: extras are clamped
+    start([...humans(0, 1, 2), ...ais(5)]);
     expect(r.phase).toBe('loading');
-    expect(r.state.grid.filter((g) => g.kind === 'ai')).toHaveLength(1);
-    expect(r.state.settings.ai).toBeLessThanOrEqual(1);
+    expect(r.state.grid.filter((g) => g.kind === 'ai')).toHaveLength(MAX_SEATS - 3);
+    expect(r.state.settings.ai).toBeLessThanOrEqual(MAX_SEATS - 3);
   });
   it('offline seats are removed at start', () => {
     const r = room(3);
@@ -235,7 +262,7 @@ describe('loading and racing', () => {
     const q = racing(2);
     const out = q.handle(0, { t: 'st', at: 5, cars: [car] }, 2000);
     expect(out).toEqual([{ to: 'others', from: 0, msg: { t: 'st', from: 0, at: 5, cars: [car] } }]);
-    expect(q.handle(0, { t: 'st', at: 5, cars: Array(9).fill(car) }, 2000)).toEqual([]);
+    expect(q.handle(0, { t: 'st', at: 5, cars: Array(2 * MAX_SEATS + 1).fill(car) }, 2000)).toEqual([]);
   });
   it('fin: partial then final; first time only; AI only from host', () => {
     const r = racing(2, 1);
@@ -286,12 +313,59 @@ describe('drops and timers', () => {
     expect(last(r.tick(1000 + LOBBY_GRACE), 'room').seats).toHaveLength(1);
     expect(r.nextWake(0)).toBeNull();
   });
-  it('shorter grace while racing', () => {
+  it('grace while loading is short, while racing it lasts the race', () => {
+    const l = room(2);
+    l.handle(1, { t: 'me', ready: true }, 0);
+    l.handle(0, { t: 'start', grid: humans(0, 1), seed: 1 }, 0);
+    l.drop(1, 500);
+    expect(l.nextWake(500)).toBe(Math.min(500 + LOAD_GRACE, LOAD_TIMEOUT));
     const r = racing(2);
     r.drop(1, 2000);
+    expect(RACE_GRACE).toBeGreaterThanOrEqual(240_000);
     expect(r.nextWake(2000)).toBe(2000 + RACE_GRACE);
+    r.tick(2000 + 60_000);
+    expect(r.state.seats).toHaveLength(2);
     r.tick(2000 + RACE_GRACE);
     expect(r.state.seats).toHaveLength(1);
+  });
+  it('a seat back mid-race gets the start with where the room last saw everyone, and the times so far', () => {
+    const r = racing(3, 1);
+    const car = (who: any, s: number): CarState => ({ who, s, p: [0, 0, 0], q: [0, 0, 0, 1], v: [0, 0, 0], steer: 0, speed: 0, thr: 0, boost: 0 });
+    r.handle(0, { t: 'st', at: 1, cars: [car({ seat: 0 }, 120), car({ ai: 0 }, 90), car({ seat: 1 }, 5)] }, 2000);
+    r.handle(1, { t: 'st', at: 1, cars: [car({ seat: 1 }, 77), car({ seat: 0 }, 5000)] }, 2000);
+    r.handle(2, { t: 'fin', who: { seat: 2 }, time: 55 }, 2500);
+    const token = r.state.seats[1].token;
+    r.drop(1, 3000);
+    const j = r.join(hello('P1', token), 4000);
+    expect(j.seat).toBe(1);
+    const go = last(j.out, 'go');
+    expect(go.resume).toEqual({ s0: 120, a0: 90, s1: 77 });
+    expect(go.goAt).toBe(1000 + GO_DELAY);
+    // times first, so a lobby page can tell this seat has finished before it sees `go`
+    expect(j.out.findIndex((o) => o.msg.t === 'result')).toBeLessThan(j.out.findIndex((o) => o.msg.t === 'go'));
+    expect(last(j.out, 'result').rows.find((x) => 'seat' in x.who && x.who.seat === 2)?.time).toBe(55);
+    // a fresh start knows nothing of the old race
+    expect(parseS2C(JSON.stringify(go))).toEqual(go);
+  });
+  it('a seat back after the end gets the final results; an offline seat that never finished still holds the race until the finish timeout', () => {
+    const r = racing(2, 0);
+    r.handle(0, { t: 'fin', who: { seat: 0 }, time: 60 }, 5000);
+    const token = r.state.seats[1].token;
+    r.drop(1, 6000);
+    expect(r.phase).toBe('racing');
+    expect(last(r.tick(5000 + FINISH_TIMEOUT), 'result').final).toBe(true);
+    const j = r.join(hello('P1', token), 5000 + FINISH_TIMEOUT + 1);
+    expect(j.seat).toBe(1);
+    expect(last(j.out, 'result').final).toBe(true);
+    expect(msgs(j.out, 'go')).toHaveLength(0);
+  });
+  it('the host is the one that reports the AI: still true after it dropped and came back', () => {
+    const r = racing(2, 1);
+    const token = r.state.seats[0].token;
+    r.drop(0, 2000);
+    expect(r.handle(1, { t: 'fin', who: { ai: 0 }, time: 70 }, 2100)).toEqual([]);
+    r.join(hello('P0', token), 2200);
+    expect(msgs(r.handle(0, { t: 'fin', who: { ai: 0 }, time: 71 }, 2300), 'result')).toHaveLength(1);
   });
   it('empty room expires', () => {
     const r = room(1);

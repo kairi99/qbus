@@ -2223,35 +2223,6 @@ body {
   display: none;
 }
 
-.rh-draft {
-  position: absolute;
-  top: 40%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #8fe3ff;
-  font-size: 26px;
-  font-style: italic;
-  font-weight: 800;
-  letter-spacing: 1px;
-  text-shadow: 0 2px 6px rgb(0 0 0 / 70%);
-  pointer-events: none;
-  animation: rh-draft-pulse 0.6s ease-in-out infinite alternate;
-}
-
-.rh-draft[hidden] {
-  display: none;
-}
-
-@keyframes rh-draft-pulse {
-  from {
-    opacity: 0.65;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
 .rh-net {
   position: absolute;
   top: 56px;
@@ -2266,6 +2237,17 @@ body {
   text-align: center;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.rh-net-btn {
+  margin-left: 12px;
+  padding: 4px 12px;
+  font-size: 14px;
+  pointer-events: auto;
+}
+
+.rh-net .rh-net-btn[hidden] {
+  display: none;
 }
 
 .rh-net[hidden] {

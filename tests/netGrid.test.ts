@@ -25,13 +25,28 @@ describe('online grid', () => {
 
   it('no more AI than free places; crews in order; offline seats left out', () => {
     const seats = [seat(0, 'popular', true), seat(1), { ...seat(2), online: false }];
-    const g = buildGrid(seats, settings(3), IDS, 5);
-    expect(g.filter((e) => e.kind === 'ai')).toHaveLength(2);
+    const g = buildGrid(seats, settings(5), IDS, 5);
+    expect(g.filter((e) => e.kind === 'ai')).toHaveLength(4);
     expect(g.filter((e) => e.kind === 'human')).toHaveLength(2);
-    expect(g.slice(0, 2).map((e) => (e.kind === 'ai' ? [e.idx, e.crew] : null))).toEqual([[0, 0], [1, 1]]);
+    expect(g.slice(0, 4).map((e) => (e.kind === 'ai' ? [e.idx, e.crew] : null))).toEqual([[0, 0], [1, 1], [2, 2], [3, 3]]);
     // "Lo mismo que los panas": the host's vehicle.
     const same = buildGrid([seat(0, 'gusanito', true), seat(1)], settings(2, 'same'), IDS, 5);
     expect(same.filter((e) => e.kind === 'ai').map((e) => e.vehicle)).toEqual(['gusanito', 'gusanito']);
+  });
+
+  it('six seats: five AI in front of one player, or two players and four AI, crews in order', () => {
+    const solo = buildGrid([seat(0, 'popular', true)], settings(5), IDS, 8);
+    expect(solo).toHaveLength(6);
+    expect(solo.slice(0, 5).map((e) => (e.kind === 'ai' ? e.crew : -1))).toEqual([0, 1, 2, 3, 4]);
+    // Mixed: each AI a different vehicle, none the host's.
+    const vs = solo.slice(0, 5).map((e) => e.vehicle);
+    expect(new Set(vs).size).toBe(5);
+    expect(vs).not.toContain('popular');
+    const two = buildGrid([seat(0, 'popular', true), seat(1)], settings(5), IDS, 8);
+    expect(two.filter((e) => e.kind === 'ai')).toHaveLength(4);
+    const full = buildGrid([0, 1, 2, 3, 4, 5].map((i) => seat(i, 'popular', i === 0)), settings(5), IDS, 8);
+    expect(full.filter((e) => e.kind === 'ai')).toHaveLength(0);
+    expect(full).toHaveLength(6);
   });
 
   it('keys, racers and a seat\'s slot', () => {

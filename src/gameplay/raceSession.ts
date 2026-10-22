@@ -17,6 +17,7 @@ import { FALL_BACK, FallWatch } from './fallWatch';
 import { GHOST_TIME, Ghost } from './ghost';
 import { LAUNCH_EFFECT, type LaunchGrade, LaunchRev, aiGrade } from './launch';
 import { PlaceCaller, RaceGame } from './raceGame';
+import { bestOnline, recordOnline, settleOnlinePlace } from './onlineRecords';
 import { bestRace, recordRace } from './raceRecords';
 import { CREWS, MAX_RIVALS, RESET_WAIT } from './raceField';
 import { PICKUP_FILL, Pickups } from './pickups';
@@ -33,6 +34,7 @@ import type { Life } from '../net/live';
 import type { ResultRow } from '../net/protocol';
 import { racerKey } from '../net/protocol';
 import { AI_COLOR } from '../net/colors';
+import { HornHold } from '../net/horn';
 import { NameTags } from '../ui/nameTags';
 
 export type RaceSkill = keyof typeof SKILLS;
@@ -98,6 +100,8 @@ interface Remote extends RemoteEntry {
   model: BusModel;
   lastS: number;
   life: Life;
+  /** Its horn's sound state (a tap lasts at least `HORN_MIN`). */
+  hornHold: HornHold;
 }
 
 export interface RaceOptions {
@@ -204,6 +208,10 @@ export class RaceSession {
   camera: THREE.Camera | null = null;
   private online: RaceOptions['online'];
   private final = false;
+  /** The player's own finish time (online: to settle its record's place once the results are final). */
+  private myTime: number | null = null;
+  /** Online, coming back to a race already running: the next GO is not a start. */
+  private resuming = false;
   /** Online with the room gone for good: the results card holds only the player's own. */
   private offline = false;
   /** Online: finish times to report to the server (the player's, and the AI simulated here). Read and cleared by the caller. */
@@ -241,7 +249,7 @@ export class RaceSession {
     for (const e of this.online?.remotes ?? []) {
       const model = new BusModel(e.preset);
       scene.add(model.root);
-      this.remotes.push({ ...e, model, lastS: -1, life: 'live' });
+      this.remotes.push({ ...e, model, lastS: -1, life: 'live', hornHold: new HornHold() });
     }
     const others = [...this.rivals.map((r) => r.preset), ...this.remotes.map((r) => r.preset)];
     const total = 1 + others.length;
@@ -303,6 +311,32 @@ export class RaceSession {
     this.playerS = -1;
     this.noseS[0] = -1;
     this.becomeGhost(this.ghost, this.player.bus, RESET_WAIT + GHOST_TIME);
+  }
+
+  /**
+   * Online, a page back in a race already running: the player's bus (and the AI simulated here)
+   * go back on the road where the room last saw them (`s`: front axle, track meters; null: stays
+   * on the grid), held like after an R and see-through for a moment. No launch, no count.
+   */
+  resume(player: number | null, ai: readonly (number | null)[]): void {
+    const t = this.track;
+    this.resuming = true;
+    if (player !== null) {
+      const at = trackPose(t, Math.max(t.start - 12, player - this.player.preset.body.length / 2));
+      this.player.bus.reset({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading, pitch: at.pitch });
+      this.playerReset();
+    }
+    this.rivals.forEach((r, i) => {
+      const s = ai[i];
+      if (s === null || s === undefined) return;
+      const at = trackPose(t, Math.max(t.start - 12, s - r.preset.body.length / 2), r.driver.lane);
+      r.bus.reset({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading, pitch: at.pitch });
+      r.driver.rescued();
+      r.lastS = -1;
+      r.wait = RESET_WAIT;
+      this.noseS[i + 1] = -1;
+      this.becomeGhost(r.ghost, r.bus, RESET_WAIT + GHOST_TIME);
+    });
   }
 
   /** Opacity for the player's model (1 unless it is a ghost). */
@@ -567,7 +601,7 @@ export class RaceSession {
       }
     });
     this.tickGhost(0, this.ghost, this.player.bus, null, dt);
-    this.syncRemotes();
+    this.syncRemotes(dt);
     // Slipstream: who sits close behind whom (remotes pull us too; their own clients pull them).
     for (let k = 0; k < this.slips.length; k++) this.draftTarget[k] = g.phase === 'racing' ? draftOf(this.users[k], this.users) : 0;
     if (this.tags && this.camera) this.tags.update(this.camera);
@@ -599,7 +633,6 @@ export class RaceSession {
       progress: this.progress,
       length: g.length,
       wait: g.phase === 'racing' ? this.wait : 0,
-      draft: this.slips[0].level,
     });
   }
 
@@ -623,7 +656,7 @@ export class RaceSession {
   }
 
   /** The buses moved from the network: progress from their snapshots, models, minimap, engines. */
-  private syncRemotes(): void {
+  private syncRemotes(dt: number): void {
     const t = this.track;
     const base = 1 + this.rivals.length;
     this.remotes.forEach((m, j) => {
@@ -650,6 +683,7 @@ export class RaceSession {
       const quiet = m.life !== 'live';
       v.speedFrac = quiet ? 0 : Math.abs(m.remote.speed) / (m.preset.topSpeedKmh / 3.6);
       v.load = quiet ? 0 : engineLoad(m.remote.throttle, m.remote.speed, bus.boosting);
+      v.horn = m.hornHold.step(!quiet && m.remote.horn, dt);
       m.model.setGhost(m.remote.ghost ? REMOTE_GHOST_OPACITY : 1);
       m.model.sync(bus, m.remote.wheels);
     });
@@ -673,6 +707,7 @@ export class RaceSession {
       this.positions[k - 1].x = NaN;
       this.positions[k - 1].z = NaN;
       this.voices[k - 1].x = 1e6;
+      this.voices[k - 1].horn = false;
       this.hud.hideDot(k);
       return;
     }
@@ -682,7 +717,7 @@ export class RaceSession {
 
   /** Online: our own link to the room. Reconnecting shows a banner; closed for good, the race goes on alone. */
   setNet(state: 'connecting' | 'open' | 'closed' | 'rejected'): void {
-    this.hud.setNet(state === 'connecting' ? 'Reconectando…' : state === 'open' ? null : 'Sin conexión con la sala: sigues corriendo solo');
+    this.hud.setNet(state === 'connecting' ? 'Reconectando…' : state === 'open' ? null : 'Sin conexión con la sala: sigues corriendo solo', state === 'connecting');
     if (state !== 'closed' && state !== 'rejected') return;
     if (!this.offline) this.hud.setOffline();
     this.offline = true;
@@ -707,6 +742,7 @@ export class RaceSession {
       const i = keys.indexOf(racerKey(row.who));
       if (i >= 0 && row.time !== null && g.racers[i].time === null) g.setTime(i, row.time);
     }
+    if (final && !this.final && this.online && this.myTime !== null) settleOnlinePlace(this.zone, this.myTime, g.placeOf(0));
     this.final ||= final;
     if (!this.results) return;
     this.results = this.resultsCard();
@@ -722,7 +758,8 @@ export class RaceSession {
       place: g.placeOf(0),
       rows: resultRows(g.racers, g.ranking(), [this.player.preset.name, ...this.rivals.map((r) => r.base.name), ...this.remotes.map((r) => r.vehicle)]),
       launch: this.grade ? LAUNCH_EFFECT[this.grade].label.replace(/[¡!]/g, '') : '—',
-      best: online ? null : (bestRace(this.zone)?.time ?? null),
+      best: (online ? bestOnline(this.zone)?.time : bestRace(this.zone)?.time) ?? null,
+      online,
       newBest: this.results?.newBest ?? false,
       final: this.final,
     };
@@ -752,6 +789,12 @@ export class RaceSession {
   }
 
   private go(): void {
+    if (this.resuming) {
+      // Back in a running race: no start to grade, just the tachometer away.
+      this.resuming = false;
+      this.hud.count('', true);
+      return;
+    }
     this.hud.count('¡CARRERA!', true);
     this.audio.cue('go');
     this.grade = this.launch.grade();
@@ -769,8 +812,9 @@ export class RaceSession {
   private finish(): void {
     const g = this.game;
     const mine = g.racers[0].time!;
-    // Online times aren't records: the field and the rules differ from a race against the AI.
-    const newBest = this.online ? false : recordRace(this.zone, mine, this.player.preset.name);
+    // Online times have their own records (the field and the rules differ from a race against the AI).
+    const newBest = this.online ? recordOnline(this.zone, { time: mine, bus: this.player.preset.name, place: g.placeOf(0), racers: g.racers.length }) : recordRace(this.zone, mine, this.player.preset.name);
+    this.myTime = mine;
     this.results = this.resultsCard();
     this.results.newBest = newBest;
     // The trackside camera first; the results card after it. A rival at the line within a second: a photo finish.

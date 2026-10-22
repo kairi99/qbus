@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClockSync, MAX_SLEW, WINDOW } from '../src/net/clock';
-import { RoomConnection, clearSession, createRoom, loadSession, saveSession } from '../src/net/connection';
+import { RoomConnection, SEAT_TTL, clearSession, createRoom, lastSavedSeat, loadSession, saveSession, savedSeat } from '../src/net/connection';
 import { PROTO } from '../src/net/protocol';
 
 describe('ClockSync', () => {
@@ -227,6 +227,59 @@ describe('RoomConnection', () => {
     expect(FakeWS.all).toHaveLength(n);
   });
 
+  it('keeps retrying forever when asked, and "Reconectar" tries at once, backoff starting over', () => {
+    const c = new RoomConnection('ABCD', { name: 'Ana', vehicle: 'bus', token: 'tok' }, { url: 'ws://x', WebSocketImpl: FakeWS as any, now: () => tm.t, setTimer: tm.set, clearTimer: tm.clear, giveUpMs: Infinity });
+    last().open();
+    last().recv(WELCOME);
+    last().drop();
+    for (let i = 0; i < 200; i++) {
+      tm.advance(4000);
+      last().drop();
+    }
+    expect(c.state).toBe('connecting');
+    const n = FakeWS.all.length;
+    expect(n).toBeGreaterThan(100);
+    c.retry();
+    expect(FakeWS.all).toHaveLength(n + 1);
+    last().open();
+    expect(last().sent[0]).toMatchObject({ t: 'hello', token: 'tok' });
+    last().recv(WELCOME);
+    expect(c.state).toBe('open');
+    // already welcomed: a retry does nothing
+    c.retry();
+    expect(FakeWS.all).toHaveLength(n + 1);
+  });
+
+  it('after it gave up, retry() starts again; after a rejection it does not', () => {
+    const c = make('tok');
+    for (let i = 0; i < 20 && c.state !== 'closed'; i++) {
+      last().drop();
+      tm.advance(4000);
+    }
+    expect(c.state).toBe('closed');
+    const n = FakeWS.all.length;
+    c.retry();
+    expect(c.state).toBe('connecting');
+    expect(FakeWS.all).toHaveLength(n + 1);
+    last().open();
+    last().recv({ t: 'error', code: 'racing' });
+    expect(c.state).toBe('rejected');
+    c.retry();
+    expect(FakeWS.all).toHaveLength(n + 1);
+  });
+
+  it('a socket the room closed as replaced (another page took the seat) is not retried', () => {
+    const c = make('tok');
+    last().open();
+    last().recv(WELCOME);
+    last().readyState = 3;
+    last().onclose({ code: 4001 });
+    expect(c.state).toBe('rejected');
+    expect(c.replaced).toBe(true);
+    tm.advance(60_000);
+    expect(FakeWS.all).toHaveLength(1);
+  });
+
   it('rejects on fatal error without reconnecting', () => {
     const c = make();
     last().open();
@@ -297,5 +350,60 @@ describe('session helpers', () => {
     expect(() => saveSession({ code: 'A', token: 't', name: 'n' })).not.toThrow();
     expect(loadSession()).toBeNull();
     expect(() => clearSession()).not.toThrow();
+  });
+});
+
+describe('saved seats (a reopened tab)', () => {
+  beforeEach(() => {
+    (globalThis as any).sessionStorage = stubStorage();
+    (globalThis as any).localStorage = stubStorage();
+  });
+  afterEach(() => {
+    delete (globalThis as any).sessionStorage;
+    delete (globalThis as any).localStorage;
+  });
+  it('outlives the tab, per room, and is forgotten with the room', () => {
+    const real = Date.now;
+    saveSession({ code: 'AAAA', token: 'a', name: 'Ana' });
+    Date.now = () => real() + 5;
+    saveSession({ code: 'BBBB', token: 'b', name: 'Ana' });
+    Date.now = real;
+    (globalThis as any).sessionStorage = stubStorage(); // the tab was closed
+    expect(loadSession()).toBeNull();
+    expect(savedSeat('AAAA')).toEqual({ code: 'AAAA', token: 'a', name: 'Ana' });
+    expect(savedSeat('CCCC')).toBeNull();
+    expect(lastSavedSeat()?.code).toBe('BBBB');
+    clearSession('BBBB');
+    expect(savedSeat('BBBB')).toBeNull();
+    expect(lastSavedSeat()?.code).toBe('AAAA');
+  });
+  it('clearing the tab seat clears its saved one too', () => {
+    saveSession({ code: 'AAAA', token: 'a', name: 'Ana' });
+    clearSession();
+    expect(savedSeat('AAAA')).toBeNull();
+  });
+  it('expires, and junk is dropped', () => {
+    saveSession({ code: 'AAAA', token: 'a', name: 'Ana' });
+    const real = Date.now;
+    Date.now = () => real() + SEAT_TTL + 1;
+    try {
+      (globalThis as any).sessionStorage = stubStorage();
+      expect(savedSeat('AAAA')).toBeNull();
+    } finally {
+      Date.now = real;
+    }
+    for (const j of ['{', '[]', '{"AAAA":{"code":"AAAA"}}', 'null', '{"AAAA":5}']) {
+      localStorage.setItem('qbus.online.seats', j);
+      expect(savedSeat('AAAA')).toBeNull();
+    }
+  });
+  it('survives missing or throwing storage', () => {
+    delete (globalThis as any).localStorage;
+    expect(() => saveSession({ code: 'A', token: 't', name: 'n' })).not.toThrow();
+    expect(savedSeat('A')).toEqual({ code: 'A', token: 't', name: 'n' }); // this tab's
+    (globalThis as any).localStorage = { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); }, removeItem: () => { throw new Error('no'); } };
+    expect(() => saveSession({ code: 'A', token: 't', name: 'n' })).not.toThrow();
+    expect(() => clearSession('A')).not.toThrow();
+    expect(lastSavedSeat()).toBeNull();
   });
 });

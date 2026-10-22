@@ -163,7 +163,8 @@ describe('the field', () => {
         expect(v).not.toContain(player);
       }
     // The crews' own vehicles when the player's isn't among them.
-    expect(rivalVehicles('mixed', 'ae86', 3, pool)).toEqual(CREWS.map((c) => c.bus));
+    expect(rivalVehicles('mixed', 'ae86', 3, pool)).toEqual(CREWS.slice(0, 3).map((c) => c.bus));
+    expect(rivalVehicles('mixed', 'gusanito', MAX_RIVALS, pool)).toEqual(CREWS.map((c) => c.bus));
   });
 
   it('the same as the player, or one vehicle for all', () => {

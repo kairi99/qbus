@@ -139,6 +139,8 @@ export const LEVELS = {
   shutter: 0.5,
   /** A race rival's engine at its panner's reference distance (8 m): under the player's own. */
   rivalEngine: 0.7,
+  /** Another player's horn online at its panner's reference distance (8 m): under their own horn at the wheel, over the engines. */
+  remoteHorn: { bus: 1.1, car: 0.95 },
 } as const;
 
 /** Linear gain to decibels. */

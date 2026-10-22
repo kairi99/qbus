@@ -550,6 +550,19 @@ describe('weather', () => {
   };
 
   const all = [popular, interparroquial, buseta, ae86, articulado, gusanito] as BusPreset[];
+  it.each(all)('mud (grip under a soaked road) still steers like a soaked road, not plowing straight on ($name)', (preset) => {
+    const turned = (grip: number) => {
+      const { bus, run } = setup(preset);
+      bus.grip = grip;
+      run(idle, 1);
+      run({ ...idle, throttle: 1 }, 3);
+      const h0 = bus.heading;
+      run({ throttle: 0.3, steer: 1, handbrake: false }, 1);
+      return Math.abs(Math.atan2(Math.sin(bus.heading - h0), Math.cos(bus.heading - h0)));
+    };
+    expect(turned(0.45)).toBeGreaterThan(turned(0.7) * 0.85);
+  });
+
   it.each(all)('a soaked road brakes longer and (but for the articulado) slides in a hard turn, without spinning ($name)', (preset) => {
     const turn = (grip: number) => {
       const { bus, run } = setup(preset);

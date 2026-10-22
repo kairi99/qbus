@@ -17,6 +17,8 @@ export interface RivalVoice {
   load: number;
   /** A petrol engine (the car's, the gusanito's) rather than the bus's diesel. */
   car: boolean;
+  /** Online: its player's horn is sounding. */
+  horn?: boolean;
 }
 
 /** Where the sound is heard from (the camera): position, forward and up. */
@@ -64,6 +66,8 @@ export class BusAudio {
   private engineSynth!: { osc: OscillatorNode; gain: GainNode };
   private horn: { gain: GainNode; sample: boolean } | null = null;
   private rivalEngines: { layers: EngineLayers; panner: PannerNode; voice: EngineVoice }[] = [];
+  /** Other players' horns online, one looping source per racer behind a panner at its bus (index as in `rivals`). */
+  private rivalHorns: ({ gain: GainNode; panner: PannerNode } | null)[] = [];
   private synthHornGain!: GainNode;
 
   constructor(
@@ -502,7 +506,35 @@ export class BusAudio {
       } else e.panner.setPosition(v.x, v.y, v.z);
       const { rpm } = engineRpm(v.speedFrac, v.load, e.voice);
       e.layers.set(engineMix(rpm, v.load, e.voice), rpm, v.load, now, turboWhistle(rpm, v.load, e.voice));
+      this.remoteHorn(i, v, ctx, now);
     });
+  }
+
+  /** Rival `i`'s horn: made when first honked, the vehicle's own horn sound, from where its bus is. */
+  private remoteHorn(i: number, v: RivalVoice, ctx: AudioContext, now: number): void {
+    let h = this.rivalHorns[i];
+    if (!h) {
+      if (!v.horn) return;
+      const buffer = this.buffers[v.car ? 'horn-car' : 'horn-bus'];
+      if (!buffer) return;
+      const panner = new PannerNode(ctx, { panningModel: 'equalpower', distanceModel: 'inverse', refDistance: 8, rolloffFactor: 1.3, maxDistance: 2000 });
+      panner.connect(this.master);
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      gain.connect(panner);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      src.connect(gain);
+      src.start();
+      h = this.rivalHorns[i] = { gain, panner };
+    }
+    if (h.panner.positionX) {
+      h.panner.positionX.value = v.x;
+      h.panner.positionY.value = v.y;
+      h.panner.positionZ.value = v.z;
+    } else h.panner.setPosition(v.x, v.y, v.z);
+    h.gain.gain.setTargetAtTime(v.horn ? LEVELS.remoteHorn[v.car ? 'car' : 'bus'] : 0, now, v.horn ? 0.01 : 0.04);
   }
 
   update(f: AudioFrame, dt: number): void {

@@ -422,10 +422,15 @@ export class BusPhysics {
     }
   }
 
-  /** 0 on a dry road, 1 soaked (`grip` WET_GRIP_REF), up to 1.5 in floodwater. */
+  /**
+   * 0 on a dry road, 1 soaked (`grip` WET_GRIP_REF), up to 1.5 only in floodwater. On land it
+   * stops at soaked: lower grip (mud: a landslide's `grip` ~0.5) pushed the caps past the tuned
+   * wet values, the front tires to the floor, and the bus plowed straight on whatever the wheel.
+   */
   private get wetness(): number {
-    const grip = this.wade > AQUAPLANE ? this.grip * WADE_GRIP : this.grip;
-    return Math.min(1.5, (1 - grip) / (1 - WET_GRIP_REF));
+    const floating = this.wade > AQUAPLANE;
+    const grip = floating ? this.grip * WADE_GRIP : this.grip;
+    return Math.min(floating ? 1.5 : 1, (1 - grip) / (1 - WET_GRIP_REF));
   }
 
   /** Floodwater drags every section back, more the deeper and faster it goes (a splash, then a crawl). */

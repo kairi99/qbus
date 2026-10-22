@@ -21,6 +21,8 @@ export class RemoteBus {
   snapped = false;
   /** The last sample was a ghost (the bus passes through the others). */
   ghost = false;
+  /** The player's horn is down (as of the last snapshot sampled). */
+  horn = false;
   /** Set from outside (its player left, or went silent): a ghost whatever the snapshots say. */
   forceGhost = false;
   private removed = false;
@@ -64,6 +66,7 @@ export class RemoteBus {
     this.throttle = pose.thr;
     this.s = pose.s;
     this.snapped = pose.snapped;
+    this.horn = pose.horn;
     const d = (pose.speed / this.radius) * dt;
     for (const sec of this.spins) for (let i = 0; i < sec.length; i++) sec[i] += d;
   }

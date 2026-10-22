@@ -159,9 +159,95 @@ describe('online rooms (wrangler dev)', () => {
     expect(room.seats).toHaveLength(1);
   });
 
-  it('rejects a fifth player', async () => {
+  /** Two humans and an AI, started and loaded: racing. */
+  async function startRace() {
     const code = await createRoom();
-    for (let i = 0; i < 4; i++) {
+    const a = client(code);
+    await a.send(hello('Ana'));
+    const wa = await a.waitFor(isWelcome);
+    const b = client(code);
+    await b.send(hello('Beto'));
+    const wb = await b.waitFor(isWelcome);
+    await b.send({ t: 'me', ready: true });
+    await a.waitFor((m) => isRoom(m) && m.seats.some((x) => x.id === wb.you && x.ready));
+    const grid = [
+      { kind: 'ai' as const, idx: 0, vehicle: 'bus', crew: 0 },
+      { kind: 'human' as const, seat: wa.you, vehicle: 'bus' },
+      { kind: 'human' as const, seat: wb.you, vehicle: 'bus' },
+    ];
+    await a.send({ t: 'start', grid, seed: 5 });
+    await b.waitFor((m) => isRoom(m) && m.phase === 'loading');
+    await a.send({ t: 'loaded' });
+    await b.send({ t: 'loaded' });
+    await a.waitFor(isGo);
+    await b.waitFor(isGo);
+    return { code, a, b, wa, wb };
+  }
+  const car = (who: CarState['who'], s: number): CarState => ({ who, s, p: [1, 2, 3], q: [0, 0, 0, 1], v: [0, 0, 0], steer: 0, speed: 5, thr: 1, boost: 0 });
+
+  it('a player whose link drops mid-race gets its seat back with where it was, the host stays', async () => {
+    const { code, a, b, wa, wb } = await startRace();
+    await b.send({ t: 'st', at: 1, cars: [car({ seat: wb.you }, 321)] });
+    await a.waitFor(isSt);
+    b.close();
+    // Offline, not gone: the seat stays, nobody else became host.
+    const off = await a.waitFor((m): m is Extract<S2C, { t: 'room' }> => isRoom(m) && m.seats.some((x) => x.id === wb.you && !x.online));
+    expect(off.seats).toHaveLength(2);
+    expect(off.seats.find((x) => x.id === wa.you)?.host).toBe(true);
+    // A brand new socket with the token: same seat, the race as it is, its last position.
+    const b2 = client(code);
+    await b2.send(hello('Beto', wb.token));
+    const w2 = await b2.waitFor(isWelcome);
+    expect(w2.you).toBe(wb.you);
+    const go = await b2.waitFor(isGo);
+    expect(go.resume).toMatchObject({ [`s${wb.you}`]: 321 });
+    expect(go.grid).toHaveLength(3);
+    await a.waitFor((m) => isRoom(m) && m.phase === 'racing' && m.seats.every((x) => x.online));
+    // And it finishes as itself.
+    await b2.send({ t: 'fin', who: { seat: wb.you }, time: 99 });
+    await a.waitFor((m) => isResult(m) && m.rows.some((r) => 'seat' in r.who && r.who.seat === wb.you && r.time === 99));
+  });
+
+  it('the host dropping keeps the host (and the AI reports); it only passes when the host leaves', async () => {
+    const { code, a, b, wa, wb } = await startRace();
+    a.close();
+    const off = await b.waitFor((m): m is Extract<S2C, { t: 'room' }> => isRoom(m) && m.seats.some((x) => x.id === wa.you && !x.online));
+    expect(off.seats.find((x) => x.id === wa.you)?.host).toBe(true);
+    expect(off.seats.find((x) => x.id === wb.you)?.host).toBe(false);
+    const a2 = client(code);
+    await a2.send(hello('Ana', wa.token));
+    await a2.waitFor(isWelcome);
+    await a2.waitFor(isGo);
+    await a2.send({ t: 'fin', who: { ai: 0 }, time: 80 });
+    await b.waitFor((m) => isResult(m) && m.rows.some((r) => 'ai' in r.who && r.time === 80));
+    // Gone for good (it leaves): now the other human is host.
+    await a2.send({ t: 'leave' });
+    const gone = await b.waitFor((m): m is Extract<S2C, { t: 'room' }> => isRoom(m) && m.seats.length === 1);
+    expect(gone.seats[0]).toMatchObject({ id: wb.you, host: true });
+  });
+
+  it('a lobby seat comes back with its name, vehicle and ready flag', async () => {
+    const code = await createRoom();
+    const a = client(code);
+    await a.send(hello('Ana'));
+    await a.waitFor(isWelcome);
+    const b = client(code);
+    await b.send({ t: 'hello', v: PROTO, name: 'Beto', vehicle: 'popular' });
+    const wb = await b.waitFor(isWelcome);
+    await b.send({ t: 'me', ready: true });
+    await a.waitFor((m) => isRoom(m) && m.seats.some((x) => x.id === wb.you && x.ready));
+    b.close();
+    await a.waitFor((m) => isRoom(m) && m.seats.some((x) => x.id === wb.you && !x.online));
+    const b2 = client(code);
+    await b2.send({ t: 'hello', v: PROTO, name: 'Otro', vehicle: 'taxi', token: wb.token });
+    const room = await b2.waitFor((m): m is Extract<S2C, { t: 'room' }> => isRoom(m) && m.seats.length === 2);
+    expect(room.seats.find((x) => x.id === wb.you)).toMatchObject({ name: 'Beto', vehicle: 'popular', ready: true, online: true });
+    expect(room.seats.find((x) => x.host)?.name).toBe('Ana');
+  });
+
+  it('rejects a seventh player', async () => {
+    const code = await createRoom();
+    for (let i = 0; i < 6; i++) {
       const c = client(code);
       await c.send(hello(`P${i}`));
       await c.waitFor(isWelcome);

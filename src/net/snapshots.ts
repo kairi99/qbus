@@ -21,13 +21,15 @@ export interface Pose {
   boost: 0 | 1;
   /** The vehicle is a ghost (from the latest snapshot at or before the sample time). */
   ghost: boolean;
+  /** The player's horn flag of the latest snapshot at or before the sample time. */
+  horn: boolean;
   s: number;
   /** The sample is the far side of a teleport. */
   snapped: boolean;
 }
 
 export function newPose(): Pose {
-  return { p: [0, 0, 0], q: [0, 0, 0, 1], rears: [], steer: 0, speed: 0, thr: 0, boost: 0, ghost: false, s: 0, snapped: false };
+  return { p: [0, 0, 0], q: [0, 0, 0, 1], rears: [], steer: 0, speed: 0, thr: 0, boost: 0, ghost: false, horn: false, s: 0, snapped: false };
 }
 
 interface Entry {
@@ -133,6 +135,7 @@ export class SnapshotBuffer {
     out.thr = b.thr;
     out.boost = b.boost;
     out.ghost = a.g === 1;
+    out.horn = b.h === 1;
     const ra = a.rears;
     const rb = b.rears;
     const nr = ra && rb ? Math.min(ra.length, rb.length) : 0;

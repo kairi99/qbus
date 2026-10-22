@@ -28,6 +28,8 @@ export interface RaceResults {
   final?: boolean;
   /** Online with the room gone: only the player's own result. */
   solo?: boolean;
+  /** An online race: `best` is the player's best online time. */
+  online?: boolean;
 }
 
 export type RaceHudAction = 'again' | 'menu' | 'lobby';
@@ -37,11 +39,10 @@ export type RaceHudAction = 'again' | 'menu' | 'lobby';
  * countdown, the tachometer with its green launch window (big during the countdown, gone a
  * moment after GO), a progress strip with every racer on it, and the results card.
  */
-/** The slipstream badge shows past this much pull. */
-const DRAFT_SHOWN = 0.3;
-
 export class RaceHud {
   onAction: ((a: RaceHudAction) => void) | null = null;
+  /** Online: the banner's "Reconectar". */
+  onRetry: (() => void) | null = null;
   private el: HTMLElement;
   private k: Record<string, HTMLElement> = {};
   private needle: SVGElement;
@@ -71,8 +72,7 @@ export class RaceHud {
       <div class="rh-flash" data-k="flash" hidden></div>
       <div class="rh-photo" data-k="photo" hidden></div>
       <div class="rh-wait" data-k="wait" hidden>De vuelta en la vía… <b data-k="waitN">3</b></div>
-      <div class="rh-net" data-k="net" hidden></div>
-      <div class="rh-draft" data-k="draft" hidden>¡Rebufo!</div>
+      <div class="rh-net" data-k="net" hidden><span data-k="netText"></span><button class="gh-btn rh-net-btn" data-act="retry" hidden>Reconectar</button></div>
       <div class="rh-hint" data-k="hint">Acelera <span class="keys-only">con <b>W</b></span> y mantén la aguja en lo <b class="rh-green">verde</b>: ¡salida perfecta!</div>
       <div class="rh-strip"><div class="rh-flag">🏁</div></div>
       <div class="rh-tach" data-k="tach">
@@ -109,8 +109,9 @@ export class RaceHud {
       this.dots.push(d);
     }
     this.el.addEventListener('click', (e) => {
-      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act as RaceHudAction | undefined;
-      if (act) this.onAction?.(act);
+      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+      if (act === 'retry') this.onRetry?.();
+      else if (act) this.onAction?.(act as RaceHudAction);
     });
   }
 
@@ -144,10 +145,8 @@ export class RaceHud {
     flash.classList.add('rh-flash-on');
   }
 
-  /** `wait`: seconds before the player may go on after an R reset (0: none). `draft`: the slipstream's pull on the player (0..1). */
-  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; wait: number; draft: number }): void {
-    const drafting = f.draft > DRAFT_SHOWN;
-    if (this.k.draft.hidden === drafting) this.k.draft.hidden = !drafting;
+  /** `wait`: seconds before the player may go on after an R reset (0: none). */
+  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; wait: number }): void {
     setText(this.k.place, `${f.place} / ${f.racers}`);
     const waiting = f.wait > 0;
     if (this.k.wait.hidden === waiting) this.k.wait.hidden = !waiting;
@@ -179,7 +178,7 @@ export class RaceHud {
       .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span><small>${row.bus}</small><b>${row.time === null ? (r.final ? 'retirado' : 'en carrera') : `${row.estimated ? '≈ ' : ''}${raceClock(row.time)}`}</b></li>`)
       .join('');
     this.k.rLaunch.textContent = `Salida: ${r.launch}`;
-    this.k.rBest.textContent = r.newBest ? `¡Récord de la ruta! ${raceClock(r.best!)}` : r.best !== null ? `Récord: ${raceClock(r.best)}` : '';
+    this.k.rBest.textContent = r.newBest ? `¡Récord${r.online ? ' en línea' : ' de la ruta'}! ${raceClock(r.best!)}` : r.best !== null ? `${r.online ? 'Tu mejor en línea' : 'Récord'}: ${raceClock(r.best)}` : '';
     this.k.rBest.classList.toggle('rh-record', r.newBest);
   }
 
@@ -190,15 +189,12 @@ export class RaceHud {
     again.innerHTML = 'Volver a la sala <small>Enter</small>';
   }
 
-  /** Online: the connection banner ("Reconectando…"); null hides it. */
-  setNet(text: string | null): void {
+  /** Online: the connection banner ("Reconectando…", with a button to try again now); null hides it. */
+  setNet(text: string | null, retry = false): void {
     const el = this.k.net;
-    if (el.hidden === (text === null)) {
-      if (text !== null) setText(el, text);
-      return;
-    }
     el.hidden = text === null;
-    if (text !== null) setText(el, text);
+    if (text !== null) setText(this.k.netText, text);
+    this.el.querySelector<HTMLElement>('[data-act="retry"]')!.hidden = !retry;
   }
 
   /** Online with the room gone: the way out is the menu. */

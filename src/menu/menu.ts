@@ -6,6 +6,7 @@ import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose 
 import { type StarThresholds, starThresholds, starsFor } from '../gameplay/stars';
 import { buildRoadGraph } from '../world/roadGraph';
 import { HILLS_OPTIONS, RAIN_OPTIONS, type RaceSetup, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
+import { bestOnline } from '../gameplay/onlineRecords';
 import { bestRace } from '../gameplay/raceRecords';
 import { SLIDE_TRACKS } from '../gameplay/landslides';
 import { raceClock } from '../gameplay/raceGame';
@@ -16,7 +17,7 @@ import { money, starText, targetsText } from '../ui/gameHud';
 import { MenuSounds } from './menuSounds';
 import { MAX_SEATS, cleanName, normalizeCode, type RoomSettings, type S2C, type Seat } from '../net/protocol';
 import { buildGrid } from '../net/onlineGrid';
-import { ONLINE, RoomConnection, clearSession, createRoom, loadSession, roomInfo } from '../net/connection';
+import { ONLINE, RoomConnection, clearSession, createRoom, lastSavedSeat, loadSession, roomInfo, savedSeat, type OnlineSession } from '../net/connection';
 
 type RoomMsg = Extract<S2C, { t: 'room' }>;
 
@@ -65,7 +66,7 @@ const MODES = [
 /** Vehicles offered in a mode: buses on a route; buses and cars in free roam and races. */
 const vehiclesFor = (mode: Selection['mode']) => (mode === 'route' ? BUSES : VEHICLES);
 
-const RIVAL_COUNTS = [1, 2, 3];
+const RIVAL_COUNTS = [1, 2, 3, 4, 5];
 const SKILL_OPTIONS: { value: RaceSetup['skill']; label: string }[] = [
   { value: 'easy', label: 'Tranquilos' },
   { value: 'normal', label: 'Normales' },
@@ -98,8 +99,34 @@ export class Menu {
     const seat = loadSession();
     if (back && seat && seat.code === back) {
       history.replaceState(null, '', location.pathname);
-      this.lobby(new RoomConnection(seat.code, { name: seat.name, vehicle: this.settings.bus, token: seat.token }), seat.code);
-    } else this.title();
+      this.lobby(this.reconnect(seat), seat.code);
+    } else {
+      this.title();
+      // A reload (the tab's seat is still there): back to that room, if it is still on.
+      if (seat) void this.rejoin(seat);
+    }
+  }
+
+  /** A connection that takes `seat` back (name, ready flag and vehicle are the room's). */
+  private reconnect(seat: OnlineSession): RoomConnection {
+    return new RoomConnection(seat.code, { name: seat.name, vehicle: this.onlineVehicle || this.settings.bus, token: seat.token }, { giveUpMs: LOBBY_GIVE_UP });
+  }
+
+  /** Back into a room whose seat this browser still holds. `note`: where to say it is gone (from the online screen); from the title screen that stays quiet. */
+  private async rejoin(seat: OnlineSession, note?: (t: string) => void): Promise<void> {
+    try {
+      const info = await roomInfo(seat.code);
+      if (!info) {
+        clearSession(seat.code);
+        note?.('Esa sala ya no existe');
+        return;
+      }
+      // Still where it was asked for (not off in another menu).
+      if (!note && !this.root.querySelector('.mn-title')) return;
+      this.lobby(this.reconnect(seat), seat.code);
+    } catch {
+      note?.(NO_SERVER);
+    }
   }
 
   // ---- screens ------------------------------------------------------------
@@ -339,6 +366,8 @@ export class Menu {
   private online(message = ''): void {
     const s = this.settings;
     if (!VEHICLES.some((v) => v.preset.id === this.onlineVehicle)) this.onlineVehicle = VEHICLES.some((v) => v.preset.id === s.bus) ? s.bus : VEHICLES[0].preset.id;
+    // A seat this browser still holds in some room (a closed tab, a crashed page): a way back.
+    const back = lastSavedSeat();
     this.root.innerHTML = `
       ${SKYLINE}
       <main class="mn-settings mn-online">
@@ -364,6 +393,7 @@ export class Menu {
               </div>
             </form>
           </div>
+          ${back ? `<button class="mn-btn" data-go="rejoin">Volver a la sala ${back.code}</button>` : ''}
           <p class="mn-note" role="status" aria-live="polite">${esc(message)}</p>
         </div>
       </main>`;
@@ -381,12 +411,13 @@ export class Menu {
     vehicle.addEventListener('change', () => (this.onlineVehicle = vehicle.value));
     code.addEventListener('input', () => (code.value = code.value.toUpperCase()));
     this.on('[data-go="back"]', () => this.title());
+    if (back) this.on('[data-go="rejoin"]', () => void this.rejoin(back, (t) => (note.textContent = t)));
     this.on('[data-go="create"]', async () => {
       busy(true);
       note.textContent = 'Creando la sala…';
       try {
         const room = await createRoom();
-        this.lobby(new RoomConnection(room, { name: cleanName(name.value), vehicle: this.onlineVehicle }), room);
+        this.lobby(new RoomConnection(room, { name: cleanName(name.value), vehicle: this.onlineVehicle }, { giveUpMs: LOBBY_GIVE_UP }), room);
       } catch {
         note.textContent = NO_SERVER;
         busy(false);
@@ -405,9 +436,14 @@ export class Menu {
       try {
         const info = await roomInfo(c);
         if (!info) note.textContent = 'No existe esa sala';
-        else if (info.phase !== 'lobby') note.textContent = 'Esa sala ya está corriendo';
-        else if (info.seats >= MAX_SEATS) note.textContent = 'Sala llena';
-        else return this.lobby(new RoomConnection(c, { name: cleanName(name.value), vehicle: this.onlineVehicle }), c);
+        else {
+          // A seat this browser had in that room (same name) comes back to it, even to a race on.
+          const mine = savedSeat(c);
+          const token = mine && mine.name === cleanName(name.value) ? mine.token : undefined;
+          if (info.phase !== 'lobby' && !token) note.textContent = 'Esa sala ya está corriendo';
+          else if (info.seats >= MAX_SEATS && !token) note.textContent = 'Sala llena';
+          else return this.lobby(new RoomConnection(c, { name: cleanName(name.value), vehicle: this.onlineVehicle, token }, { giveUpMs: LOBBY_GIVE_UP }), c);
+        }
       } catch {
         note.textContent = NO_SERVER;
       }
@@ -422,6 +458,7 @@ export class Menu {
     let everOpen = false;
     let failure = '';
     let note = '';
+    let finished = false;
     const offs: (() => void)[] = [];
     this.root.innerHTML = `
       ${SKYLINE}
@@ -436,13 +473,16 @@ export class Menu {
             <strong class="mn-code" data-room-code aria-label="Código ${code.split('').join(' ')}">${code}</strong>
             <span class="mn-code-hint">Pásales este código a tus panas</span>
           </div>
-          <p class="mn-banner" role="status" aria-live="polite" hidden></p>
+          <p class="mn-banner" role="status" aria-live="polite" hidden><span data-k="bannerText"></span> <button class="mn-btn" data-go="retry" hidden>Reconectar</button></p>
           <label class="mn-field"><span>Qué maneja</span>
             <select class="mn-select" name="vehicle">${vehicleOptions(this.onlineVehicle)}</select></label>
           <div class="mn-lobby-body"></div>
         </div>
       </main>`;
     const banner = this.root.querySelector<HTMLElement>('.mn-banner')!;
+    const bannerText = banner.querySelector<HTMLElement>('[data-k="bannerText"]')!;
+    const retry = banner.querySelector<HTMLElement>('[data-go="retry"]')!;
+    retry.addEventListener('click', () => conn.retry());
     const body = this.root.querySelector<HTMLElement>('.mn-lobby-body')!;
     const leave = () => {
       offs.forEach((f) => f());
@@ -462,8 +502,9 @@ export class Menu {
       if (failure) text = failure;
       else if (conn.state === 'connecting') text = everOpen ? 'Reconectando…' : 'Conectando…';
       else if (conn.state === 'closed') text = 'Se perdió la conexión con la sala';
-      banner.textContent = text;
+      bannerText.textContent = text;
       banner.hidden = !text;
+      retry.hidden = failure !== '' || conn.state === 'open';
       this.root.querySelector('.mn-code-box')!.classList.toggle('mn-dead', !!failure || conn.state === 'closed');
     };
     const render = () => {
@@ -476,7 +517,7 @@ export class Menu {
     };
     conn.onState = (st) => {
       if (st === 'open') everOpen = true;
-      if (st === 'rejected' && !failure) failure = 'No se pudo entrar a la sala';
+      if (st === 'rejected' && !failure) failure = conn.replaced ? 'Otra pestaña tomó tu lugar en la sala' : 'No se pudo entrar a la sala';
       status();
       render();
     };
@@ -487,16 +528,28 @@ export class Menu {
       }),
       conn.on('room', (m) => {
         room = m;
+        // A seat taken back keeps its vehicle: the picker shows it.
+        const mineSeat = m.seats.find((x) => x.id === conn.seat);
+        const pick = this.root.querySelector<HTMLSelectElement>('select[name="vehicle"]');
+        if (mineSeat && pick && mineSeat.vehicle !== this.onlineVehicle && VEHICLES.some((v) => v.preset.id === mineSeat.vehicle)) pick.value = this.onlineVehicle = mineSeat.vehicle;
         // The host started: everyone's page goes to the game, which reconnects to this seat.
         if (m.phase === 'loading') {
           offs.forEach((f) => f());
           conn.onState = null;
-          // The room's light and weather ride in the link, so every page starts the same race.
-          const sky = `&tod=${m.settings.tod ?? 'day'}&rain=${m.settings.rain ?? 'random'}&slides=${m.settings.slides === false ? 0 : 1}`;
-          location.search = `?play=1&mode=online&city=${encodeURIComponent(m.settings.track)}&room=${code}${sky}`;
+          location.search = this.gameLink(m, code);
           return;
         }
         render();
+      }),
+      conn.on('result', (m) => {
+        finished = m.rows.some((r) => 'seat' in r.who && r.who.seat === conn.seat && r.time !== null);
+      }),
+      // Back to a race already running (this seat was in it, a reload or a reopened tab): its game page takes over.
+      conn.on('go', () => {
+        if (finished || !room) return;
+        offs.forEach((f) => f());
+        conn.onState = null;
+        location.search = this.gameLink(room, code);
       }),
       conn.on('error', (m) => {
         failure = ERROR_TEXT[m.code] ?? 'No se pudo entrar a la sala';
@@ -508,6 +561,12 @@ export class Menu {
     status();
     render();
     this.root.querySelector<HTMLElement>('[data-go="back"]')?.focus();
+  }
+
+  /** The game page of an online race. The room's light and weather ride in the link, so every page starts the same race. */
+  private gameLink(m: RoomMsg, code: string): string {
+    const sky = `&tod=${m.settings.tod ?? 'day'}&rain=${m.settings.rain ?? 'random'}&slides=${m.settings.slides === false ? 0 : 1}`;
+    return `?play=1&mode=online&city=${encodeURIComponent(m.settings.track)}&room=${code}${sky}`;
   }
 
   /** Seats and race options for the current room message. */
@@ -550,6 +609,7 @@ export class Menu {
         <div><dt>Hora</dt><dd>${esc(time)}</dd></div>
         <div><dt>Lluvia</dt><dd>${esc(rain)}</dd></div>${slidesHere ? `<div><dt>Derrumbes</dt><dd>${st.slides ? 'Sí' : 'No'}</dd></div>` : ''}</dl>`;
     }
+    const best = bestOnline(st.track);
     const others = room.seats.filter((x) => !x.host && x.online);
     const mine = room.seats.find((x) => x.id === me);
     const action = room.phase === 'racing'
@@ -561,7 +621,7 @@ export class Menu {
     return `
       <h2>En la sala (${humans}/${MAX_SEATS})</h2>
       <ul class="mn-seats">${rows.join('')}</ul>
-      <div class="mn-opts"><h2>La carrera</h2>${options}</div>
+      <div class="mn-opts"><h2>La carrera</h2>${options}${best ? `<p class="mn-best" data-k="best">Tu mejor en línea en ${esc(track)}: <b>${raceClock(best.time)}</b> · ${esc(best.bus)} · ${best.place}º de ${best.racers}</p>` : ''}</div>
       <div class="mn-lobby-actions">${action}</div>
       <p class="mn-note" role="status" aria-live="polite">${esc(note)}</p>`;
   }
@@ -923,6 +983,9 @@ function choice(name: string, value: string, label: string, checked: boolean, ke
 }
 
 const NO_SERVER = 'No hay conexión con el servidor de salas';
+/** The lobby keeps trying a lost link a little past the room's grace for a seat. */
+const LOBBY_GIVE_UP = 65_000;
+
 const ERROR_TEXT: Record<string, string> = {
   full: 'Sala llena',
   racing: 'Esa sala ya está corriendo',

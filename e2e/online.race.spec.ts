@@ -68,6 +68,13 @@ test('two players race online: shared start, each sees the other, results from t
   const before = await remoteX();
   await a.page.keyboard.down('KeyW');
   await expect.poll(async () => Math.abs((await remoteX()) - before), { timeout: 90_000 }).toBeGreaterThan(5);
+  // Ana honks: Beto's audio is told to sound her horn, and to stop when she lets go.
+  const hornHeard = () => q(b.page, 'q.racing.voices.some((v) => v.horn)');
+  expect(await hornHeard()).toBe(false);
+  await a.page.keyboard.down('KeyH');
+  await expect.poll(hornHeard, { timeout: 30_000 }).toBe(true);
+  await a.page.keyboard.up('KeyH');
+  await expect.poll(hornHeard, { timeout: 30_000 }).toBe(false);
   // Beto sees Ana's name over her bus, in her color.
   expect(await q(b.page, '!!q.racing.tags?.of("Ana")?.visible')).toBe(true);
   await b.page.screenshot({ path: `${shots}/online-race-tags.png` });
