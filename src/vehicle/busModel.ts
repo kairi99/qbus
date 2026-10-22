@@ -36,6 +36,33 @@ function steeringWheel(r: number): THREE.Group {
   return wheel;
 }
 
+/** Per-wheel animation inputs; `section` 0 is the front section, i + 1 rear section i. */
+export interface WheelPose {
+  /** Suspension length (m). */
+  susp(section: number, i: number): number;
+  /** Steering angle (rad). */
+  steer(section: number, i: number): number;
+  /** Accumulated spin (rad). */
+  spin(section: number, i: number): number;
+}
+
+/** Wheel pose read straight from a bus's raycast vehicles. */
+class PhysicsWheels implements WheelPose {
+  bus!: BusPhysics;
+  private v(section: number) {
+    return section ? this.bus.rears[section - 1].vehicle : this.bus.vehicle;
+  }
+  susp(section: number, i: number): number {
+    return this.v(section).wheelSuspensionLength(i) ?? 0;
+  }
+  steer(section: number, i: number): number {
+    return this.v(section).wheelSteering(i) ?? 0;
+  }
+  spin(section: number, i: number): number {
+    return this.v(section).wheelRotation(i) ?? 0;
+  }
+}
+
 export class BusModel {
   readonly root = new THREE.Group();
   private exterior = new THREE.Group();
@@ -306,12 +333,57 @@ export class BusModel {
     });
   }
 
+  /** The exterior's materials as drawn while a ghost: own copies of the originals (the models share none of them). */
+  private ghostMats = new Map<THREE.Material, THREE.Material>();
+  private ghostMeshes: { mesh: THREE.Mesh; solid: THREE.Material; ghost: THREE.Material }[] | null = null;
+  private ghostOpacity = 1;
+
+  /**
+   * Draws the exterior (rear sections and wheels too) see-through at `opacity`; 1 puts the original
+   * materials back. The cockpit, flames and spray are left alone.
+   */
+  setGhost(opacity: number): void {
+    if (opacity === this.ghostOpacity) return;
+    this.ghostOpacity = opacity;
+    if (!this.ghostMeshes) {
+      if (opacity >= 1) return;
+      const list: NonNullable<BusModel['ghostMeshes']> = (this.ghostMeshes = []);
+      const visit = (o: THREE.Object3D) => {
+        if (o === this.flames) return;
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh && !Array.isArray(mesh.material)) {
+          const solid = mesh.material;
+          let ghost = this.ghostMats.get(solid);
+          if (!ghost) {
+            ghost = solid.clone();
+            ghost.transparent = true;
+            ghost.depthWrite = false;
+            this.ghostMats.set(solid, ghost);
+          }
+          list.push({ mesh, solid, ghost });
+        }
+        o.children.forEach(visit);
+      };
+      visit(this.exterior);
+    }
+    const on = opacity < 1;
+    for (const [solid, ghost] of this.ghostMats) ghost.opacity = solid.opacity * opacity;
+    for (const g of this.ghostMeshes) g.mesh.material = on ? g.ghost : g.solid;
+  }
+
   setCockpitView(on: boolean): void {
     this.exterior.visible = !on;
     this.cockpit.visible = on;
   }
 
-  sync(bus: BusPhysics): void {
+  /** Default wheel pose: read from the physics (rebound to the bus on each sync). */
+  private physicsWheels = new PhysicsWheels();
+
+  sync(bus: BusPhysics, wheels?: WheelPose): void {
+    if (!wheels) {
+      this.physicsWheels.bus = bus;
+      wheels = this.physicsWheels;
+    }
     const t = bus.body.translation();
     const q = bus.body.rotation();
     this.root.position.set(t.x, t.y, t.z);
@@ -328,14 +400,13 @@ export class BusModel {
     });
     const mount = bus.preset.wheels.mountHeight;
     for (const { pivot, spin, section, index } of this.wheels) {
-      const v = section ? bus.rears[section - 1].vehicle : bus.vehicle;
-      pivot.position.y = mount - (v.wheelSuspensionLength(index) ?? 0);
-      pivot.rotation.y = v.wheelSteering(index) ?? 0;
-      spin.rotation.z = -(v.wheelRotation(index) ?? 0);
+      pivot.position.y = mount - wheels.susp(section, index);
+      pivot.rotation.y = wheels.steer(section, index);
+      spin.rotation.z = -wheels.spin(section, index);
     }
     // Its axis points forward, away from the driver: negated so it turns counterclockwise, as
     // seen from the seat, when the wheels steer left.
-    this.steeringWheel.rotation.z = -(bus.vehicle.wheelSteering(0) ?? 0) * 4;
+    this.steeringWheel.rotation.z = -wheels.steer(0, 0) * 4;
     this.flames.visible = bus.boosting;
     if (bus.boosting) for (const f of this.flames.children) f.scale.x = 0.8 + Math.random() * 0.6;
   }

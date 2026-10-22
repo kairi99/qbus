@@ -87,4 +87,15 @@ describe('settings', () => {
     expect(s.timeOfDay).toBe('day');
     expect(loadSettings(memory({ qbus: '{not json' }))).toEqual(DEFAULTS);
   });
+
+  it('online name: empty by default, kept when saved, cleaned, and v2 saves load with the default', () => {
+    expect(loadSettings(memory()).online).toEqual({ name: '' });
+    const store = memory();
+    saveSettings({ ...DEFAULTS, online: { name: 'Ana' } }, store);
+    expect(loadSettings(store).online.name).toBe('Ana');
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...DEFAULTS, online: { name: '  ' + 'x'.repeat(30) + '  ' } }) })).online.name).toBe('x'.repeat(16));
+    const { online: _, ...old } = DEFAULTS;
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2, hills: 1.3 }) })).online.name).toBe('');
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 3, hills: 1.3 }) })).hills).toBe(1.3);
+  });
 });

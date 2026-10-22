@@ -1,8 +1,8 @@
-import { GROUP, RAPIER, groups } from '../physics/world';
+import { GROUP, RAPIER, VEHICLE_GROUPS, groups } from '../physics/world';
 
 /** In its lane a car only meets the bus and other cars (the sim keeps it on the road); a freed wreck meets everything. */
 const IN_LANE = groups(GROUP.TRAFFIC, GROUP.ALL & ~GROUP.STATIC);
-const WRECK = groups(GROUP.ALL, GROUP.ALL);
+const WRECK = VEHICLE_GROUPS;
 import type { CityData, Vec2 } from '../world/cityData';
 import { groundHeightAt } from '../world/cityData';
 import { surfaceY } from '../world/elevation';

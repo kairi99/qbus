@@ -35,6 +35,8 @@ import { FALL_BACK, FallWatch } from './gameplay/fallWatch';
 import { RaceSession } from './gameplay/raceSession';
 import { TireSmoke, dustOf, smokeOf } from './vehicle/tireSmoke';
 import { distToPolyline } from './world/geom';
+import { OnlineRace, joinOnline } from './net/onlineRace';
+import { loadSession } from './net/connection';
 import { MAX_RIVALS, TRACK_TRAFFIC, gridSlots, parseRivalChoice, rivalVehicles } from './gameplay/raceField';
 
 const MAX_FRAME = 0.1;
@@ -106,12 +108,24 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // Free roam (?mode=free) has no route; a route shift is always driven in a bus. A race
   // (?mode=race on a track: `&rivals=1..3`, `&rivalBus=mixed|same|<vehicle id>`,
   // `&skill=easy|normal|hard`, `&traffic=1`) has none either, and any vehicle.
-  const raceMode = params.get('mode') === 'race' && !!city.race;
+  // Online (?mode=online&room=K7Q2, from the menu's lobby): a race whose grid, vehicles and GO
+  // come from the room; the page waits for everyone to have the track loaded.
+  const online = params.get('mode') === 'online' && !!city.race;
+  const raceMode = (params.get('mode') === 'race' || online) && !!city.race;
+  const roomCode = params.get('room') ?? '';
+  const seat = online ? loadSession() : null;
+  const joined = online && seat && seat.code === roomCode ? await joinOnline(roomCode, { name: seat.name, vehicle: settings.bus, token: seat.token }, document.querySelector<HTMLElement>('#hud')!) : null;
+  if (online && !joined) {
+    // Not this room's (a stale or shared link): back to the menu.
+    location.search = '';
+    return;
+  }
   const free = params.get('mode') === 'free' || raceMode;
   const routes = free ? [] : routesFor(city);
   const route = free ? null : (routes.find((r) => r.id === params.get('route')) ?? routes[0]);
   // A link without ?bus= to a Trolebús/Ecovía route takes the articulated bus, like the menu.
-  const picked = busById(params.get('bus') ?? (route?.system ? BRT_BUS : settings.bus));
+  const mine = joined ? joined.go.grid.find((g) => g.kind === 'human' && g.seat === joined.conn.seat) : undefined;
+  const picked = busById(mine?.vehicle ?? params.get('bus') ?? (route?.system ? BRT_BUS : settings.bus));
   const preset = free || picked.kind !== 'car' ? picked : busById('popular');
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
@@ -133,13 +147,14 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const rivals = Math.max(1, Math.min(MAX_RIVALS, Number(params.get('rivals') ?? 1) || 1));
   const skill = (['easy', 'normal', 'hard'] as const).find((k) => k === params.get('skill')) ?? 'normal';
   const ids = VEHICLES.map((v) => v.preset.id);
-  const field = raceMode ? rivalVehicles(parseRivalChoice(params.get('rivalBus'), ids), preset.id, rivals, ids) : [];
-  const grid = raceMode ? gridSlots(city.race!, [...field.map((id) => busById(id).body.length), preset.body.length]) : null;
+  const net = joined ? new OnlineRace(joined.conn, joined, world, city.race!, roomCode) : null;
+  const field = net ? net.localAi.map((a) => a.vehicle) : raceMode ? rivalVehicles(parseRivalChoice(params.get('rivalBus'), ids), preset.id, rivals, ids) : [];
+  const grid = net ? [...net.localAi.map((a) => a.slot), net.slots[net.me]] : raceMode ? gridSlots(city.race!, [...field.map((id) => busById(id).body.length), preset.body.length]) : null;
   // Traffic on a track only if asked for (free roam on one too).
   const trackTraffic = city.race && params.get('traffic') === '1' ? TRACK_TRAFFIC : 0;
-  const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone, start: grid?.[grid.length - 1], title: raceMode ? 'Carrera' : undefined, trackTraffic });
+  const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone, start: grid?.[grid.length - 1], title: net ? 'Carrera en línea' : raceMode ? 'Carrera' : undefined, trackTraffic });
   const racing = raceMode
-    ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null, ground: (p) => groundHeightAt(city, p) })
+    ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null, ground: (p) => groundHeightAt(city, p), seed: joined?.go.seed, online: net ? { keys: net.keys, goIn: () => net.goIn(), remotes: net.remotes } : null })
     : null;
   if (racing) session.racers = racing.buses;
   // Tire smoke (drifts, a spinning launch) and dust off the asphalt, everyone's in one draw.
@@ -173,18 +188,22 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     if (a === 'menu') toMenu();
     if (a === 'again') again();
   };
-  if (racing) racing.hud.onAction = (a) => (a === 'menu' ? toMenu() : again());
+  if (racing) racing.hud.onAction = (a) => (a === 'menu' ? (net ? net.leave() : toMenu()) : a === 'lobby' ? net?.toLobby() : again());
+  if (net && racing) net.attach(racing);
+  if (racing) racing.camera = camera;
 
   // How to play, every time a shift, free roam or a race starts (unless turned off, or ?tutorial=0).
   // A race's grid waits for it to close.
   const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system, racing ? { from: city.race!.from, to: city.race!.to, traffic: trackTraffic > 0 } : null);
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
-  if (settings.tutorial && params.get('tutorial') !== '0') tutorial.show();
+  // Online the countdown runs on the room's clock: no card to hold it.
+  if (settings.tutorial && params.get('tutorial') !== '0' && !net) tutorial.show();
 
   // Weather: showers at random moments, or always, or never (a setting; ?rain= overrides: 0 never,
   // 1 raining, 2 a downpour that floods the underpasses, or a setting's name).
   const rainParam = params.get('rain');
-  const weatherSeed = Math.floor(Math.random() * 2 ** 31);
+  // Online everyone gets the same showers (the room's seed).
+  const weatherSeed = joined?.go.seed ?? Math.floor(Math.random() * 2 ** 31);
   const weather =
     rainParam === '0' ? new Weather('off', weatherSeed)
     : rainParam === '1' || rainParam === '2' ? new Weather('always', weatherSeed, rainParam === '2' ? 1 : 0.55)
@@ -215,7 +234,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // Per-frame cost breakdown (ms, smoothed) and both passes' draw stats, for tools/tests.
   const perf = { sim: 0, frame: 0, render: 0, calls: 0, triangles: 0, backdropCalls: 0, steps: 0 };
   renderer.info.autoReset = false;
-  if (import.meta.env.DEV) (window as any).__qbus = { quality, smoke, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, weather, basins, timeOfDay: tod, fall, racing, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
+  if (import.meta.env.DEV) (window as any).__qbus = { quality, smoke, bus, audio, radio, rig, input, city, props, renderer, scene, backdrop, session, route, tutorial, perf, weather, basins, timeOfDay: tod, fall, racing, online: net, groundAt: (p: { x: number; z: number }) => groundHeightAt(city, p) };
 
   const scratchPos = { x: 0, y: 0, z: 0 };
   const earFwd = new THREE.Vector3();
@@ -283,7 +302,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       }
       if (paused) continue;
       if (action === 'restart' && session.game?.over) session.restart();
-      if (action === 'restart' && racing?.over) again();
+      if (action === 'restart' && racing?.over) {
+        if (net) net.toLobby();
+        else again();
+      }
       if (action === 'horn') session.playerHonk();
     }
 
@@ -318,7 +340,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     const drive = paused || tutorial.open ? { throttle: 0, steer: 0, handbrake: false } : input.drive();
     if (drive.throttle > 0 || drive.boost) session.start();
     // Paused: the world stands still (but keeps rendering behind the menu).
-    acc = paused ? 0 : acc + dt;
+    // Online the race doesn't wait: pausing only shows the menu.
+    const frozen = paused && !net;
+    acc = frozen ? 0 : acc + dt;
     let steps = 0;
     while (acc >= PHYSICS_STEP) {
       steps++;
@@ -327,6 +351,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         racing.step(PHYSICS_STEP);
         bus.update(racing.playerInput(drive, racing.game.green && session.nitro.step(!!drive.boost, PHYSICS_STEP)), PHYSICS_STEP);
       } else bus.update({ ...drive, boost: session.nitro.step(!!drive.boost, PHYSICS_STEP) }, PHYSICS_STEP);
+      if (net) {
+        net.beforeStep(acc - PHYSICS_STEP, PHYSICS_STEP);
+        net.tick(PHYSICS_STEP, bus, drive.throttle);
+      }
       session.beforeStep(PHYSICS_STEP);
       world.step();
       session.physicsStep(PHYSICS_STEP);
@@ -338,7 +366,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     const upY = 1 - 2 * (q.x * q.x + q.z * q.z);
     flippedFor = upY < 0.3 ? flippedFor + dt : 0;
 
-    if (race && !paused) {
+    if (race && !frozen) {
       const p = bus.position(scratchPos);
       // Near the last spot (cheap), by position and height; off that stretch of road (a teleport,
       // an R reset onto another leg), the whole track.
@@ -353,10 +381,12 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         const s = trackPose(race, Math.max(race.start - 12, trackS - FALL_BACK));
         bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
         trackS = -1;
+        racing?.playerFell();
       }
     }
     props.sync();
     model.sync(bus);
+    model.setGhost(racing?.ghostFade ?? 1);
     if (!paused) {
       const spin = racing && racing.playerGrip < 1 ? drive.throttle : 0;
       smoke.emit(bus, smokeOf(bus.slipAngle, bus.speed, spin), dustOf(offEdge, bus.speed), dt);
@@ -372,8 +402,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     const spray = bus.wade > 0.05 ? Math.min(1, Math.abs(bus.speed) / 10) * Math.min(1, bus.wade / 0.4) : 0;
     model.setSpray(spray);
     if (racing) {
-      racing.frame(paused ? 0 : dt, drive.throttle, !paused && !tutorial.open);
-      session.others = racing.others as { x: number; z: number }[];
+      racing.frame(frozen ? 0 : dt, drive.throttle, !paused && !tutorial.open);
+      session.others = racing.others as { x: number; z: number; color?: string }[];
       for (const n of racing.notices) session.notice(n.text, n.tone);
       racing.notices.length = 0;
       // The rivals' engines, heard from the camera.

@@ -8,8 +8,11 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:rooms": "vitest run --config vitest.rooms.config.ts",
     "test:underpass": "vitest run --config vitest.underpass.config.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:online": "playwright test -c playwright.online.config.ts",
+    "dev:lan": "vite --host"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",

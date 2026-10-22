@@ -12,7 +12,8 @@ const angle = (v: number) => -SWEEP / 2 + (v / TACH_MAX) * SWEEP;
 export interface RaceResultRow {
   name: string;
   bus: string;
-  time: number;
+  /** Null: still on the road (online, until the server has the time), or out of the race. */
+  time: number | null;
   estimated: boolean;
   player: boolean;
 }
@@ -23,9 +24,13 @@ export interface RaceResults {
   launch: string;
   best: number | null;
   newBest: boolean;
+  /** Online: the server's results are final (a racer without a time is out of the race). */
+  final?: boolean;
+  /** Online with the room gone: only the player's own result. */
+  solo?: boolean;
 }
 
-export type RaceHudAction = 'again' | 'menu';
+export type RaceHudAction = 'again' | 'menu' | 'lobby';
 
 /**
  * The race's HUD (Spanish): the route and the player's place and time (top left), the big
@@ -63,6 +68,7 @@ export class RaceHud {
       <div class="rh-flash" data-k="flash" hidden></div>
       <div class="rh-photo" data-k="photo" hidden></div>
       <div class="rh-wait" data-k="wait" hidden>De vuelta en la vía… <b data-k="waitN">3</b></div>
+      <div class="rh-net" data-k="net" hidden></div>
       <div class="rh-hint" data-k="hint">Acelera <span class="keys-only">con <b>W</b></span> y mantén la aguja en lo <b class="rh-green">verde</b>: ¡salida perfecta!</div>
       <div class="rh-strip"><div class="rh-flag">🏁</div></div>
       <div class="rh-tach" data-k="tach">
@@ -162,13 +168,49 @@ export class RaceHud {
       this.tachHideIn = -1;
       return;
     }
-    this.k.rTitle.textContent = r.place === 1 ? '¡GANASTE, ÑAÑO!' : `Llegaste ${r.place}º`;
+    this.k.rTitle.textContent = r.solo ? 'Terminaste la carrera' : r.place === 1 ? '¡GANASTE, ÑAÑO!' : `Llegaste ${r.place}º`;
     this.k.rTable.innerHTML = r.rows
-      .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span><small>${row.bus}</small><b>${row.estimated ? '≈ ' : ''}${raceClock(row.time)}</b></li>`)
+      .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span><small>${row.bus}</small><b>${row.time === null ? (r.final ? 'retirado' : 'en carrera') : `${row.estimated ? '≈ ' : ''}${raceClock(row.time)}`}</b></li>`)
       .join('');
     this.k.rLaunch.textContent = `Salida: ${r.launch}`;
     this.k.rBest.textContent = r.newBest ? `¡Récord de la ruta! ${raceClock(r.best!)}` : r.best !== null ? `Récord: ${raceClock(r.best)}` : '';
     this.k.rBest.classList.toggle('rh-record', r.newBest);
+  }
+
+  /** Online: "Volver a la sala" in place of another race. */
+  setOnline(): void {
+    const again = this.el.querySelector<HTMLElement>('[data-act="again"]')!;
+    again.dataset.act = 'lobby';
+    again.innerHTML = 'Volver a la sala <small>Enter</small>';
+  }
+
+  /** Online: the connection banner ("Reconectando…"); null hides it. */
+  setNet(text: string | null): void {
+    const el = this.k.net;
+    if (el.hidden === (text === null)) {
+      if (text !== null) setText(el, text);
+      return;
+    }
+    el.hidden = text === null;
+    if (text !== null) setText(el, text);
+  }
+
+  /** Online with the room gone: the way out is the menu. */
+  setOffline(): void {
+    this.el.querySelector<HTMLElement>('[data-act="lobby"]')!.innerHTML = 'Menú <small>Enter</small>';
+    this.el.querySelector<HTMLElement>('[data-act="menu"]')!.hidden = true;
+  }
+
+  /** Racer i's dot on the progress strip in its own color (online: each player's; null keeps the default). */
+  setColors(colors: readonly (string | null)[]): void {
+    colors.forEach((c, i) => {
+      if (c && this.dots[i]) this.dots[i].style.background = c;
+    });
+  }
+
+  /** Hides racer i's dot on the strip (it left the race). */
+  hideDot(i: number): void {
+    if (this.dots[i]) this.dots[i].hidden = true;
   }
 
   get resultsOpen(): boolean {
@@ -178,5 +220,5 @@ export class RaceHud {
 
 /** Rows for the results card, from the race's racers in finishing order. */
 export function resultRows(racers: Racer[], order: number[], buses: string[]): RaceResultRow[] {
-  return order.map((i) => ({ name: racers[i].name, bus: buses[i], time: racers[i].time ?? 0, estimated: racers[i].estimated, player: i === 0 }));
+  return order.map((i) => ({ name: racers[i].name, bus: buses[i], time: racers[i].time, estimated: racers[i].estimated, player: i === 0 }));
 }

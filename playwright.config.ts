@@ -9,6 +9,7 @@ const localChrome = `${homedir()}/.cache/qbus-chrome/chrome-linux64/chrome`;
 
 export default defineConfig({
   testDir: 'e2e',
+  testIgnore: /online.*\.spec\.ts/,
   timeout: 90_000,
   // WebGL here is software-rendered (CPU-bound): parallel workers just starve each other.
   workers: 1,

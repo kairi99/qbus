@@ -27,6 +27,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # The room server for online races (wss://qbus-rooms.<account>.workers.dev): a repository
+          # variable (Settings → Secrets and variables → Actions → Variables). Unset: no online races.
+          VITE_QBUS_ROOMS_URL: ${{ vars.QBUS_ROOMS_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

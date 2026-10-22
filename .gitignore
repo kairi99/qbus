@@ -8,3 +8,5 @@ e2e/screenshots/
 data/raw/*.tif
 tools/music/out/
 __pycache__/
+server/node_modules
+server/.wrangler

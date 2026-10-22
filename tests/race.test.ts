@@ -100,6 +100,57 @@ describe('the race', () => {
   });
 });
 
+describe('online clock', () => {
+  const run = (g: RaceGame, goIns: number[]) => {
+    const out: string[] = [];
+    for (const go of goIns) for (const e of g.update(0.016, [0, 0], false, go)) out.push(e.type === 'count' ? `count${e.n}` : e.type);
+    return out;
+  };
+
+  it('counts down from the shared clock with jittery frames', () => {
+    const g = new RaceGame(['Tú', 'Rival'], 1000);
+    expect(run(g, [4.5, 4.2, 3.4, 3.0, 2.9, 2.2, 1.99, 1.0, 0.8, 0.05, -0.03])).toEqual(['count3', 'count2', 'count1', 'go']);
+    expect(g.phase).toBe('racing');
+    expect(g.time).toBeCloseTo(0.03);
+  });
+
+  it('a late joiner only hears the current count', () => {
+    const g = new RaceGame(['Tú', 'Rival'], 1000);
+    expect(run(g, [1.4, 1.3, -0.1])).toEqual(['count2', 'go']);
+    const h = new RaceGame(['Tú', 'Rival'], 1000);
+    expect(run(h, [0.9, 0.5, -0.1])).toEqual(['count1', 'go']);
+  });
+
+  it('a frame jump past GO emits go only', () => {
+    const g = new RaceGame(['Tú', 'Rival'], 1000);
+    expect(run(g, [3.5, -0.2])).toEqual(['go']);
+    expect(g.phase).toBe('racing');
+  });
+
+  it('race time follows the shared clock', () => {
+    const g = new RaceGame(['Tú', 'Rival'], 1000);
+    run(g, [0.5, -0.1]);
+    g.update(0.9, [10, 20], true, -5.5);
+    expect(g.time).toBeCloseTo(5.5);
+    expect(g.countLeft).toBeLessThanOrEqual(0);
+  });
+
+  it('without estimates, setTime fills a time and re-ranks', () => {
+    const g = new RaceGame(['Tú', 'Rival'], 500, { estimate: false });
+    run(g, [-0.1]);
+    g.update(0.1, [100, 300], true, -10);
+    g.update(0.1, [500, 400], true, -30);
+    expect(g.phase).toBe('over');
+    expect(g.racers[1].time).toBeNull();
+    expect(g.racers[1].estimated).toBe(false);
+    expect(g.ranking()).toEqual([0, 1]);
+    g.setTime(1, 25);
+    expect(g.racers[1].time).toBe(25);
+    expect(g.ranking()).toEqual([1, 0]);
+    expect(g.placeOf(0)).toBe(2);
+  });
+});
+
 describe('the field', () => {
   const pool = ['popular', 'interparroquial', 'buseta', 'articulado', 'gusanito', 'ae86'];
 
@@ -217,5 +268,19 @@ describe('place calls', () => {
     c.reset(2);
     c.update(PLACE_SETTLE / 2, 1);
     for (let i = 0; i < 20; i++) expect(c.update(0.1, 2)).toBeNull();
+  });
+});
+
+describe('online finish', () => {
+  it('after the player finishes, the others still finish on the shared clock', () => {
+    const g = new RaceGame(['Tú', 'Ana'], 100, { estimate: false });
+    g.update(0.1, [0, 0], true, 0.5);
+    g.update(0.1, [0, 0], true, -0.1);
+    let ev = g.update(0.1, [100, 40], true, -10);
+    expect(ev.map((e) => e.type)).toEqual(['finish', 'over']);
+    expect(g.racers[1].time).toBeNull();
+    ev = g.update(0.1, [100, 100], true, -14);
+    expect(ev).toEqual([{ type: 'finish', racer: 1, place: 2, time: 14 }]);
+    expect(g.ranking()).toEqual([0, 1]);
   });
 });

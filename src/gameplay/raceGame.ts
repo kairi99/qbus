@@ -37,11 +37,17 @@ export class RaceGame {
   private count = 3;
   private lastPlace = 0;
   private order: number[] = [];
+  /** Last count announced on an external clock. */
+  private shown = 0;
 
-  /** `names[0]` is the player. `length`: start line to finish (m). */
+  /**
+   * `names[0]` is the player. `length`: start line to finish (m). `estimate: false` (online): racers
+   * still on the road when the player finishes keep a null time until `setTime`.
+   */
   constructor(
     names: string[],
     readonly length: number,
+    private readonly opts: { estimate?: boolean } = {},
   ) {
     this.racers = names.map((name) => ({ name, s: 0, time: null, estimated: false }));
     this.order = names.map((_, i) => i);
@@ -62,14 +68,32 @@ export class RaceGame {
     return this.phase === 'racing' || this.phase === 'over';
   }
 
-  /** `progress[i]`: racer i's meters past the start line. Nothing moves the clock in 'grid' until `begin`. */
-  update(dt: number, progress: readonly number[], begun = true): RaceEvent[] {
+  /**
+   * `progress[i]`: racer i's meters past the start line. Nothing moves the clock in 'grid' until `begun`.
+   * `goIn` (online): seconds to GO on the shared clock (negative after): it sets the phase, the count
+   * and the race time; `begun` and the grid wait are ignored.
+   */
+  update(dt: number, progress: readonly number[], begun = true, goIn?: number): RaceEvent[] {
     const ev: RaceEvent[] = [];
     // On the grid and counting down, places are the grid's order (the player starts at the back).
     if (this.phase === 'grid' || this.phase === 'countdown') {
       this.racers.forEach((r, i) => (r.s = progress[i]));
       this.order = this.ranking();
       this.lastPlace = this.placeOf(0);
+    }
+    if (goIn !== undefined && (this.phase === 'grid' || this.phase === 'countdown')) {
+      this.count = goIn / COUNT_STEP;
+      if (goIn <= 0) {
+        this.phase = 'racing';
+        this.time = -goIn;
+        ev.push({ type: 'go' });
+      } else if (goIn <= 3 * COUNT_STEP) {
+        this.phase = 'countdown';
+        const n = Math.ceil(this.count);
+        if (n !== this.shown) ev.push({ type: 'count', n });
+        this.shown = n;
+      }
+      return ev;
     }
     if (this.phase === 'grid') {
       if (!begun) return ev;
@@ -91,8 +115,11 @@ export class RaceGame {
       } else if (now !== before) ev.push({ type: 'count', n: now });
       return ev;
     }
-    if (this.phase === 'over') return ev;
-    this.time += dt;
+    // Online the race goes on after the player's finish: the others' crossings still count (the
+    // host reports its AI's times to the server).
+    const over = this.phase === 'over';
+    if (over && this.opts.estimate !== false) return ev;
+    this.time = goIn !== undefined ? -goIn : this.time + dt;
     this.racers.forEach((r, i) => {
       r.s = progress[i];
       if (r.time === null && r.s >= this.length) {
@@ -101,22 +128,33 @@ export class RaceGame {
       }
     });
     this.order = this.ranking();
+    if (over) return ev;
     const place = this.placeOf(0);
     if (this.lastPlace && place !== this.lastPlace) ev.push({ type: 'overtake', place, gained: place < this.lastPlace });
     this.lastPlace = place;
     if (this.racers[0].time !== null) {
       this.phase = 'over';
       // Everyone still racing gets a time from their pace so far (and a 3% cushion: they'd tire).
-      for (const r of this.racers)
-        if (r.time === null) {
-          const pace = Math.max(1, r.s) / this.time;
-          r.time = this.time + ((this.length - r.s) / pace) * 1.03;
-          r.estimated = true;
-        }
+      // Online the real times come from the server instead.
+      if (this.opts.estimate !== false) {
+        for (const r of this.racers)
+          if (r.time === null) {
+            const pace = Math.max(1, r.s) / this.time;
+            r.time = this.time + ((this.length - r.s) / pace) * 1.03;
+            r.estimated = true;
+          }
+      }
       this.order = this.ranking();
       ev.push({ type: 'over' });
     }
     return ev;
+  }
+
+  /** Fills racer `i`'s real time (the server's results) and re-ranks. */
+  setTime(i: number, time: number): void {
+    this.racers[i].time = time;
+    this.racers[i].estimated = false;
+    this.order = this.ranking();
   }
 
   /** Racer indices, first to last. */

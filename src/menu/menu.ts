@@ -1,5 +1,5 @@
 import { type BusPreset, isTrain } from '../vehicle/busPreset';
-import { BRT_BUS, BUSES, VEHICLES, busStats } from '../vehicle/buses';
+import { BRT_BUS, BUSES, VEHICLES, busById, busStats } from '../vehicle/buses';
 import { TRACK_LIST, ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose } from '../gameplay/routes';
@@ -13,6 +13,11 @@ import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
 import { MISSIONS } from '../gameplay/missions';
 import { money, starText, targetsText } from '../ui/gameHud';
 import { MenuSounds } from './menuSounds';
+import { MAX_SEATS, cleanName, normalizeCode, type RoomSettings, type S2C, type Seat } from '../net/protocol';
+import { buildGrid } from '../net/onlineGrid';
+import { ONLINE, RoomConnection, clearSession, createRoom, loadSession, roomInfo } from '../net/connection';
+
+type RoomMsg = Extract<S2C, { t: 'room' }>;
 
 export interface Selection {
   mode: 'route' | 'free' | 'race';
@@ -77,6 +82,7 @@ export class Menu {
   private sounds: MenuSounds;
   private busChoice: BusChoice;
   private routeDefs = new Map<string, RouteDef>();
+  private onlineVehicle = '';
 
   constructor(host: HTMLElement) {
     this.settings = loadSettings();
@@ -86,7 +92,13 @@ export class Menu {
     host.appendChild(this.root);
     this.sounds = new MenuSounds(this.root, () => this.settings.volume);
     if (import.meta.env.DEV) (window as any).__qbusMenu = { sounds: this.sounds };
-    this.title();
+    // Back from an online race (?lobby=K7Q2): straight into that room's lobby, with the seat's token.
+    const back = new URLSearchParams(location.search).get('lobby');
+    const seat = loadSession();
+    if (back && seat && seat.code === back) {
+      history.replaceState(null, '', location.pathname);
+      this.lobby(new RoomConnection(seat.code, { name: seat.name, vehicle: this.settings.bus, token: seat.token }), seat.code);
+    } else this.title();
   }
 
   // ---- screens ------------------------------------------------------------
@@ -99,12 +111,14 @@ export class Menu {
         <p class="mn-tag">Maneje como chofer quiteño: rápido, sin frenar y pitando.</p>
         <nav class="mn-title-actions">
           <button class="mn-btn mn-btn-go" data-go="setup">Jugar</button>
+          ${ONLINE ? '<button class="mn-btn" data-go="online">En línea</button>' : ''}
           <button class="mn-btn" data-go="settings">Ajustes</button>
           <button class="mn-btn" data-go="credits">Créditos</button>
         </nav>
         <p class="mn-foot">Mapa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Relieve Copernicus GLO-30</p>
       </main>`;
     this.on('[data-go="setup"]', () => this.setup());
+    this.on('[data-go="online"]', () => this.online());
     this.on('[data-go="settings"]', () => this.settingsScreen(() => this.title()));
     this.on('[data-go="credits"]', () => this.credits());
     this.focusFirst();
@@ -314,6 +328,262 @@ export class Menu {
       });
     }
     this.focusFirst();
+  }
+
+
+  // ---- online -----------------------------------------------------------------
+
+  /** Name, vehicle, and either a new room or the code of a friend's. */
+  private online(message = ''): void {
+    const s = this.settings;
+    if (!VEHICLES.some((v) => v.preset.id === this.onlineVehicle)) this.onlineVehicle = VEHICLES.some((v) => v.preset.id === s.bus) ? s.bus : VEHICLES[0].preset.id;
+    this.root.innerHTML = `
+      ${SKYLINE}
+      <main class="mn-settings mn-online">
+        <header class="mn-head">
+          <button class="mn-back" data-go="back" aria-label="Volver">‹</button>
+          <div class="mn-led mn-led-wide"><span>EN LÍNEA</span></div>
+        </header>
+        <div class="mn-panel">
+          <label class="mn-field"><span>Su nombre</span>
+            <input class="mn-text" name="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Ñaño" value="${esc(s.online.name)}" /></label>
+          <label class="mn-field"><span>Qué maneja</span>
+            <select class="mn-select" name="vehicle">${vehicleOptions(this.onlineVehicle)}</select></label>
+          <div class="mn-online-split">
+            <section>
+              <h2>Una sala nueva</h2>
+              <button class="mn-btn mn-btn-go" data-go="create">Crear sala</button>
+            </section>
+            <form class="mn-join" data-form="join">
+              <h2>La sala de un pana</h2>
+              <div class="mn-join-row">
+                <input class="mn-text mn-code-input" name="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD" aria-label="Código de la sala" />
+                <button class="mn-btn" type="submit" data-go="join">Unirse</button>
+              </div>
+            </form>
+          </div>
+          <p class="mn-note" role="status" aria-live="polite">${esc(message)}</p>
+        </div>
+      </main>`;
+    const q = <T extends HTMLElement>(sel: string) => this.root.querySelector<T>(sel)!;
+    const name = q<HTMLInputElement>('input[name="name"]');
+    const vehicle = q<HTMLSelectElement>('select[name="vehicle"]');
+    const code = q<HTMLInputElement>('input[name="code"]');
+    const note = q('.mn-note');
+    const buttons = this.root.querySelectorAll<HTMLButtonElement>('[data-go="create"], [data-go="join"]');
+    const busy = (b: boolean) => buttons.forEach((el) => (el.disabled = b));
+    name.addEventListener('input', () => {
+      this.settings.online.name = name.value.trim() ? cleanName(name.value) : '';
+      saveSettings(this.settings);
+    });
+    vehicle.addEventListener('change', () => (this.onlineVehicle = vehicle.value));
+    code.addEventListener('input', () => (code.value = code.value.toUpperCase()));
+    this.on('[data-go="back"]', () => this.title());
+    this.on('[data-go="create"]', async () => {
+      busy(true);
+      note.textContent = 'Creando la sala…';
+      try {
+        const room = await createRoom();
+        this.lobby(new RoomConnection(room, { name: cleanName(name.value), vehicle: this.onlineVehicle }), room);
+      } catch {
+        note.textContent = NO_SERVER;
+        busy(false);
+      }
+    });
+    q('form[data-form="join"]').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const c = normalizeCode(code.value);
+      if (!c) {
+        note.textContent = 'No existe esa sala';
+        code.focus();
+        return;
+      }
+      busy(true);
+      note.textContent = 'Buscando la sala…';
+      try {
+        const info = await roomInfo(c);
+        if (!info) note.textContent = 'No existe esa sala';
+        else if (info.phase !== 'lobby') note.textContent = 'Esa sala ya está corriendo';
+        else if (info.seats >= MAX_SEATS) note.textContent = 'Sala llena';
+        else return this.lobby(new RoomConnection(c, { name: cleanName(name.value), vehicle: this.onlineVehicle }), c);
+      } catch {
+        note.textContent = NO_SERVER;
+      }
+      busy(false);
+    });
+    name.focus();
+  }
+
+  /** The waiting room: the code to share, who is in, the race options (the host's to change) and ready/start. */
+  private lobby(conn: RoomConnection, code: string): void {
+    let room: RoomMsg | null = null;
+    let everOpen = false;
+    let failure = '';
+    let note = '';
+    const offs: (() => void)[] = [];
+    this.root.innerHTML = `
+      ${SKYLINE}
+      <main class="mn-settings mn-online mn-lobby">
+        <header class="mn-head">
+          <button class="mn-back" data-go="back" aria-label="Salir de la sala">‹</button>
+          <div class="mn-led mn-led-wide"><span>LA SALA</span></div>
+        </header>
+        <div class="mn-panel">
+          <div class="mn-code-box">
+            <span class="mn-code-label">Código de la sala</span>
+            <strong class="mn-code" data-room-code aria-label="Código ${code.split('').join(' ')}">${code}</strong>
+            <span class="mn-code-hint">Pásales este código a tus panas</span>
+          </div>
+          <p class="mn-banner" role="status" aria-live="polite" hidden></p>
+          <label class="mn-field"><span>Qué maneja</span>
+            <select class="mn-select" name="vehicle">${vehicleOptions(this.onlineVehicle)}</select></label>
+          <div class="mn-lobby-body"></div>
+        </div>
+      </main>`;
+    const banner = this.root.querySelector<HTMLElement>('.mn-banner')!;
+    const body = this.root.querySelector<HTMLElement>('.mn-lobby-body')!;
+    const leave = () => {
+      offs.forEach((f) => f());
+      conn.onState = null;
+      conn.close();
+      clearSession();
+      this.online();
+    };
+    this.on('[data-go="back"]', leave);
+    this.root.querySelector<HTMLSelectElement>('select[name="vehicle"]')!.addEventListener('change', (e) => {
+      this.onlineVehicle = (e.target as HTMLSelectElement).value;
+      conn.send({ t: 'me', vehicle: this.onlineVehicle });
+    });
+
+    const status = () => {
+      let text = '';
+      if (failure) text = failure;
+      else if (conn.state === 'connecting') text = everOpen ? 'Reconectando…' : 'Conectando…';
+      else if (conn.state === 'closed') text = 'Se perdió la conexión con la sala';
+      banner.textContent = text;
+      banner.hidden = !text;
+      this.root.querySelector('.mn-code-box')!.classList.toggle('mn-dead', !!failure || conn.state === 'closed');
+    };
+    const render = () => {
+      // Keep keyboard focus on the same control across a re-render.
+      const act = document.activeElement as HTMLElement | null;
+      const key = act && body.contains(act) ? act.dataset.k : undefined;
+      body.innerHTML = room && !failure ? this.lobbyBody(room, conn.seat, note) : '';
+      if (room && !failure) this.lobbyWire(body, room, conn, render, (n) => ((note = n), render()));
+      if (key) body.querySelector<HTMLElement>(`[data-k="${key}"]`)?.focus();
+    };
+    conn.onState = (st) => {
+      if (st === 'open') everOpen = true;
+      if (st === 'rejected' && !failure) failure = 'No se pudo entrar a la sala';
+      status();
+      render();
+    };
+    offs.push(
+      conn.on('welcome', () => {
+        everOpen = true;
+        status();
+      }),
+      conn.on('room', (m) => {
+        room = m;
+        // The host started: everyone's page goes to the game, which reconnects to this seat.
+        if (m.phase === 'loading') {
+          offs.forEach((f) => f());
+          conn.onState = null;
+          location.search = `?play=1&mode=online&city=${encodeURIComponent(m.settings.track)}&room=${code}`;
+          return;
+        }
+        render();
+      }),
+      conn.on('error', (m) => {
+        failure = ERROR_TEXT[m.code] ?? 'No se pudo entrar a la sala';
+        status();
+        render();
+        this.root.querySelector<HTMLElement>('[data-go="back"]')?.focus();
+      }),
+    );
+    status();
+    render();
+    this.root.querySelector<HTMLElement>('[data-go="back"]')?.focus();
+  }
+
+  /** Seats and race options for the current room message. */
+  private lobbyBody(room: RoomMsg, me: number | null, note: string): string {
+    const host = room.seats.find((x) => x.id === me)?.host === true;
+    const st = room.settings;
+    const humans = room.seats.length;
+    const maxAi = Math.max(0, Math.min(MAX_SEATS - 1, MAX_SEATS - humans));
+    const ai = Math.min(st.ai, maxAi);
+    const rows = room.seats.map((x) => seatRow(x, x.id === me));
+    for (let i = 0; i < MAX_SEATS - humans; i++) rows.push(`<li class="mn-seat mn-seat-empty"><span class="mn-seat-name">${i < ai ? 'IA' : 'Libre'}</span></li>`);
+    const track = TRACK_LIST.find((t) => t.id === st.track)?.name ?? st.track;
+    const skill = SKILL_OPTIONS.find((o) => o.value === st.skill)?.label ?? st.skill;
+    const who = st.rivalBus === 'mixed' ? 'De todo un poco' : st.rivalBus === 'same' ? 'Lo mismo que los panas' : busById(st.rivalBus).name;
+    let options: string;
+    if (host) {
+      const aiChoices = Array.from({ length: maxAi + 1 }, (_, n) => n);
+      options = `
+        <fieldset><legend>Pista</legend>${TRACK_LIST.map((t) => choice('track', t.id, t.name, st.track === t.id, `track-${t.id}`)).join('')}</fieldset>
+        <fieldset><legend>Rivales de la IA</legend>${aiChoices.map((n) => choice('ai', String(n), String(n), ai === n, `ai-${n}`)).join('')}</fieldset>
+        <fieldset><legend>Choferes</legend>${SKILL_OPTIONS.map((o) => choice('skill', o.value, o.label, st.skill === o.value, `skill-${o.value}`)).join('')}</fieldset>
+        <fieldset><legend>Qué manejan</legend>
+          ${choice('rivalBus', 'mixed', 'De todo un poco', st.rivalBus === 'mixed', 'rb-mixed')}
+          ${choice('rivalBus', 'same', 'Lo mismo que los panas', st.rivalBus === 'same', 'rb-same')}
+          ${VEHICLES.map((v) => choice('rivalBus', v.preset.id, v.preset.name, st.rivalBus === v.preset.id, `rb-${v.preset.id}`)).join('')}
+        </fieldset>`;
+    } else {
+      options = `<dl class="mn-sum">
+        <div><dt>Pista</dt><dd>${esc(track)}</dd></div>
+        <div><dt>Rivales de la IA</dt><dd>${ai}</dd></div>
+        <div><dt>Choferes</dt><dd>${esc(skill)}</dd></div>
+        <div><dt>Qué manejan</dt><dd>${esc(who)}</dd></div></dl>`;
+    }
+    const others = room.seats.filter((x) => !x.host && x.online);
+    const mine = room.seats.find((x) => x.id === me);
+    const action = room.phase === 'racing'
+      ? '<span class="mn-wait">Todavía hay panas en carrera</span>'
+      : host
+      ? `<button class="mn-btn mn-btn-go" data-k="start" data-act="start" ${others.every((x) => x.ready) ? '' : 'disabled'}>¡Arrancar!</button>
+         ${others.every((x) => x.ready) ? '' : '<span class="mn-wait">Esperando que todos estén listos</span>'}`
+      : `<button class="mn-btn ${mine?.ready ? 'mn-btn-go' : ''}" data-k="ready" data-act="ready" aria-pressed="${mine?.ready === true}">¡Listo!</button>`;
+    return `
+      <h2>En la sala (${humans}/${MAX_SEATS})</h2>
+      <ul class="mn-seats">${rows.join('')}</ul>
+      <div class="mn-opts"><h2>La carrera</h2>${options}</div>
+      <div class="mn-lobby-actions">${action}</div>
+      <p class="mn-note" role="status" aria-live="polite">${esc(note)}</p>`;
+  }
+
+  private lobbyWire(body: HTMLElement, room: RoomMsg, conn: RoomConnection, render: () => void, setNote: (n: string) => void): void {
+    const host = room.seats.find((x) => x.id === conn.seat)?.host === true;
+    body.querySelectorAll<HTMLInputElement>('input[type="radio"]').forEach((el) =>
+      el.addEventListener('change', () => {
+        const next: RoomSettings = { ...room.settings };
+        if (el.name === 'track') next.track = el.value;
+        if (el.name === 'ai') next.ai = Number(el.value);
+        if (el.name === 'skill') next.skill = el.value as RoomSettings['skill'];
+        if (el.name === 'rivalBus') next.rivalBus = el.value;
+        conn.send({ t: 'set', settings: next });
+      }),
+    );
+    body.querySelector('[data-act="ready"]')?.addEventListener('click', () => {
+      const mine = room.seats.find((x) => x.id === conn.seat);
+      conn.send({ t: 'me', ready: !mine?.ready });
+    });
+    if (host) body.querySelector('[data-act="start"]')?.addEventListener('click', () => this.onStartOnline(conn, room, setNote));
+    void render;
+  }
+
+  /** The host's ¡Arrancar!: the grid (AI in front, the players shuffled) goes to the room, which loads everyone's game. */
+  private onStartOnline(conn: RoomConnection, room: RoomMsg, setNote: (n: string) => void): void {
+    if (room.phase !== 'lobby') {
+      // Back from a race: the room returns to the lobby first (everyone readies again).
+      conn.send({ t: 'set', settings: room.settings });
+      setNote('Esperando que todos estén listos otra vez');
+      return;
+    }
+    const seed = Math.floor(Math.random() * 2 ** 31);
+    conn.send({ t: 'start', grid: buildGrid(room.seats, room.settings, VEHICLES.map((v) => v.preset.id), seed), seed });
+    setNote('¡Arrancando!');
   }
 
   // ---- routes ---------------------------------------------------------------
@@ -623,8 +893,31 @@ function slider(name: string, label: string, value: number): string {
   return `<label class="mn-volume"><span>${label}</span><input type="range" min="0" max="100" step="5" value="${pct}" name="${name}" /><output>${pct}%</output></label>`;
 }
 
-function choice(name: string, value: string, label: string, checked: boolean): string {
-  return `<label class="mn-choice"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} /><span>${label}</span></label>`;
+function choice(name: string, value: string, label: string, checked: boolean, key = ''): string {
+  return `<label class="mn-choice"><input type="radio" name="${name}" value="${value}" ${key ? `data-k="${key}"` : ''} ${checked ? 'checked' : ''} /><span>${label}</span></label>`;
+}
+
+const NO_SERVER = 'No hay conexión con el servidor de salas';
+const ERROR_TEXT: Record<string, string> = {
+  full: 'Sala llena',
+  racing: 'Esa sala ya está corriendo',
+  version: 'Actualiza la página',
+  unknown: 'No existe esa sala',
+};
+
+const esc = (t: string): string => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+function vehicleOptions(selected: string): string {
+  return VEHICLES.map((v) => `<option value="${v.preset.id}" ${v.preset.id === selected ? 'selected' : ''}>${esc(v.preset.name)}</option>`).join('');
+}
+
+function seatRow(x: Seat, mine: boolean): string {
+  const badges = [x.host ? 'Anfitrión' : '', x.online ? (x.ready && !x.host ? 'Listo' : '') : 'Desconectado'].filter(Boolean);
+  return `<li class="mn-seat${x.online ? '' : ' mn-seat-off'}" data-seat="${x.id}">
+    <span class="mn-seat-name">${esc(x.name)}${mine ? ' <em>(tú)</em>' : ''}</span>
+    <span class="mn-seat-bus">${esc(busById(x.vehicle).name)}</span>
+    ${badges.map((b) => `<span class="mn-badge mn-badge-${b === 'Listo' ? 'ready' : b === 'Anfitrión' ? 'host' : 'off'}">${b}</span>`).join('')}
+  </li>`;
 }
 
 /** Streets in grey, the chosen route in amber along the streets it drives, numbered stops. */

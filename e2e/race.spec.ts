@@ -73,11 +73,18 @@ test('R in a race puts the bus back on the road and holds it there a few seconds
   await expect(page.locator('.rh-wait')).toBeVisible();
   await expect(page.locator('.rh-wait b')).toHaveText(/[123]/);
   await page.screenshot({ path: `${shots}/b4-race-reset-wait.png` });
+  // Put back on the road, it is a ghost (see-through, passes through the others) for a while.
+  expect(await page.evaluate(() => (window as any).__qbus.bus.ghost)).toBe(true);
+  expect(await page.evaluate(() => (window as any).__qbus.racing.ghostFade)).toBeLessThan(1);
+  await page.screenshot({ path: `${shots}/race-ghost.png` });
   // Throttle held all along: the bus stays put until the wait is over, then drives on.
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => Math.abs((window as any).__qbus.bus.speed))).toBeLessThan(1);
   await expect(page.locator('.rh-wait')).toBeHidden({ timeout: 60_000 });
   await expect.poll(() => page.evaluate(() => (window as any).__qbus.bus.speed), { timeout: 60_000 }).toBeGreaterThan(3);
+  // ...and solid again once the ghost time is up.
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.bus.ghost), { timeout: 60_000 }).toBe(false);
+  expect(await page.evaluate(() => (window as any).__qbus.racing.ghostFade)).toBe(1);
   await page.keyboard.up('KeyW');
   expect(errors).toEqual([]);
 });

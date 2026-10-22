@@ -1,4 +1,4 @@
-import { GROUP, RAPIER, groups } from '../physics/world';
+import { GROUP, RAPIER, VEHICLE_GROUPS, groups } from '../physics/world';
 import type { DriveInput } from '../core/input';
 import type { BusPreset } from './busPreset';
 
@@ -51,6 +51,23 @@ const trainGroups = () => {
   return groups(bit, GROUP.ALL & ~bit);
 };
 
+const REMOTE_GROUPS = groups(GROUP.REMOTE, GROUP.ALL & ~GROUP.STATIC & ~GROUP.TRAFFIC & ~GROUP.REMOTE);
+/** A ghost: nothing but the static world (and a membership no wheel ray stands on). */
+const GHOST_GROUPS = groups(GROUP.REMOTE, GROUP.STATIC);
+
+type Q = { x: number; y: number; z: number; w: number };
+const mul = (a: Q, b: Q): Q => ({
+  x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+  y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+  z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+  w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+});
+/** v rotated by unit quaternion q. */
+const rotate = (v: { x: number; y: number; z: number }, q: Q) => {
+  const t = mul(mul(q, { x: v.x, y: v.y, z: v.z, w: 0 }), { x: -q.x, y: -q.y, z: -q.z, w: q.w });
+  return { x: t.x, y: t.y, z: t.z };
+};
+
 /** Turntable motor: beyond the yaw limit it pushes back hard; inside, a little damping keeps the swing calm. */
 const TURNTABLE_STIFFNESS = 600;
 const TURNTABLE_DAMPING = 60;
@@ -100,7 +117,8 @@ export class BusPhysics {
     const n = art ? (art.sections ?? 1) : 0;
     this.frontLength = art ? preset.body.length - n * (art.rearLength + art.gap) : preset.body.length;
     const train = n > 1 ? trainGroups() : undefined;
-    this.wheelGroups = train;
+    // Wheel rays never stand on a remote player's bus (its chassis still collides).
+    this.wheelGroups = train !== undefined ? train & ~GROUP.REMOTE : groups(GROUP.ALL, GROUP.ALL & ~GROUP.REMOTE);
     const w = preset.wheels;
     this.body = this.section(this.frontLength, preset.mass);
     this.vehicle = this.addAxles(this.body, [
@@ -126,7 +144,7 @@ export class BusPhysics {
       motor(joint, RAPIER.JointAxis.AngX, 0, TURNTABLE_STIFFNESS, TURNTABLE_DAMPING);
       this.rears.push({ body, vehicle, joint, length: art!.rearLength, lockedBend: null });
     }
-    if (train !== undefined) for (const c of this.colliders) c.setCollisionGroups(train);
+    for (const c of this.colliders) c.setCollisionGroups(train ?? VEHICLE_GROUPS);
 
     this.reset(spawn);
   }
@@ -513,6 +531,123 @@ export class BusPhysics {
     this.rearGrip = this.preset.wheels.frictionSlip;
     this.boosting = false;
     this.wade = 0;
+  }
+
+  /** Collision groups to restore when the ghost ends (null while solid). */
+  private solidGroups: number[] | null = null;
+  private solidWheelGroups: number | undefined;
+
+  /** A ghost (after a respawn): touches only the static world, every other vehicle passes through it. */
+  get ghost(): boolean {
+    return this.solidGroups !== null;
+  }
+
+  /** Turns the ghost on, or off (back to exactly the groups each collider had). */
+  setGhost(on: boolean): void {
+    if (on === this.ghost) return;
+    const cs = this.colliders;
+    if (on) {
+      this.solidGroups = cs.map((c) => c.collisionGroups());
+      for (const c of cs) c.setCollisionGroups(GHOST_GROUPS);
+      // Its wheels stand on the static world only, not on the vehicles it passes through.
+      this.solidWheelGroups = this.wheelGroups;
+      this.wheelGroups = groups(GROUP.ALL, GROUP.STATIC);
+    } else {
+      this.wheelGroups = this.solidWheelGroups;
+      cs.forEach((c, i) => c.setCollisionGroups(this.solidGroups![i]));
+      this.solidGroups = null;
+    }
+  }
+
+  private overlapShape: RAPIER.Cuboid | null = null;
+  private overlapOwn = new Set<number>();
+
+  /**
+   * Whether any section's box overlaps a vehicle (another bus, a car, a wreck) right now: what a
+   * ghost waits for before it turns solid. The static world doesn't count.
+   */
+  overlapsOthers(world: RAPIER.World): boolean {
+    const own = this.overlapOwn;
+    own.clear();
+    for (const c of this.colliders) own.add(c.handle);
+    let hit = false;
+    const { width, height } = this.preset.body;
+    this.bodies.forEach((b, i) => {
+      if (hit) return;
+      const len = i ? this.rears[i - 1].length : this.frontLength;
+      // Slightly shrunk: two vehicles side by side, touching, are no overlap.
+      const shape = (this.overlapShape ??= new RAPIER.Cuboid(1, 1, 1));
+      shape.halfExtents.x = len / 2 - 0.05;
+      shape.halfExtents.y = height / 2 - 0.05;
+      shape.halfExtents.z = width / 2 - 0.05;
+      world.intersectionsWithShape(
+        b.translation(),
+        b.rotation(),
+        shape,
+        () => (hit = true) && false,
+        RAPIER.QueryFilterFlags.EXCLUDE_FIXED,
+        groups(GROUP.ALL & ~GROUP.STATIC, GROUP.ALL & ~GROUP.STATIC),
+        undefined,
+        undefined,
+        (c) => !own.has(c.handle),
+      );
+    });
+    return hit;
+  }
+
+  /**
+   * Turns this bus into another player's: every body kinematic (moved by `setPose` from snapshots,
+   * never `update()`d), colliders in the REMOTE group. Kinematic bodies ignore the turntable
+   * joints, which stay in place.
+   */
+  makeRemote(): void {
+    for (const b of this.bodies) {
+      b.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+      for (let i = 0; i < b.numColliders(); i++) {
+        const c = b.collider(i);
+        c.setCollisionGroups(REMOTE_GROUPS);
+        c.setRestitution(0);
+      }
+    }
+  }
+
+  /**
+   * Moves a remote bus to the given pose next step: the front section `{p, q}` and each rear as
+   * `[px, py, pz, qx, qy, qz, qw]`. Missing rears keep their current pose relative to the front.
+   */
+  setPose(front: { p: ArrayLike<number>; q: ArrayLike<number> }, rears?: ArrayLike<number>[]): void {
+    const f = this.body;
+    if (!rears || rears.length < this.rears.length) {
+      // Rest offsets relative to the front section, rigidly carried along (all in line at the spawn).
+      const t0 = f.translation();
+      const q0 = f.rotation();
+      for (let i = rears ? rears.length : 0; i < this.rears.length; i++) {
+        const r = this.rears[i].body;
+        const tr = r.translation();
+        const qr = r.rotation();
+        // rel = inverse(q0) * (tr - t0); out = q * rel + p; rotation = q * inverse(q0) * qr.
+        const d = { x: tr.x - t0.x, y: tr.y - t0.y, z: tr.z - t0.z };
+        const rel = rotate(d, { x: -q0.x, y: -q0.y, z: -q0.z, w: q0.w });
+        const w = rotate(rel, { x: front.q[0], y: front.q[1], z: front.q[2], w: front.q[3] });
+        const qi = { x: -q0.x, y: -q0.y, z: -q0.z, w: q0.w };
+        const qa = mul({ x: front.q[0], y: front.q[1], z: front.q[2], w: front.q[3] }, mul(qi, qr));
+        r.setNextKinematicTranslation({ x: front.p[0] + w.x, y: front.p[1] + w.y, z: front.p[2] + w.z });
+        r.setNextKinematicRotation(qa);
+      }
+    }
+    f.setNextKinematicTranslation({ x: front.p[0], y: front.p[1], z: front.p[2] });
+    f.setNextKinematicRotation({ x: front.q[0], y: front.q[1], z: front.q[2], w: front.q[3] });
+    if (rears)
+      for (let i = 0; i < Math.min(rears.length, this.rears.length); i++) {
+        const r = rears[i];
+        this.rears[i].body.setNextKinematicTranslation({ x: r[0], y: r[1], z: r[2] });
+        this.rears[i].body.setNextKinematicRotation({ x: r[3], y: r[4], z: r[5], w: r[6] });
+      }
+  }
+
+  /** Removes every body (and with them the joints and colliders) from the world. */
+  remove(world: RAPIER.World): void {
+    for (const b of this.bodies) world.removeRigidBody(b);
   }
 
   /** Current yaw, derived from the forward vector projected onto the ground plane. */

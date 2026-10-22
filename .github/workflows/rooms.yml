@@ -1,0 +1,43 @@
+# Deploys the online-race room server (server/, a Cloudflare Worker) when it changes on master.
+# One-time setup on GitHub (Settings → Secrets and variables → Actions):
+#   secret CLOUDFLARE_API_TOKEN  (Cloudflare → My Profile → API Tokens → "Edit Cloudflare Workers")
+#   secret CLOUDFLARE_ACCOUNT_ID (Cloudflare dashboard → Workers & Pages → Account ID)
+# Without the token the job only leaves a notice, so pushes before the setup don't fail.
+name: Deploy the room server
+
+on:
+  push:
+    branches: [master]
+    paths: ['server/**', 'src/net/protocol.ts', '.github/workflows/rooms.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rooms
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::notice::CLOUDFLARE_API_TOKEN is not set; the room server was not deployed."
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: actions/checkout@v4
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        working-directory: server
+        run: npm ci
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        working-directory: server
+        run: npx wrangler deploy

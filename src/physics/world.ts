@@ -48,10 +48,17 @@ export function addTerrainCollider(world: RAPIER.World, t: Terrain, sink?: { pit
  * traffic in its lane (TRAFFIC, filtering out STATIC) never touches it; everything else keeps
  * the default "all groups" and collides with everything. TRAIN: a train of sections (the
  * gusanito) whose sections ignore each other, each train with its own bit (`TRAIN << k`, k <
- * TRAINS) so two trains still collide; static-only queries don't see them.
+ * TRAINS) so two trains still collide; static-only queries don't see them. REMOTE: another
+ * player's bus in an online race (kinematic, moved from snapshots): it shoves local buses, AI
+ * and wrecks, but touches nothing static, traffic, nor other remote buses, and wheel rays skip it.
  */
-export const GROUP = { STATIC: 0x0001, TRAFFIC: 0x0002, TRAIN: 0x0010, TRAINS: 8, ALL: 0xffff };
+export const GROUP = { STATIC: 0x0001, TRAFFIC: 0x0002, REMOTE: 0x0004, TRAIN: 0x0010, TRAINS: 8, ALL: 0xffff };
 export const groups = (member: number, filter: number) => (member << 16) | filter;
+/**
+ * A plain vehicle's own group: everything but STATIC (the world's), so that a ghost, which
+ * touches only STATIC, passes through it. Wrecks and other buses share it.
+ */
+export const VEHICLE_GROUPS = groups(GROUP.ALL & ~GROUP.STATIC, GROUP.ALL);
 
 /** Puts every collider on a fixed body (or on none) in the STATIC group. Call once the city is built. */
 export function markStatic(world: RAPIER.World): void {

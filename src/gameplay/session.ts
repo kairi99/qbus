@@ -129,7 +129,7 @@ export class GameSession {
   private sinceRecycle = 0;
   private obstacleBuf: Obstacle[] = [];
   /** Other racers' positions (a race), drawn on the minimap. */
-  others: { x: number; z: number }[] = [];
+  others: { x: number; z: number; color?: string }[] = [];
   private rivals: BusPhysics[] = [];
   private hitters: RAPIER.Collider[];
   /** A traffic car's lane edge and meters along it to meters along the race track. */

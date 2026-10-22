@@ -2223,6 +2223,26 @@ body {
   display: none;
 }
 
+.rh-net {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 55%);
+  color: #ffd21f;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.rh-net[hidden] {
+  display: none;
+}
+
 .rh-strip {
   position: absolute;
   top: 18px;
@@ -2355,4 +2375,260 @@ body {
 
 .rh-results p.rh-record {
   color: #9dff7a;
+}
+
+/* ---- Online: name/code fields, the lobby ---- */
+.mn-title-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.mn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.mn-text,
+.mn-select {
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 9px 12px;
+  border: 3px solid var(--mn-ink);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--mn-ink);
+  min-width: 0;
+}
+
+.mn-code-input {
+  width: 6.5em;
+  text-align: center;
+  font-family: ui-monospace, 'DejaVu Sans Mono', Menlo, monospace;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.mn-online-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 36px;
+}
+
+.mn-online h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.mn-join-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.mn-online .mn-note {
+  margin: 0;
+  min-height: 1.3em;
+  font-weight: 700;
+  color: #8a2a12;
+}
+
+.mn-code-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  background: var(--mn-paper);
+  border: 3px dashed var(--mn-ink);
+  border-radius: 10px;
+}
+
+.mn-code-box.mn-dead {
+  opacity: 0.5;
+}
+
+.mn-code-label {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mn-code {
+  font-family: ui-monospace, 'DejaVu Sans Mono', Menlo, monospace;
+  font-size: clamp(44px, 14vw, 72px);
+  line-height: 1;
+  letter-spacing: 0.25em;
+  padding-left: 0.25em;
+  user-select: all;
+}
+
+.mn-code-hint {
+  font-size: 15px;
+}
+
+.mn-banner {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mn-amber);
+  border: 2px solid var(--mn-ink);
+  font-weight: 800;
+}
+
+.mn-lobby-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mn-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mn-seat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 2px solid var(--mn-ink);
+  border-radius: 8px;
+  font-size: 17px;
+}
+
+.mn-seat-name {
+  font-weight: 800;
+}
+
+.mn-seat-name em {
+  font-weight: 600;
+  font-style: normal;
+  opacity: 0.7;
+}
+
+.mn-seat-bus {
+  flex: 1;
+  opacity: 0.8;
+}
+
+.mn-seat-empty {
+  border-style: dashed;
+  border-color: #c9c2b0;
+  color: #6b6556;
+}
+
+.mn-seat-off {
+  opacity: 0.55;
+}
+
+.mn-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  background: #d9ccaa;
+}
+
+.mn-badge-host {
+  background: var(--mn-amber);
+}
+
+.mn-badge-ready {
+  background: var(--mn-green);
+  color: #fff;
+}
+
+.mn-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mn-sum {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+}
+
+.mn-sum div {
+  display: flex;
+  flex-direction: column;
+}
+
+.mn-sum dt {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.mn-sum dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.mn-lobby-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.mn-lobby-actions .mn-btn[aria-pressed='true'] {
+  background: var(--mn-green);
+  color: #fff;
+}
+
+.mn-wait {
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+@media (max-width: 520px) {
+  .mn-online .mn-panel {
+    padding: 14px;
+  }
+
+  .mn-lobby-actions .mn-btn {
+    width: 100%;
+  }
+}
+
+/* Online race: waiting for everyone to load the track. */
+.ol-wait {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 28px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 65%);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  pointer-events: auto;
+}
+
+.ol-wait p {
+  margin: 0;
+}
+
+.ol-wait [hidden] {
+  display: none;
 }
