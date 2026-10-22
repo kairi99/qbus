@@ -63,9 +63,11 @@ export interface RoomSettings {
   rivalBus: string;
   rain: RoomRain;
   tod: RoomTime;
+  /** Landslides on the tracks that have them. */
+  slides: boolean;
 }
 
-export const DEFAULT_ROOM_SETTINGS: RoomSettings = { track: 'papallacta', ai: 2, skill: 'normal', rivalBus: 'mixed', rain: 'random', tod: 'day' };
+export const DEFAULT_ROOM_SETTINGS: RoomSettings = { track: 'papallacta', ai: 2, skill: 'normal', rivalBus: 'mixed', rain: 'random', tod: 'day', slides: true };
 
 export type GridEntry = { kind: 'human'; seat: number; vehicle: string } | { kind: 'ai'; idx: number; vehicle: string; crew: number };
 
@@ -148,11 +150,12 @@ export function isRacer(x: unknown): x is Racer {
 /** A valid RoomSettings (copied), or null. */
 export function validSettings(x: unknown): RoomSettings | null {
   if (!isObj(x) || !isId(x.track) || !isInt(x.ai) || x.ai < 0 || x.ai > MAX_SEATS - 1 || !SKILLS.includes(x.skill as string) || !isId(x.rivalBus)) return null;
-  // Rain and light came later: a client from before sends neither, and gets the defaults.
+  // Rain, light and landslides came later: a client from before sends none of them, and gets the defaults.
   const rain = x.rain === undefined ? DEFAULT_ROOM_SETTINGS.rain : RAINS.find((r) => r === x.rain);
   const tod = x.tod === undefined ? DEFAULT_ROOM_SETTINGS.tod : TIMES.find((t) => t === x.tod);
-  if (!rain || !tod) return null;
-  return { track: x.track, ai: x.ai, skill: x.skill as RaceSkillId, rivalBus: x.rivalBus, rain, tod };
+  const slides = x.slides === undefined ? DEFAULT_ROOM_SETTINGS.slides : x.slides;
+  if (!rain || !tod || typeof slides !== 'boolean') return null;
+  return { track: x.track, ai: x.ai, skill: x.skill as RaceSkillId, rivalBus: x.rivalBus, rain, tod, slides };
 }
 
 function validGrid(x: unknown): x is GridEntry[] {

@@ -36,7 +36,7 @@ export class MiniMap {
   }
 
   /** `others`: other racers, drawn as dots (red, or each its own `color`: online, a player's). */
-  update(bus: Vec2, heading: number, path: Vec2[] | null, target: Vec2 | null, targetColor: string, stops: Vec2[], others: readonly (Vec2 & { color?: string })[] = []): void {
+  update(bus: Vec2, heading: number, path: Vec2[] | null, target: Vec2 | null, targetColor: string, stops: Vec2[], others: readonly (Vec2 & { color?: string })[] = [], marks: readonly Vec2[] = []): void {
     const c = this.ctx;
     const k = (SIZE * devicePixelRatio) / 2 / RANGE;
     const half = (SIZE * devicePixelRatio) / 2;
@@ -70,6 +70,20 @@ export class MiniMap {
       c.beginPath();
       c.arc(s.x, s.z, 5, 0, Math.PI * 2);
       c.fill();
+    }
+    // Landslides: an orange diamond.
+    c.fillStyle = '#e8821e';
+    c.strokeStyle = '#1d1a14';
+    c.lineWidth = 3;
+    for (const m of marks) {
+      c.beginPath();
+      c.moveTo(m.x, m.z - 11);
+      c.lineTo(m.x + 11, m.z);
+      c.lineTo(m.x, m.z + 11);
+      c.lineTo(m.x - 11, m.z);
+      c.closePath();
+      c.fill();
+      c.stroke();
     }
     c.strokeStyle = '#ffffff';
     c.lineWidth = 3;

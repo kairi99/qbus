@@ -1,6 +1,7 @@
 import type { DriveInput } from '../core/input';
 import type { BusPreset } from '../vehicle/busPreset';
 import { type TrackData, locateOnTrack, trackPoint } from '../world/track';
+import type { SlideAdvice } from './landslides';
 
 /**
  * What a vehicle can do, for a driver to plan with: cornering and braking (m/s²) on a dry road
@@ -202,6 +203,8 @@ export const KEEP_RIGHT = 1.2;
 /** An oncoming car this close (m): squeeze over this far right to meet it. */
 const MEET = 70;
 const MEET_RIGHT = 1.8;
+/** Waiting for an oncoming car to pass before it takes the oncoming half past a slide: braking at this (m/s²). */
+const HOLD_BRAKE = 4;
 
 /**
  * The lane a racer aims for and the speed it must keep under (m/s): its `home` lane, unless
@@ -211,8 +214,11 @@ const MEET_RIGHT = 1.8;
  * it follows. A car stays "in the way" until it's behind our tail, so a pass is never cut back
  * in on it; caught alongside with an oncoming car close, it drops back behind it. Out in the
  * other half with an oncoming car near, it goes back to the right.
+ * A landslide ahead (`slide`: its open lane, the speed to arrive at) overrides all that: the open
+ * lane, following whoever is ahead in it; if that is the oncoming half it waits short of the
+ * debris for an oncoming car to go by.
  */
-export function chooseLane(me: RoadUser, racers: readonly RoadUser[], cars: readonly TrafficCar[], home: number, passClear = ONCOMING_CLEAR): { lane: number; limit: number } {
+export function chooseLane(me: RoadUser, racers: readonly RoadUser[], cars: readonly TrafficCar[], home: number, passClear = ONCOMING_CLEAR, slide: SlideAdvice | null = null): { lane: number; limit: number } {
   let gap = Infinity;
   let bOff = 0;
   let bV = 0;
@@ -240,6 +246,14 @@ export function chooseLane(me: RoadUser, racers: readonly RoadUser[], cars: read
     bOff = c.off;
     bV = c.v;
     beside = alongside;
+  }
+  if (slide && !Number.isNaN(slide.lane)) {
+    let limit = slide.limit;
+    if (gap < Infinity) limit = Math.min(limit, bV + Math.max(0, gap - 14) * 0.4);
+    // The open half is the oncoming one: not in it with a car coming (unless already in the debris).
+    if (slide.lane < 0 && oncoming < passClear && me.s < slide.s0 + 4) limit = Math.min(limit, Math.sqrt(2 * HOLD_BRAKE * Math.max(0, slide.s0 - me.s - 8)));
+    const lane = slide.lane < 0 && oncoming < passClear && me.s < slide.s0 + 4 ? Math.max(home, KEEP_RIGHT) : slide.lane;
+    return { lane: home + (lane - home) * slide.ramp, limit };
   }
   // Our own half, well over to the right when meeting someone.
   const right = Math.max(home, oncoming < MEET ? MEET_RIGHT : KEEP_RIGHT);

@@ -375,6 +375,66 @@ export class BusAudio {
     this.riverGain.gain.setTargetAtTime(LEVELS.river * level, ctx.currentTime, 0.5);
   }
 
+  private slideNodes: { rumble: GainNode; fall: GainNode } | null = null;
+
+  /**
+   * A landslide's sounds, synthesized: `rumble` (0..1) the ground shaking (deep noise with a slow
+   * wobble), `fall` (0..1) rocks crashing down (noise in broken bursts). Levels already carry the distance.
+   */
+  slides(rumble: number, fall: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (!this.slideNodes && rumble <= 0 && fall <= 0) return;
+    if (!this.slideNodes) {
+      const low = ctx.createGain();
+      low.gain.value = 0;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 110;
+      const rs = this.noise(ctx, 3.1);
+      // A slow wobble in its own gain stage (so it vanishes with the level).
+      const shake = ctx.createGain();
+      shake.gain.value = 0.75;
+      rs.connect(lp).connect(shake).connect(low);
+      rs.start();
+      const wob = ctx.createOscillator();
+      wob.frequency.value = 5.5;
+      const wobAmt = ctx.createGain();
+      wobAmt.gain.value = 0.25;
+      wob.connect(wobAmt).connect(shake.gain);
+      wob.start();
+      const crash = ctx.createGain();
+      crash.gain.value = 0;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 650;
+      band.Q.value = 0.6;
+      const burst = ctx.createGain();
+      burst.gain.value = 0.6;
+      const fs = this.noise(ctx, 1.7);
+      fs.connect(band).connect(burst).connect(crash);
+      fs.start();
+      // Rocks hitting rocks: the bursts' gain flutters fast.
+      const flutter = ctx.createOscillator();
+      flutter.type = 'square';
+      flutter.frequency.value = 9;
+      const flutterAmt = ctx.createGain();
+      flutterAmt.gain.value = 0.45;
+      flutter.connect(flutterAmt).connect(burst.gain);
+      flutter.start();
+      const thump = ctx.createBiquadFilter();
+      thump.type = 'lowpass';
+      thump.frequency.value = 220;
+      fs.connect(thump).connect(crash);
+      low.connect(this.master);
+      crash.connect(this.master);
+      this.slideNodes = { rumble: low, fall: crash };
+    }
+    const now = ctx.currentTime;
+    this.slideNodes.rumble.gain.setTargetAtTime(LEVELS.rumble * rumble, now, 0.25);
+    this.slideNodes.fall.gain.setTargetAtTime(LEVELS.rockfall * fall, now, 0.12);
+  }
+
   /** Nitro: a burst of filtered noise sweeping up. */
   private whoosh(volume: number): void {
     const ctx = this.ctx!;

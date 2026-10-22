@@ -37,6 +37,9 @@ export type RaceHudAction = 'again' | 'menu' | 'lobby';
  * countdown, the tachometer with its green launch window (big during the countdown, gone a
  * moment after GO), a progress strip with every racer on it, and the results card.
  */
+/** The slipstream badge shows past this much pull. */
+const DRAFT_SHOWN = 0.3;
+
 export class RaceHud {
   onAction: ((a: RaceHudAction) => void) | null = null;
   private el: HTMLElement;
@@ -69,6 +72,7 @@ export class RaceHud {
       <div class="rh-photo" data-k="photo" hidden></div>
       <div class="rh-wait" data-k="wait" hidden>De vuelta en la vía… <b data-k="waitN">3</b></div>
       <div class="rh-net" data-k="net" hidden></div>
+      <div class="rh-draft" data-k="draft" hidden>¡Rebufo!</div>
       <div class="rh-hint" data-k="hint">Acelera <span class="keys-only">con <b>W</b></span> y mantén la aguja en lo <b class="rh-green">verde</b>: ¡salida perfecta!</div>
       <div class="rh-strip"><div class="rh-flag">🏁</div></div>
       <div class="rh-tach" data-k="tach">
@@ -140,8 +144,10 @@ export class RaceHud {
     flash.classList.add('rh-flash-on');
   }
 
-  /** `wait`: seconds before the player may go on after an R reset (0: none). */
-  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; wait: number }): void {
+  /** `wait`: seconds before the player may go on after an R reset (0: none). `draft`: the slipstream's pull on the player (0..1). */
+  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; wait: number; draft: number }): void {
+    const drafting = f.draft > DRAFT_SHOWN;
+    if (this.k.draft.hidden === drafting) this.k.draft.hidden = !drafting;
     setText(this.k.place, `${f.place} / ${f.racers}`);
     const waiting = f.wait > 0;
     if (this.k.wait.hidden === waiting) this.k.wait.hidden = !waiting;

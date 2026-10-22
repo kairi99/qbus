@@ -30,8 +30,13 @@ export const TOWER_CLEAR = 6;
 const SOLID_REACH = 30;
 /** Cable segments per span. */
 const CABLE_STEPS = 16;
-/** A cable never hangs closer than this (m) to the ground under it (a span over a valley). */
-const GROUND_CLEAR = 6;
+/** A cable never hangs closer than this (m) to the ground under it (a span over a valley)... */
+export const GROUND_CLEAR = 8;
+/** ...nor than this over the road (m): a tower standing low in the valley beside the road gets
+ * leg extensions (real lines do the same on steep ground) until its spans clear both. */
+export const ROAD_CLEAR = 14;
+/** Extension panels' height (m), each a ring with X bracing on every face. */
+const EXT_PANEL = 7;
 const STEEL_LEG = '#8f979d';
 const STEEL = '#aeb5ba';
 const GLASS = '#b7bba8';
@@ -77,7 +82,7 @@ export function cableY(y0: number, y1: number, u: number, sag: number): number {
   return y0 + (y1 - y0) * u - 4 * sag * u * (1 - u);
 }
 
-/** A tower's base: its four feet (a square aligned to the line), the ground under each, and the ring height. */
+/** A tower's base: its four feet (a square aligned to the line), the ground under each, and the ring height (before any extension). */
 function footing(p: Vec2, f: TowerFrame, ground: (p: Vec2) => number) {
   const feet = [
     [-1, -1],
@@ -90,6 +95,46 @@ function footing(p: Vec2, f: TowerFrame, ground: (p: Vec2) => number) {
   });
   // The ring sits on the highest foot; the others' legs reach down to their own ground.
   return { feet, y0: Math.max(...feet.map((q) => q.g)) };
+}
+
+/**
+ * How much each tower's body is raised on leg extensions so that no cable of any span comes
+ * closer than `floor(x, z)` allows (the height a cable must keep over that spot). Raising both
+ * ends of a span by d raises every point of it by d, so each pass lifts the ends of the worst
+ * span by its deficit; lifts only grow, so this settles.
+ */
+export function towerLifts(towers: Vec2[], frames: TowerFrame[], y0: number[], floor: (p: Vec2) => number): number[] {
+  const lift = towers.map(() => 0);
+  const spans = towers.slice(1).map((t, i) => {
+    const span = Math.hypot(t.x - towers[i].x, t.z - towers[i].z);
+    // Each cable's lowest margin over its floor, for ends at the base heights (lifts add on).
+    let worst = Infinity;
+    const [a0, b0] = [attachPoints(towers[i], frames[i], y0[i]), attachPoints(t, frames[i + 1], y0[i + 1])];
+    for (let k = 0; k < a0.length; k++) {
+      const [a, b] = [a0[k], b0[k]];
+      const sag = span * (k === 6 ? EARTH_SAG : SAG);
+      for (let s = 0; s <= CABLE_STEPS * 4; s++) {
+        const u = s / (CABLE_STEPS * 4);
+        const q = { x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u };
+        worst = Math.min(worst, cableY(a.y, b.y, u, sag) - floor(q));
+      }
+    }
+    return worst;
+  });
+  for (let pass = 0; pass < towers.length * 4; pass++) {
+    let moved = false;
+    spans.forEach((margin, i) => {
+      // With uneven lifts the span is no longer raised uniformly: its low point shifts by at most
+      // the larger lift, at least the smaller. Requiring the smaller to cover the deficit is safe.
+      const deficit = -(margin + Math.min(lift[i], lift[i + 1]));
+      if (deficit <= 1e-6) return;
+      lift[i] = Math.max(lift[i], Math.min(lift[i], lift[i + 1]) + deficit);
+      lift[i + 1] = Math.max(lift[i + 1], Math.min(lift[i], lift[i + 1]) + deficit);
+      moved = true;
+    });
+    if (!moved) break;
+  }
+  return lift.map((l) => Math.ceil(l));
 }
 
 /** A square steel member between two points. */
@@ -133,6 +178,17 @@ function tower(mb: MeshBuilder, p: Vec2, f: TowerFrame, y0: number, feet: { p: V
       beam(mb, corner((k + 1) % 4, j), corner(k, j + 1), 0.13, STEEL);
     }
   }
+  // Leg extensions (a tower low beside the road): braced panels down to the highest foot.
+  const ext = y0 - Math.max(...feet.map((q) => q.g));
+  const panels = Math.floor(ext / EXT_PANEL);
+  for (let j = 1; j <= panels; j++)
+    for (let k = 0; k < 4; k++) {
+      const [hi, lo] = [corner(k, 0).setY(y0 - (j - 1) * EXT_PANEL), corner(k, 0).setY(y0 - j * EXT_PANEL)];
+      const [hi1, lo1] = [corner((k + 1) % 4, 0).setY(hi.y), corner((k + 1) % 4, 0).setY(lo.y)];
+      beam(mb, lo, lo1, 0.18, STEEL);
+      beam(mb, hi, lo1, 0.13, STEEL);
+      beam(mb, hi1, lo, 0.13, STEEL);
+    }
   // Each leg runs on down to its own ground (the foot on the downhill side is longer).
   feet.forEach((q, k) => {
     const c = corner(k, 0);
@@ -170,6 +226,30 @@ function legSolids(race: TrackData, p: Vec2, feet: { p: Vec2; g: number }[], y0:
   }
 }
 
+/** One line laid out: each tower's frame and base (lifted on extensions where needed), and each cable as points along every span. */
+export function layLine(race: TrackData, line: NonNullable<TrackScenery['powerLines']>[number], ground: (p: Vec2) => number) {
+  const frames = towerFrames(line.towers);
+  const bases = line.towers.map((p, i) => footing(p, frames[i], ground));
+  const lifts = towerLifts(line.towers, frames, bases.map((b) => b.y0), (q) => cableFloor(race, ground, q));
+  bases.forEach((b, i) => (b.y0 += lifts[i]));
+  const held = line.towers.map((p, i) => attachPoints(p, frames[i], bases[i].y0));
+  const cables: THREE.Vector3[][] = [];
+  for (let i = 0; i + 1 < line.towers.length; i++) {
+    const span = Math.hypot(line.towers[i + 1].x - line.towers[i].x, line.towers[i + 1].z - line.towers[i].z);
+    for (let k = 0; k < held[i].length; k++) {
+      const [a, b] = [held[i][k], held[i + 1][k]];
+      const sag = span * (k === 6 ? EARTH_SAG : SAG);
+      const pts: THREE.Vector3[] = [];
+      for (let s = 0; s <= CABLE_STEPS; s++) {
+        const u = s / CABLE_STEPS;
+        pts.push(new THREE.Vector3(a.x + (b.x - a.x) * u, cableY(a.y, b.y, u, sag), a.z + (b.z - a.z) * u));
+      }
+      cables.push(pts);
+    }
+  }
+  return { frames, bases, lifts, cables };
+}
+
 /**
  * Builds the lines into the static tiles (towers) and returns their cables as one draw call
  * (null with none). Visual cables only: they hang far over the road, if they cross it at all.
@@ -184,29 +264,12 @@ export function powerLines(
 ): THREE.LineSegments | null {
   const verts: number[] = [];
   for (const line of lines) {
-    const frames = towerFrames(line.towers);
-    const bases = line.towers.map((p, i) => footing(p, frames[i], ground));
-    const held = line.towers.map((p, i) => attachPoints(p, frames[i], bases[i].y0));
+    const { frames, bases, cables } = layLine(race, line, ground);
     line.towers.forEach((p, i) => {
       tower(solid.at(p.x, p.z), p, frames[i], bases[i].y0, bases[i].feet);
       legSolids(race, p, bases[i].feet, bases[i].y0, world, fixed);
     });
-    for (let i = 0; i + 1 < line.towers.length; i++) {
-      const span = Math.hypot(line.towers[i + 1].x - line.towers[i].x, line.towers[i + 1].z - line.towers[i].z);
-      for (let k = 0; k < held[i].length; k++) {
-        const [a, b] = [held[i][k], held[i + 1][k]];
-        const sag = span * (k === 6 ? EARTH_SAG : SAG);
-        let prev: THREE.Vector3 | null = null;
-        for (let s = 0; s <= CABLE_STEPS; s++) {
-          const u = s / CABLE_STEPS;
-          const x = a.x + (b.x - a.x) * u;
-          const z = a.z + (b.z - a.z) * u;
-          const cur = new THREE.Vector3(x, Math.max(cableY(a.y, b.y, u, sag), ground({ x, z }) + GROUND_CLEAR), z);
-          if (prev) verts.push(prev.x, prev.y, prev.z, cur.x, cur.y, cur.z);
-          prev = cur;
-        }
-      }
-    }
+    for (const pts of cables) for (let s = 1; s < pts.length; s++) verts.push(pts[s - 1].x, pts[s - 1].y, pts[s - 1].z, pts[s].x, pts[s].y, pts[s].z);
   }
   if (!verts.length) return null;
   const g = new THREE.BufferGeometry();
@@ -215,6 +278,13 @@ export function powerLines(
   const mesh = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: CABLE, fog: true }));
   mesh.frustumCulled = true;
   return mesh;
+}
+
+/** The lowest a cable may hang over `p`: clear of the ground, and well clear of the road (deck plus its banks). */
+export function cableFloor(race: TrackData, ground: (p: Vec2) => number, p: Vec2): number {
+  const at = locateOnTrack(race, p);
+  const road = Math.abs(at.off) < race.width / 2 + 6 ? at.y + ROAD_CLEAR : -Infinity;
+  return Math.max(ground(p) + GROUND_CLEAR, road);
 }
 
 /** Within `r` meters of a tower's axis (plants, crowds and mist keep off). */

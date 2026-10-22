@@ -11,6 +11,7 @@ import type { DriveInput } from '../core/input';
 import { engineLoad } from '../core/soundModel';
 import { Rng } from '../core/rng';
 import { Nitro } from './nitro';
+import { draftOf, Slipstream } from './slipstream';
 import { KEEP_RIGHT, RaceDriver, type RoadUser, SKILLS, type TrafficCar, chooseLane, vehicleLimits } from './raceDriver';
 import { FALL_BACK, FallWatch } from './fallWatch';
 import { GHOST_TIME, Ghost } from './ghost';
@@ -20,6 +21,9 @@ import { bestRace, recordRace } from './raceRecords';
 import { CREWS, MAX_RIVALS, RESET_WAIT } from './raceField';
 import { PICKUP_FILL, Pickups } from './pickups';
 import { PickupView } from './pickupView';
+import { SLIDE_TRACKS, SLIDE_BRAKE, mudGrip, type SlideAdvice, type SlideField, mudAt, slideAdvice, slideField, slidePhase } from './landslides';
+import { LandslideView } from '../world/landslideView';
+import type { Obstacle } from './traffic';
 import type { TrafficSim } from './traffic';
 import { RaceHud, type RaceResults, resultRows } from '../ui/raceHud';
 import { type TireSmoke, dustOf, smokeOf } from '../vehicle/tireSmoke';
@@ -36,6 +40,9 @@ export type RaceSkill = keyof typeof SKILLS;
 /** The rubber band: a rival this far ahead of the player (m) eases off by RUBBER, behind it pushes. */
 const RUBBER_GAP = 350;
 const RUBBER = 0.07;
+/** A warning this far ahead (m) of the player is announced. */
+const SLIDE_NEWS = 600;
+
 /** After the player crosses the line: the trackside camera at the finish (s) before the results. */
 export const FINISH_CAM = 4;
 /** Relocating a ghost stuck in another vehicle: search this far (m) along the road in steps, keeping this gap (m) and lane width (m). */
@@ -69,6 +76,10 @@ interface Rival {
   lastS: number;
   /** Its throttle last step (for the engine's sound). */
   throttle: number;
+  /** How deep in mud it is (0..1). */
+  mud: number;
+  /** Braking it plans slides with (m/s²). */
+  slideBrake: number;
 }
 
 /** Online: a bus on the grid moved from the network (another player, or the host's AI off the host). */
@@ -100,6 +111,8 @@ export interface RaceOptions {
   /** Terrain height (where the finish camera can stand). */
   ground?: (p: Vec2) => number;
   seed?: number;
+  /** Landslides on the track (default: the tracks of `SLIDE_TRACKS`). Deterministic from the seed and the race time. */
+  slides?: boolean;
   /**
    * Online: the racers' keys (`racerKey`: the player, then the AI simulated here, then `remotes`),
    * seconds to GO on the shared clock, and the buses moved from the network. Places come from
@@ -135,6 +148,9 @@ export class RaceSession {
   /** Each racer on the road (front axle's meters along, offset + right, speed), the player first. */
   private users: RoadUser[];
   private near: RoadUser[] = [];
+  /** Slipstream pull: each local racer's target (0..1, from `users` each frame) and its eased pull (player first, then the rivals). */
+  private draftTarget: number[] = [];
+  private slips: Slipstream[] = [];
   private positions: { x: number; z: number }[];
   /** The rivals' engines, for the audio (refreshed every frame). */
   readonly voices: RivalVoice[];
@@ -151,8 +167,30 @@ export class RaceSession {
   /** Tire grip from the weather (`gripFor(wet)`), for every bus on the road, and how wet it is (0..1: the rivals drive to it). */
   weatherGrip = 1;
   wet = 0;
-  /** Tire smoke and dust off the rivals' wheels (the player's is main's). */
-  smoke: TireSmoke | null = null;
+  /** Tire smoke and dust off the rivals' wheels (the player's is main's), and the slides' dust. */
+  private smokePool: TireSmoke | null = null;
+  /** Landslides (null: none on this race) and their view and physics. */
+  readonly slides: SlideField | null;
+  private slideView: LandslideView | null = null;
+  private slideWarned: boolean[] = [];
+  private advice: SlideAdvice = { lane: NaN, s0: Infinity, limit: Infinity, landed: false, ramp: 0 };
+  /** The race time the physics steps count from: the frame's, plus the steps taken since. */
+  private clock = 0;
+  private sub = 0;
+  /** How deep in mud the player is (0..1). */
+  private playerMud = 0;
+  private ear = { x: 0, z: 0 };
+  /** Where the slides that have started are (the minimap's marks; one record per site, the list reused). */
+  readonly slideMarks: { x: number; z: number }[] = [];
+
+  get smoke(): TireSmoke | null {
+    return this.smokePool;
+  }
+
+  set smoke(s: TireSmoke | null) {
+    this.smokePool = s;
+    if (this.slideView) this.slideView.smoke = s;
+  }
   /** Popups for the player's feed (launch, pickups, places won and lost): read and cleared by main. */
   readonly notices: { text: string; tone: 'money' | 'bad' }[] = [];
   private caller = new PlaceCaller();
@@ -181,7 +219,8 @@ export class RaceSession {
     hudRoot: HTMLElement,
     opts: RaceOptions,
   ) {
-    this.rng = new Rng(opts.seed ?? Math.floor(Math.random() * 2 ** 31));
+    const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
+    this.rng = new Rng(seed);
     this.skill = opts.skill ?? 'normal';
     this.traffic = opts.traffic ?? null;
     const n = Math.max(0, Math.min(MAX_RIVALS, opts.vehicles.length));
@@ -196,7 +235,7 @@ export class RaceSession {
       scene.add(model.root);
       // The middle of the road, a little to either side; with traffic about, the right half.
       const home = busy ? KEEP_RIGHT - (i % 2) * 0.3 : (i % 2 ? 1 : -1) * 0.6;
-      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], vehicleLimits(preset), home), nitro: new Nitro(), fall: new FallWatch(), ghost: new Ghost(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, throttle: 0 });
+      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], vehicleLimits(preset), home), nitro: new Nitro(), fall: new FallWatch(), ghost: new Ghost(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, throttle: 0, mud: 0, slideBrake: vehicleLimits(preset).brake * SKILLS[this.skill].brake * SLIDE_BRAKE });
     }
     this.online = opts.online ?? null;
     for (const e of this.online?.remotes ?? []) {
@@ -209,6 +248,8 @@ export class RaceSession {
     this.game = new RaceGame(['Tú', ...this.rivals.map((r) => r.preset.name), ...this.remotes.map((r) => r.name)], track.finish - track.start, { estimate: !this.online });
     this.progress = new Array(total).fill(0);
     this.users = Array.from({ length: total }, (_, k) => ({ s: 0, off: 0, v: 0, len: k ? others[k - 1].body.length : player.preset.body.length }));
+    this.slips = Array.from({ length: 1 + this.rivals.length }, () => new Slipstream());
+    this.draftTarget = this.slips.map(() => 0);
     this.noseS = new Array(total).fill(-1);
     // Online every racer's dot on the minimap and the strip has its color: the players' seats', grey for the AI.
     const colors = [...this.rivals.map(() => AI_COLOR), ...this.remotes.map((r) => r.color)];
@@ -226,6 +267,12 @@ export class RaceSession {
       for (const r of this.remotes) this.tags.add(r.remote.bus, r.name, r.color);
     }
     this.finishSpot = finishCamera(track, opts.ground ?? (() => -Infinity));
+    const ground = opts.ground ?? (() => 0);
+    this.slides = (opts.slides ?? SLIDE_TRACKS.has(zone)) ? slideField(track, seed, ground) : null;
+    if (this.slides) {
+      this.slideView = new LandslideView(scene, world, track, this.slides, null, ground);
+      this.slideWarned = this.slides.sites.map(() => false);
+    }
   }
 
   /** While the finish camera rolls: where it stands (it looks at the player's bus). */
@@ -238,9 +285,14 @@ export class RaceSession {
     return this.rivals.map((r) => r.bus);
   }
 
+  /** The player's bus is held still: before GO, or waiting out an R reset (no throttle, no nitro). */
+  get playerHeld(): boolean {
+    return !this.game.green || this.wait > 0;
+  }
+
   /** What the player's bus gets this step: held still until GO (and after an R reset), then the launch's effect on its input. */
   playerInput(drive: { throttle: number; steer: number; handbrake: boolean; boost?: boolean }, nitroBoost: boolean): DriveInput {
-    if (!this.game.green || this.wait > 0) return { throttle: 0, steer: drive.steer, handbrake: false, boost: false, parked: true };
+    if (this.playerHeld) return { throttle: 0, steer: drive.steer, handbrake: false, boost: false, parked: true };
     const e = this.grade && this.effect > 0 ? LAUNCH_EFFECT[this.grade] : null;
     return { throttle: drive.throttle * (e?.throttle ?? 1), steer: drive.steer, handbrake: drive.handbrake, boost: nitroBoost || (!!e && e.boost > 0) };
   }
@@ -343,29 +395,36 @@ export class RaceSession {
 
   /** Grip the player's tires have from the launch (wheelspin), 1 otherwise. */
   get playerGrip(): number {
-    return this.grade && this.effect > 0 ? LAUNCH_EFFECT[this.grade].grip : 1;
+    return (this.grade && this.effect > 0 ? LAUNCH_EFFECT[this.grade].grip : 1) * mudGrip(this.playerMud, this.wet);
   }
 
   /** Racer `k`'s lane and speed limit (`chooseLane`), against the other racers and the traffic. */
-  private laneFor(k: number, home: number): { lane: number; limit: number } {
+  private laneFor(k: number, home: number, brake: number): { lane: number; limit: number } {
     const me = this.users[k];
     this.near.length = 0;
     for (let j = 0; j < this.users.length; j++) if (j !== k) this.near.push(this.users[j]);
-    return chooseLane(me, this.near, this.cars, home, SKILLS[this.skill].passClear);
+    const slide = this.slides ? slideAdvice(this.slides.sites, this.game.time, me.s, me.len, brake, this.advice) : null;
+    return chooseLane(me, this.near, this.cars, home, SKILLS[this.skill].passClear, slide);
   }
 
   /** Each physics step, before the world steps: the rivals drive. */
   step(dt: number): void {
+    if (this.slideView) {
+      this.sub += dt;
+      this.slideView.step(this.clock + this.sub);
+    }
     const playerS = this.progress[0];
+    this.player.bus.draft = this.slips[0].step(this.playerHeld ? 0 : this.draftTarget[0], dt);
     this.rivals.forEach((r, i) => {
       if (r.wait > 0) r.wait -= dt;
+      r.bus.draft = this.slips[i + 1].step(r.fall.falling || r.wait > 0 ? 0 : this.draftTarget[i + 1], dt);
       if (!this.game.green || r.fall.falling || r.wait > 0) {
         r.throttle = 0;
         r.bus.update(this.hold, dt);
         return;
       }
       const ahead = this.progress[i + 1] - playerS;
-      const way = this.laneFor(i + 1, r.home);
+      const way = this.laneFor(i + 1, r.home, r.slideBrake);
       r.driver.lane = way.lane;
       // Eases off ahead of the player as much as its skill lets it, pushes when behind.
       const band = Math.max(-1, Math.min(1, ahead / RUBBER_GAP));
@@ -373,12 +432,61 @@ export class RaceSession {
       const input = r.driver.drive(r.bus, dt, pace, r.nitro.ready || r.nitro.active, way.limit);
       const e = r.grade && r.effect > 0 ? LAUNCH_EFFECT[r.grade] : null;
       if (r.effect > 0) r.effect -= dt;
-      r.bus.grip = this.weatherGrip * (e?.grip ?? 1);
-      r.driver.wet = this.wet;
+      r.bus.grip = this.weatherGrip * (e?.grip ?? 1) * mudGrip(r.mud, this.wet);
+      r.bus.mud = r.mud;
+      r.driver.wet = Math.max(this.wet, r.mud);
       r.throttle = input.throttle * (e?.throttle ?? 1);
       r.bus.update({ throttle: r.throttle, steer: input.steer, handbrake: input.handbrake, boost: r.nitro.step(!!input.boost, dt) || (!!e && e.boost > 0) }, dt);
     });
     if (this.effect > 0) this.effect -= dt;
+  }
+
+  /** What the landslides do this frame: mud under every local racer, the view, the heads-up. */
+  private slideFrame(dt: number): void {
+    const field = this.slides;
+    const view = this.slideView;
+    if (!field || !view) return;
+    const g = this.game;
+    this.clock = g.time;
+    this.sub = 0;
+    const hw = this.track.width / 2;
+    // The mud under each local racer's middle (the front axle's place, a bus length less 40%).
+    const mudOf = (u: RoadUser) => mudAt(field, g.time, u.s - u.len * 0.4, u.off, this.wet, hw);
+    this.playerMud = g.green ? mudOf(this.users[0]) : 0;
+    this.player.bus.mud = this.playerMud;
+    this.rivals.forEach((r, i) => (r.mud = g.green ? mudOf(this.users[i + 1]) : 0));
+    const cam = this.camera?.position;
+    const p = cam ?? this.player.bus.position(this.nose);
+    this.ear.x = p.x;
+    this.ear.z = p.z;
+    view.update(g.time, dt, this.ear, this.wet);
+    // "Derrumbe adelante": a slide starting to go within SLIDE_NEWS ahead of the player.
+    this.slideMarks.length = 0;
+    for (const site of field.sites) if (slidePhase(site, g.time) !== 'idle') this.slideMarks.push(site.at);
+    field.sites.forEach((site, i) => {
+      if (this.slideWarned[i] || g.phase !== 'racing') return;
+      const phase = slidePhase(site, g.time);
+      if (phase === 'idle' || phase === 'settled') return;
+      const ahead = site.s - this.playerS;
+      if (ahead < 0 || ahead > SLIDE_NEWS) return;
+      this.slideWarned[i] = true;
+      this.notices.push({ text: '¡Derrumbe adelante!', tone: 'bad' });
+    });
+  }
+
+  /** Landslide state for the e2e and the minimap: each site's phase and place along the track. */
+  slideState(): { phase: string; s: number; side: number; trigger: number }[] {
+    return (this.slides?.sites ?? []).map((site) => ({ phase: slidePhase(site, this.game.time), s: site.s, side: site.side, trigger: site.trigger }));
+  }
+
+  /** Landed boulders, as boxes for the traffic to stay out of. */
+  get slideObstacles(): readonly Obstacle[] {
+    return this.slideView?.obstacles ?? [];
+  }
+
+  /** Sound levels of the landslides at the camera (0..1). */
+  get slideSound(): { rumble: number; fall: number } {
+    return this.slideView?.loudness ?? { rumble: 0, fall: 0 };
   }
 
   /** Where each car of the traffic is along the track (it drives one lane each way). */
@@ -408,6 +516,7 @@ export class RaceSession {
     if (!g.green) this.launch.update(dt, begun ? throttleHeld : 0);
     if (this.wait > 0 && g.phase === 'racing') this.wait = Math.max(0, this.wait - dt);
     this.locateTraffic();
+    this.slideFrame(dt);
     // Progress: each front axle's distance past the start line.
     const pn = this.player.bus.nose(this.nose);
     const here = locateOnTrack(t, pn, this.playerS, 120);
@@ -454,11 +563,13 @@ export class RaceSession {
       r.model.sync(r.bus);
       if (this.smoke && !r.fall.falling) {
         const spin = r.grade === 'spin' && r.effect > 0 ? r.throttle : 0;
-        this.smoke.emit(r.bus, smokeOf(r.bus.slipAngle, r.bus.speed, spin), dustOf(Math.abs(s.off) - t.width / 2, r.bus.speed), dt);
+        this.smoke.emit(r.bus, smokeOf(r.bus.slipAngle, r.bus.speed, spin), dustOf(Math.abs(s.off) - t.width / 2, r.bus.speed), dt, r.mud);
       }
     });
     this.tickGhost(0, this.ghost, this.player.bus, null, dt);
     this.syncRemotes();
+    // Slipstream: who sits close behind whom (remotes pull us too; their own clients pull them).
+    for (let k = 0; k < this.slips.length; k++) this.draftTarget[k] = g.phase === 'racing' ? draftOf(this.users[k], this.users) : 0;
     if (this.tags && this.camera) this.tags.update(this.camera);
     if (g.green) this.collect(dt);
     this.view.update(dt);
@@ -488,6 +599,7 @@ export class RaceSession {
       progress: this.progress,
       length: g.length,
       wait: g.phase === 'racing' ? this.wait : 0,
+      draft: this.slips[0].level,
     });
   }
 
@@ -690,12 +802,21 @@ export class RaceSession {
     this.wait = 0;
     this.ghost.reset();
     this.player.bus.setGhost(false);
+    for (const sl of this.slips) sl.reset();
+    this.draftTarget.fill(0);
     this.playerS = -1;
     this.noseS.fill(-1);
     this.finishIn = 0;
     this.results = null;
     this.hud.photo(null);
     this.smoke?.clear();
+    this.slideView?.reset();
+    this.slideWarned.fill(false);
+    this.clock = 0;
+    this.sub = 0;
+    this.playerMud = 0;
+    this.player.bus.mud = 0;
+    for (const r of this.rivals) (r.mud = 0), (r.bus.mud = 0);
     this.game = new RaceGame(this.game.racers.map((r) => r.name), this.track.finish - this.track.start);
     this.hud.showResults(null);
   }
@@ -709,6 +830,7 @@ export class RaceSession {
     for (const r of this.remotes) this.scene.remove(r.model.root);
     this.tags?.dispose();
     this.view.dispose();
+    this.slideView?.dispose();
   }
 }
 

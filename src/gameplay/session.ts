@@ -184,6 +184,11 @@ export class GameSession {
     this.hitters = [...this.d.bus.colliders, ...list.flatMap((r) => r.colliders)];
   }
 
+  /** Fixed obstacles on the road the traffic keeps out of (a race's landed boulders). */
+  hazards: readonly Obstacle[] = [];
+  /** Landslides to mark on the minimap (a race's; live list). */
+  marks: readonly { x: number; z: number }[] = [];
+
   get racers(): BusPhysics[] {
     return this.rivals;
   }
@@ -259,6 +264,7 @@ export class GameSession {
     bus.sections().forEach((s, i) => obstacles.push({ id: i ? `bus${i}` : 'bus', pos: s.pos, heading: s.heading, length: s.length, width: bus.preset.body.width, lift: bus.roadHeight() - terrainAt(this.d.city, s.pos) }));
     this.racers.forEach((r, k) => r.sections().forEach((s, i) => obstacles.push({ id: `racer${k}.${i}`, pos: s.pos, heading: s.heading, length: s.length, width: r.preset.body.width, lift: r.roadHeight() - terrainAt(this.d.city, s.pos) })));
     for (const w of this.trafficBodies.obstacles()) obstacles.push(w);
+    for (const h of this.hazards) obstacles.push(h);
     for (const p of this.peds.peds) {
       if (!p.onRoad) continue;
       let o = this.pedObstacles.get(p.id);
@@ -506,7 +512,7 @@ export class GameSession {
     if (!this.game) {
       if (this.minimapClock >= 1 / 30) {
         this.minimapClock = 0;
-        this.minimap.update(here, bus.heading, null, null, this.targetColor(), [], this.others);
+        this.minimap.update(here, bus.heading, null, null, this.targetColor(), [], this.others, this.marks);
       }
       return;
     }

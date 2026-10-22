@@ -21,6 +21,8 @@ const REAR = [2, 3];
 const COAST_BRAKE = 1.5;
 /** Floodwater's drag (1/s per meter of depth): half a meter of water holds a bus to a crawl. */
 const WADE_DRAG = 1.1;
+/** Deep mud's drag (1/s): holds a bus to about 50 km/h unless it pushes the nitro. */
+const MUD_DRAG = 0.3;
 /** Grip left in water deeper than AQUAPLANE (the tires float on it). */
 const WADE_GRIP = 0.6;
 const AQUAPLANE = 0.15;
@@ -28,6 +30,11 @@ const AQUAPLANE = 0.15;
 const WET_GRIP_REF = 0.7;
 /** Brakes on a soaked road stop this much less hard (the tires lock and skid). */
 const WET_BRAKE = 0.7;
+/** The bodies' linear damping (1/s): stands in for air drag, the thing a slipstream takes away. */
+const AIR_DRAG = 0.05;
+/** Slipstream at full pull (`draft` 1): no air drag plus this shove (m/s²) on throttle, up to this far past top speed (km/h). */
+const DRAFT_ACCEL = 1.8;
+const DRAFT_TOP_KMH = 14;
 
 /** A rear section of an articulated bus: its own body and trailing axle, hinged to the section ahead. */
 export interface RearSection {
@@ -101,6 +108,10 @@ export class BusPhysics {
   grip = 1;
   /** Depth of floodwater the bus stands in (m; set by the game, 0 when dry): it drags it back. */
   wade = 0;
+  /** How deep in mud the bus is (0..1; set by the game, 0 when clean): it drags it back. */
+  mud = 0;
+  /** Slipstream pull behind another racer (0..1, set by the game): a shove on throttle, past top speed. */
+  draft = 0;
   /** Backing up (throttle back, or rolling backwards), for `reverseLock`. */
   private reversing = false;
   /** Ray filter for the wheels of a train (null: the default, everything). */
@@ -151,7 +162,7 @@ export class BusPhysics {
 
   private section(length: number, m: number): RAPIER.RigidBody {
     const { width, height } = this.preset.body;
-    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setCcdEnabled(true).setAngularDamping(0.4).setLinearDamping(0.05));
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setCcdEnabled(true).setAngularDamping(0.4).setLinearDamping(AIR_DRAG));
     // Articulated sections have their lower ends chamfered (approach and departure angles), or
     // the nose digs into the road where a ramp flattens out (a box 9 m long high-centers there).
     const bevel = this.preset.articulated?.bevel ?? 0;
@@ -376,7 +387,19 @@ export class BusPhysics {
     this.driftAssist(input, speed, dt);
     this.limitDriftAngle(dt);
     this.boost(!!input.boost, speed, dt);
+    this.slipstream(input, speed, dt);
     this.wading(dt);
+  }
+
+  /** Drafting: the air drag cancelled plus a mild shove, along each section, only on throttle. */
+  private slipstream(input: DriveInput, speed: number, dt: number): void {
+    if (this.draft <= 0 || input.parked || input.throttle <= 0 || this.wheelsOnGround < 2) return;
+    if (speed >= (this.preset.topSpeedKmh + DRAFT_TOP_KMH * this.draft) / 3.6) return;
+    for (const b of this.bodies) {
+      const f = this.forwardOf(b.rotation(), 1);
+      const j = b.mass() * (DRAFT_ACCEL + AIR_DRAG * Math.abs(speed)) * this.draft * input.throttle * dt;
+      b.applyImpulse({ x: f.x * j, y: f.y * j, z: f.z * j }, true);
+    }
   }
 
   /**
@@ -407,8 +430,8 @@ export class BusPhysics {
 
   /** Floodwater drags every section back, more the deeper and faster it goes (a splash, then a crawl). */
   private wading(dt: number): void {
-    if (this.wade <= 0) return;
-    const k = Math.min(1, WADE_DRAG * Math.min(1, this.wade) * dt);
+    const k = Math.min(1, (WADE_DRAG * Math.min(1, Math.max(0, this.wade)) + MUD_DRAG * Math.min(1, Math.max(0, this.mud))) * dt);
+    if (k <= 0) return;
     for (const b of this.bodies) {
       const v = b.linvel();
       const m = b.mass();
@@ -531,6 +554,8 @@ export class BusPhysics {
     this.rearGrip = this.preset.wheels.frictionSlip;
     this.boosting = false;
     this.wade = 0;
+    this.mud = 0;
+    this.draft = 0;
   }
 
   /** Collision groups to restore when the ghost ends (null while solid). */

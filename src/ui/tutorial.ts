@@ -51,6 +51,8 @@ export interface RaceInfo {
   from: string;
   to: string;
   traffic: boolean;
+  /** The track has landslides. */
+  slides?: boolean;
 }
 
 const keyList = (rows: [string, string][], cls: string) =>
@@ -74,6 +76,7 @@ function pages(free: boolean, targets: StarThresholds | null, brt: boolean, race
         <li><b>Nitro en la vía:</b> los tanques azules llenan ${tank(PICKUP_FILL)} (vuelven a los ${PICKUP_RESPAWN} s). También se recarga derrapando y pasando con las justas.</li>
         <li><b>Barrancos:</b> hay tramos sin baranda. Si te vas abajo vuelves a la vía un poco más atrás.</li>
         <li>Con <b>R</b> vuelves a la vía donde estabas, pero esperas ${RESET_WAIT} s antes de seguir.</li>
+        ${race.slides ? '<li><b>Derrumbes:</b> suena un retumbo y bajan piedras por el cerro. Un carril siempre queda libre: lo tapado es lodo y rocas, y en el lodo el bus pesa y patina.</li>' : ''}
         ${race.traffic ? '<li><b>Tráfico:</b> carros y camiones en los dos sentidos. Rebasa solo con la vía libre.</li>' : ''}
       </ul>`,
       controls(true),

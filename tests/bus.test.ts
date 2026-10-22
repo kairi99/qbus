@@ -160,6 +160,22 @@ function setup() {
     expect(kmh).toBeLessThanOrEqual(preset.topSpeedKmh + preset.nitro.topSpeedBonusKmh + 3);
   });
 
+  it('slipstream pulls it past top speed (a little), only on throttle', () => {
+    const plain = setup();
+    const drafted = setup();
+    for (const s of [plain, drafted]) s.run({ ...idle, throttle: 1 }, 12);
+    drafted.bus.draft = 1;
+    plain.run({ ...idle, throttle: 1 }, 6);
+    drafted.run({ ...idle, throttle: 1 }, 6);
+    const gain = (drafted.bus.speed - plain.bus.speed) * 3.6;
+    expect(gain).toBeGreaterThan(3);
+    expect(drafted.bus.speed * 3.6).toBeLessThanOrEqual(preset.topSpeedKmh + 14 + 2);
+    // Off the throttle it gives nothing: both coast down alike.
+    plain.run(idle, 2);
+    drafted.run(idle, 2);
+    expect(Math.abs(drafted.bus.speed - plain.bus.speed) * 3.6).toBeLessThan(gain + 1);
+  });
+
   it('reset puts the bus back upright at spawn', () => {
     const { bus, run } = setup();
     run({ ...idle, throttle: 1, steer: 1 }, 3);
@@ -578,5 +594,25 @@ describe('weather', () => {
     expect(wet.bus.speed).toBeGreaterThan(1.5);
     expect(dry.bus.speed).toBeGreaterThan(wet.bus.speed * 2);
     expect(boosted.bus.speed).toBeGreaterThan(wet.bus.speed * 1.3);
+  });
+
+  it.each([popular, gusanito] as BusPreset[])('deep mud holds the bus to about 50 km/h, nitro pushes on, reset clears it ($name)', (preset) => {
+    const dry = setup(preset);
+    const mud = setup(preset);
+    for (const s of [dry, mud]) {
+      s.run(idle, 1);
+      s.run({ ...idle, throttle: 1 }, 4);
+    }
+    mud.bus.mud = 1;
+    dry.run({ ...idle, throttle: 1 }, 10);
+    mud.run({ ...idle, throttle: 1 }, 10);
+    const kmh = mud.bus.speed * 3.6;
+    expect(kmh).toBeGreaterThan(30);
+    expect(kmh).toBeLessThan(65);
+    expect(dry.bus.speed).toBeGreaterThan(mud.bus.speed * 1.2);
+    mud.run({ ...idle, throttle: 1, boost: true }, 1.5);
+    expect(mud.bus.speed * 3.6).toBeGreaterThan(kmh);
+    mud.bus.reset({ x: 0, y: 1, z: 0, heading: 0 });
+    expect(mud.bus.mud).toBe(0);
   });
 });

@@ -16,6 +16,8 @@ export interface RaceSetup {
   rivalBus: string;
   skill: 'easy' | 'normal' | 'hard';
   traffic: boolean;
+  /** Landslides on the tracks that have them. */
+  slides: boolean;
 }
 
 /** What the player picked last time, and their preferences. Saved in localStorage. */
@@ -47,7 +49,7 @@ export interface Settings {
   online: { name: string };
 }
 
-export const RACE_DEFAULTS: RaceSetup = { track: 'papallacta', rivals: 3, rivalBus: 'mixed', skill: 'normal', traffic: false };
+export const RACE_DEFAULTS: RaceSetup = { track: 'papallacta', rivals: 3, rivalBus: 'mixed', skill: 'normal', traffic: false, slides: true };
 export const ONLINE_DEFAULTS: Settings['online'] = { name: '' };
 
 export const DEFAULTS: Settings = { mode: 'route', bus: 'popular', zone: 'mariscal', route: 'circuito', camera: 'chase', volume: 0.8, hills: DEFAULT_HILLS, timeOfDay: 'day', musicVolume: 0.5, radio: 'sanjuanito', tutorial: true, rain: 'random', race: RACE_DEFAULTS, online: ONLINE_DEFAULTS };
@@ -124,6 +126,8 @@ function parseRace(v: unknown): RaceSetup {
     rivalBus: typeof r.rivalBus === 'string' && r.rivalBus ? r.rivalBus : d.rivalBus,
     skill: r.skill === 'easy' || r.skill === 'hard' || r.skill === 'normal' ? r.skill : d.skill,
     traffic: typeof r.traffic === 'boolean' ? r.traffic : d.traffic,
+    // Added later, no settings version bump: a save without it reads as the default.
+    slides: typeof r.slides === 'boolean' ? r.slides : d.slides,
   };
 }
 

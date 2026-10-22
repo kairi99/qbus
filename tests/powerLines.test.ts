@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { attachPoints, cableY, nearTower, towerFrames } from '../src/world/powerLines';
+import { attachPoints, cableY, GROUND_CLEAR, layLine, nearTower, ROAD_CLEAR, towerFrames } from '../src/world/powerLines';
+import { terrainAt } from '../src/world/cityData';
+import { locateOnTrack } from '../src/world/track';
 import { importPowerLines } from '../src/world/osm/track';
 import type { OsmJson } from '../src/world/osm/import';
 import type { CityData } from '../src/world/cityData';
@@ -64,5 +66,28 @@ describe('power lines', () => {
     expect(nearTower(sc.powerLines, sc.powerLines![0].towers[0], 1)).toBe(true);
     const pap: CityData = JSON.parse(readFileSync('data/cities/papallacta.json', 'utf8'));
     expect(pap.race!.scenery!.powerLines).toBeUndefined();
+  });
+
+  it('Silante cables hang well clear of the road and the ground (towers low in the valley stand on extensions)', () => {
+    const city: CityData = JSON.parse(readFileSync('data/cities/silante.json', 'utf8'));
+    const race = city.race!;
+    const ground = (p: { x: number; z: number }) => terrainAt(city, p);
+    let overRoad = 0;
+    for (const line of race.scenery!.powerLines!) {
+      const { cables, lifts } = layLine(race, line, ground);
+      // Extended, not absurd: the body is ~42 m.
+      expect(Math.max(...lifts)).toBeLessThanOrEqual(45);
+      for (const pts of cables)
+        for (const p of pts) {
+          expect(p.y - ground(p)).toBeGreaterThan(GROUND_CLEAR - 0.5);
+          const at = locateOnTrack(race, p);
+          if (Math.abs(at.off) < race.width / 2 + 3) {
+            overRoad++;
+            expect(p.y - at.y).toBeGreaterThan(ROAD_CLEAR - 0.5);
+          }
+        }
+    }
+    // The spans beside the road do come over it (the case that hung cables on the asphalt).
+    expect(overRoad).toBeGreaterThan(0);
   });
 });

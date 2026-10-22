@@ -96,6 +96,13 @@ describe('mix levels', () => {
     expect(db(LEVELS.river)).toBeLessThan(-8);
   });
 
+  it('a landslide is heard over the rain and river but under the thunder and the horn', () => {
+    expect(LEVELS.rockfall).toBeGreaterThan(LEVELS.river);
+    expect(LEVELS.rumble).toBeGreaterThan(LEVELS.river);
+    expect(LEVELS.rockfall).toBeLessThan(LEVELS.thunder);
+    expect(LEVELS.rockfall).toBeLessThan(LEVELS.horn.bus);
+  });
+
   it('the turbo only whistles under load, rising with the revs, far under the engine', () => {
     expect(turboWhistle(DIESEL.idleRpm, 1, DIESEL).gain).toBe(0);
     expect(turboWhistle(2000, 0, DIESEL).gain).toBe(0);

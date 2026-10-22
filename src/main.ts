@@ -109,7 +109,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
 
   // Free roam (?mode=free) has no route; a route shift is always driven in a bus. A race
   // (?mode=race on a track: `&rivals=1..3`, `&rivalBus=mixed|same|<vehicle id>`,
-  // `&skill=easy|normal|hard`, `&traffic=1`) has none either, and any vehicle.
+  // `&skill=easy|normal|hard`, `&traffic=1`, `&slides=0` for none on a track that has them) has none either, and any vehicle.
   // Online (?mode=online&room=K7Q2, from the menu's lobby): a race whose grid, vehicles and GO
   // come from the room; the page waits for everyone to have the track loaded.
   const online = params.get('mode') === 'online' && !!city.race;
@@ -156,9 +156,13 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const trackTraffic = city.race && params.get('traffic') === '1' ? TRACK_TRAFFIC : 0;
   const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone, start: grid?.[grid.length - 1], title: net ? 'Carrera en línea' : raceMode ? 'Carrera' : undefined, trackTraffic });
   const racing = raceMode
-    ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null, ground: (p) => groundHeightAt(city, p), seed: joined?.go.seed, online: net ? { keys: net.keys, goIn: () => net.goIn(), remotes: net.remotes } : null })
+    ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null, ground: (p) => groundHeightAt(city, p), seed: joined?.go.seed, slides: params.get('slides') === '0' ? false : undefined, online: net ? { keys: net.keys, goIn: () => net.goIn(), remotes: net.remotes } : null })
     : null;
-  if (racing) session.racers = racing.buses;
+  if (racing) {
+    session.racers = racing.buses;
+    session.hazards = racing.slideObstacles;
+    session.marks = racing.slideMarks;
+  }
   // Tire smoke (drifts, a spinning launch) and dust off the asphalt, everyone's in one draw.
   const smoke = new TireSmoke(scene, tod === 'night' ? 0.4 : tod === 'sunset' ? 0.75 : 1);
   if (racing) racing.smoke = smoke;
@@ -196,7 +200,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
 
   // How to play, every time a shift, free roam or a race starts (unless turned off, or ?tutorial=0).
   // A race's grid waits for it to close.
-  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system, racing ? { from: city.race!.from, to: city.race!.to, traffic: trackTraffic > 0 } : null);
+  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system, racing ? { from: city.race!.from, to: city.race!.to, traffic: trackTraffic > 0, slides: !!racing.slides } : null);
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
   // Online the countdown runs on the room's clock: no card to hold it.
   if (settings.tutorial && params.get('tutorial') !== '0' && !net) tutorial.show();
@@ -358,9 +362,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     while (acc >= PHYSICS_STEP) {
       steps++;
       if (racing) {
-        // Held on the brakes until GO (the nitro too), then the launch's effect on the input.
+        // Held on the brakes until GO and through an R reset's wait (the nitro too: the tank
+        // neither burns nor flames), then the launch's effect on the input.
         racing.step(PHYSICS_STEP);
-        bus.update(racing.playerInput(drive, racing.game.green && session.nitro.step(!!drive.boost, PHYSICS_STEP)), PHYSICS_STEP);
+        bus.update(racing.playerInput(drive, session.nitro.step(!!drive.boost && !racing.playerHeld, PHYSICS_STEP)), PHYSICS_STEP);
       } else bus.update({ ...drive, boost: session.nitro.step(!!drive.boost, PHYSICS_STEP) }, PHYSICS_STEP);
       if (net) {
         net.beforeStep(acc - PHYSICS_STEP, PHYSICS_STEP);
@@ -400,7 +405,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     model.setGhost(racing?.ghostFade ?? 1);
     if (!paused) {
       const spin = racing && racing.playerGrip < 1 ? drive.throttle : 0;
-      smoke.emit(bus, smokeOf(bus.slipAngle, bus.speed, spin), dustOf(offEdge, bus.speed), dt);
+      smoke.emit(bus, smokeOf(bus.slipAngle, bus.speed, spin), dustOf(offEdge, bus.speed), dt, bus.mud);
     }
     smoke.update(paused ? 0 : dt);
     const lookBack = input.lookBackHeld;
@@ -452,6 +457,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     rain.update(w, camera, paused ? 0 : dt, covered);
     audio.weather(paused ? 0 : w.rain * (covered ? 0.4 : 1), paused ? 0 : spray);
     audio.river(paused ? 0 : river);
+    if (racing?.slides) audio.slides(paused ? 0 : racing.slideSound.rumble, paused ? 0 : racing.slideSound.fall);
     const t = bus.position(scratchPos);
     // The street name changes slowly: look it up a few times a second, not every frame.
     streetClock += dt;

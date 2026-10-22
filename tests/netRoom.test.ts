@@ -17,7 +17,7 @@ import {
 import { EXPIRE_AFTER, FINISH_TIMEOUT, GO_DELAY, LOAD_TIMEOUT, LOBBY_GRACE, RACE_GRACE, RoomLogic, type Out, type RoomState } from '../server/src/room';
 
 const hello = (name = 'A', token?: string): Extract<C2S, { t: 'hello' }> => ({ t: 'hello', v: PROTO, name, vehicle: 'bus', ...(token ? { token } : {}) });
-const SET = { track: 'papallacta', ai: 3, skill: 'hard', rivalBus: 'same', rain: 'always', tod: 'night' } as const;
+const SET = { track: 'papallacta', ai: 3, skill: 'hard', rivalBus: 'same', rain: 'always', tod: 'night', slides: true } as const;
 const msgs = (out: Out[], t: string) => out.filter((o) => o.msg.t === t);
 const last = <T extends S2C['t']>(out: Out[], t: T) => msgs(out, t).at(-1)?.msg as Extract<S2C, { t: T }>;
 const humans = (...ids: number[]): GridEntry[] => ids.map((seat) => ({ kind: 'human', seat, vehicle: 'bus' }));
@@ -145,6 +145,14 @@ describe('lobby', () => {
     const { rain: _r, tod: _t, ...old } = SET;
     expect(last(r.handle(0, { t: 'set', settings: old as any }, 0), 'room').settings).toMatchObject({ rain: 'random', tod: 'day' });
     expect(r.handle(0, { t: 'set', settings: { ...SET, rain: 'hail' as any } }, 0)[0].msg).toEqual({ t: 'error', code: 'bad' });
+  });
+
+  it('set carries the landslides switch: on for an older client, junk rejected', () => {
+    const r = room(2);
+    expect(last(r.handle(0, { t: 'set', settings: { ...SET, slides: false } }, 0), 'room').settings.slides).toBe(false);
+    const { slides: _o, ...old } = SET;
+    expect(last(r.handle(0, { t: 'set', settings: old as any }, 0), 'room').settings.slides).toBe(true);
+    expect(r.handle(0, { t: 'set', settings: { ...SET, slides: 'si' as any } }, 0)[0].msg).toEqual({ t: 'error', code: 'bad' });
   });
   it('me updates vehicle and ready', () => {
     const r = room(2);

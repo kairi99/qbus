@@ -179,6 +179,8 @@ test('a race from the menu: the track, the rivals and what they drive, traffic, 
   await expect(page.locator('.mn-step-zone')).toBeHidden();
   await expect(page.locator('.mn-step-route')).toBeHidden();
   await expect(page.locator('[data-track="papallacta"]')).toContainText('Paso de la Muerte');
+  // Landslides are the Silante's: no such option on Papallacta.
+  await expect(page.locator('.mn-race-opts legend', { hasText: 'Derrumbes' })).toHaveCount(0);
   // Any vehicle can race.
   await page.locator('[data-bus="buseta"]').click();
   await page.locator('.mn-race-opts label', { hasText: /^2$/ }).click();
@@ -195,6 +197,8 @@ test('a race from the menu: the track, the rivals and what they drive, traffic, 
   await expect(page.locator('[data-track="silante"]')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('[data-track="papallacta"]')).toHaveAttribute('aria-checked', 'false');
   await expect(page.locator('.mn-summary')).toContainText('Bajada del Silante');
+  await expect(page.locator('.mn-race-opts legend', { hasText: 'Derrumbes' })).toHaveCount(1);
+  await expect(page.locator('.mn-race-opts input[name="slides"][value="on"]')).toBeChecked();
   await expect(page.locator('.mn-track-map')).toHaveAttribute('data-drawn', 'silante', { timeout: 60_000 });
   await page.screenshot({ path: `${shots}/69b-setup-race-silante.png`, fullPage: true });
   await page.getByRole('button', { name: '¡Arranca!' }).click();

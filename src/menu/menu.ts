@@ -7,6 +7,7 @@ import { type StarThresholds, starThresholds, starsFor } from '../gameplay/stars
 import { buildRoadGraph } from '../world/roadGraph';
 import { HILLS_OPTIONS, RAIN_OPTIONS, type RaceSetup, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
 import { bestRace } from '../gameplay/raceRecords';
+import { SLIDE_TRACKS } from '../gameplay/landslides';
 import { raceClock } from '../gameplay/raceGame';
 import { RADIO_OFF, STATIONS } from '../core/radioStations';
 import { type RouteRecords, loadRecords, routeKey } from '../gameplay/records';
@@ -32,7 +33,7 @@ export function playUrl(s: Selection): string {
   if (s.mode === 'free') return `?${new URLSearchParams({ play: '1', mode: 'free', city: s.zone, bus: s.bus })}`;
   if (s.mode === 'race' && s.race) {
     const r = s.race;
-    return `?${new URLSearchParams({ play: '1', mode: 'race', city: r.track, bus: s.bus, rivals: String(r.rivals), rivalBus: r.rivalBus, skill: r.skill, ...(r.traffic ? { traffic: '1' } : {}) })}`;
+    return `?${new URLSearchParams({ play: '1', mode: 'race', city: r.track, bus: s.bus, rivals: String(r.rivals), rivalBus: r.rivalBus, skill: r.skill, ...(r.traffic ? { traffic: '1' } : {}), ...(SLIDE_TRACKS.has(r.track) && !r.slides ? { slides: '0' } : {}) })}`;
   }
   return `?${new URLSearchParams({ play: '1', city: s.zone, bus: s.bus, route: s.route })}`;
 }
@@ -491,7 +492,7 @@ export class Menu {
           offs.forEach((f) => f());
           conn.onState = null;
           // The room's light and weather ride in the link, so every page starts the same race.
-          const sky = `&tod=${m.settings.tod ?? 'day'}&rain=${m.settings.rain ?? 'random'}`;
+          const sky = `&tod=${m.settings.tod ?? 'day'}&rain=${m.settings.rain ?? 'random'}&slides=${m.settings.slides === false ? 0 : 1}`;
           location.search = `?play=1&mode=online&city=${encodeURIComponent(m.settings.track)}&room=${code}${sky}`;
           return;
         }
@@ -523,6 +524,8 @@ export class Menu {
     const who = st.rivalBus === 'mixed' ? 'De todo un poco' : st.rivalBus === 'same' ? 'Lo mismo que los panas' : busById(st.rivalBus).name;
     const rain = RAIN_OPTIONS.find((o) => o.value === st.rain)?.label ?? RAIN_OPTIONS[0].label;
     const time = TIME_OPTIONS.find((o) => o.value === st.tod)?.label ?? TIME_OPTIONS[0].label;
+    // Only the tracks with landslides ask.
+    const slidesHere = SLIDE_TRACKS.has(st.track);
     let options: string;
     if (host) {
       const aiChoices = Array.from({ length: maxAi + 1 }, (_, n) => n);
@@ -536,7 +539,8 @@ export class Menu {
           ${VEHICLES.map((v) => choice('rivalBus', v.preset.id, v.preset.name, st.rivalBus === v.preset.id, `rb-${v.preset.id}`)).join('')}
         </fieldset>
         <fieldset><legend>Hora</legend>${TIME_OPTIONS.map((o) => choice('tod', o.value, o.label, st.tod === o.value, `tod-${o.value}`)).join('')}</fieldset>
-        <fieldset><legend>Lluvia</legend>${RAIN_OPTIONS.map((o) => choice('rain', o.value, o.label, st.rain === o.value, `rain-${o.value}`)).join('')}</fieldset>`;
+        <fieldset><legend>Lluvia</legend>${RAIN_OPTIONS.map((o) => choice('rain', o.value, o.label, st.rain === o.value, `rain-${o.value}`)).join('')}</fieldset>${slidesHere ? `
+        <fieldset><legend>Derrumbes</legend>${choice('slides', 'on', 'Sí', st.slides, 'slides-on')}${choice('slides', 'off', 'No', !st.slides, 'slides-off')}</fieldset>` : ''}`;
     } else {
       options = `<dl class="mn-sum">
         <div><dt>Pista</dt><dd>${esc(track)}</dd></div>
@@ -544,7 +548,7 @@ export class Menu {
         <div><dt>Choferes</dt><dd>${esc(skill)}</dd></div>
         <div><dt>Qué manejan</dt><dd>${esc(who)}</dd></div>
         <div><dt>Hora</dt><dd>${esc(time)}</dd></div>
-        <div><dt>Lluvia</dt><dd>${esc(rain)}</dd></div></dl>`;
+        <div><dt>Lluvia</dt><dd>${esc(rain)}</dd></div>${slidesHere ? `<div><dt>Derrumbes</dt><dd>${st.slides ? 'Sí' : 'No'}</dd></div>` : ''}</dl>`;
     }
     const others = room.seats.filter((x) => !x.host && x.online);
     const mine = room.seats.find((x) => x.id === me);
@@ -573,6 +577,7 @@ export class Menu {
         if (el.name === 'rivalBus') next.rivalBus = el.value;
         if (el.name === 'tod') next.tod = el.value as RoomSettings['tod'];
         if (el.name === 'rain') next.rain = el.value as RoomSettings['rain'];
+        if (el.name === 'slides') next.slides = el.value === 'on';
         conn.send({ t: 'set', settings: next });
       }),
     );
@@ -657,8 +662,7 @@ export class Menu {
       el.addEventListener('click', () => {
         r.track = el.dataset.track!;
         this.mark('[data-track]', el);
-        this.summary();
-        void this.drawTrack();
+        void this.showRace();
       }),
     );
     if (!['mixed', 'same'].includes(r.rivalBus) && !VEHICLES.some((v) => v.preset.id === r.rivalBus)) r.rivalBus = 'mixed';
@@ -682,13 +686,19 @@ export class Menu {
         <legend>Tráfico en la vía</legend>
         ${choice('traffic', 'off', 'Vía libre', !r.traffic)}
         ${choice('traffic', 'on', 'Con carros y camiones', r.traffic)}
-      </fieldset>`;
+      </fieldset>
+      ${SLIDE_TRACKS.has(r.track) ? `<fieldset class="mn-slides">
+        <legend>Derrumbes</legend>
+        ${choice('slides', 'on', 'Sí', r.slides)}
+        ${choice('slides', 'off', 'No', !r.slides)}
+      </fieldset>` : ''}`;
     opts.querySelectorAll<HTMLInputElement>('input[type="radio"]').forEach((el) =>
       el.addEventListener('change', () => {
         if (el.name === 'rivals') r.rivals = Number(el.value);
         if (el.name === 'rivalBus') r.rivalBus = el.value;
         if (el.name === 'skill') r.skill = el.value as RaceSetup['skill'];
         if (el.name === 'traffic') r.traffic = el.value === 'on';
+        if (el.name === 'slides') r.slides = el.value === 'on';
         this.summary();
       }),
     );
@@ -737,7 +747,7 @@ export class Menu {
       const r = this.settings.race;
       const track = TRACK_LIST.find((t) => t.id === r.track)?.name ?? '';
       const who = r.rivalBus === 'mixed' ? 'de todo un poco' : r.rivalBus === 'same' ? 'lo mismo que usted' : (VEHICLES.find((v) => v.preset.id === r.rivalBus)?.preset.name ?? '');
-      el.textContent = `${bus}, ${track}, ${r.rivals} ${r.rivals === 1 ? 'rival' : 'rivales'} (${who})${r.traffic ? ', con tráfico' : ''}`;
+      el.textContent = `${bus}, ${track}, ${r.rivals} ${r.rivals === 1 ? 'rival' : 'rivales'} (${who})${r.traffic ? ', con tráfico' : ''}${SLIDE_TRACKS.has(r.track) && !r.slides ? ', sin derrumbes' : ''}`;
       return;
     }
     const route =

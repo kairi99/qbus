@@ -65,7 +65,7 @@ describe('settings', () => {
 
   it('keeps the race setup, and its defaults for saves from before it or garbage', () => {
     const store = memory();
-    const race = { track: 'papallacta', rivals: 2, rivalBus: 'same', skill: 'hard' as const, traffic: true };
+    const race = { track: 'papallacta', rivals: 2, rivalBus: 'same', skill: 'hard' as const, traffic: true, slides: false };
     saveSettings({ ...DEFAULTS, mode: 'race', race }, store);
     expect(loadSettings(store).mode).toBe('race');
     expect(loadSettings(store).race).toEqual(race);
@@ -73,6 +73,9 @@ describe('settings', () => {
     expect(loadSettings(memory({ qbus: JSON.stringify({ ...old, v: 2 }) })).race).toEqual(DEFAULTS.race);
     const bad = loadSettings(memory({ qbus: JSON.stringify({ ...DEFAULTS, race: { rivals: 9, skill: 'god', traffic: 'yes', rivalBus: 3 } }) })).race;
     expect(bad).toEqual(DEFAULTS.race);
+    // A race setup saved before landslides existed: they are on.
+    const { slides: _s, ...oldRace } = race;
+    expect(loadSettings(memory({ qbus: JSON.stringify({ ...DEFAULTS, v: 3, race: oldRace }) })).race).toEqual({ ...oldRace, slides: true });
   });
 
   it('ignores garbage and out-of-range values', () => {

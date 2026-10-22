@@ -175,9 +175,12 @@ describe('the field', () => {
   });
 
   it('the menu link carries the race setup', () => {
-    const url = new URLSearchParams(playUrl({ mode: 'race', bus: 'buseta', zone: 'mariscal', route: 'circuito', race: { track: 'papallacta', rivals: 2, rivalBus: 'same', skill: 'hard', traffic: true } }));
+    const url = new URLSearchParams(playUrl({ mode: 'race', bus: 'buseta', zone: 'mariscal', route: 'circuito', race: { track: 'papallacta', rivals: 2, rivalBus: 'same', skill: 'hard', traffic: true, slides: true } }));
     expect(Object.fromEntries(url)).toEqual({ play: '1', mode: 'race', city: 'papallacta', bus: 'buseta', rivals: '2', rivalBus: 'same', skill: 'hard', traffic: '1' });
-    expect(new URLSearchParams(playUrl({ mode: 'race', bus: 'popular', zone: 'mariscal', route: 'circuito', race: { track: 'papallacta', rivals: 1, rivalBus: 'mixed', skill: 'normal', traffic: false } })).has('traffic')).toBe(false);
+    expect(new URLSearchParams(playUrl({ mode: 'race', bus: 'popular', zone: 'mariscal', route: 'circuito', race: { track: 'papallacta', rivals: 1, rivalBus: 'mixed', skill: 'normal', traffic: false, slides: true } })).has('traffic')).toBe(false);
+    const silante = (slides: boolean) => new URLSearchParams(playUrl({ mode: 'race', bus: 'popular', zone: 'mariscal', route: 'circuito', race: { track: 'silante', rivals: 1, rivalBus: 'mixed', skill: 'normal', traffic: false, slides } }));
+    expect(silante(false).get('slides')).toBe('0');
+    expect(silante(true).has('slides')).toBe(false);
   });
 });
 

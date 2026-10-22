@@ -4,7 +4,9 @@
  * With `traffic` (cars per racer, the race's own number by default when given as "traffic"), the
  * track's traffic drives too (around the AI bus) and the driver picks its lane with `chooseLane`:
  * prints how many cars it hit and how long it followed.
- * Usage: npx tsx tools/sim-race.ts [zone=papallacta] [bus=popular] [skill=normal] [traffic]
+ * Usage: npx tsx tools/sim-race.ts [zone=papallacta] [bus=popular] [skill=normal] [traffic] [slides]
+ * With `slides` the track's landslides fall (SEED= picks them, default 1): the AI takes the open lane,
+ * slows through the mud (which grips and drags like in a race); prints the rescues.
  */
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
@@ -21,8 +23,13 @@ import { gripFor } from '../src/gameplay/weather';
 import { TrafficSim } from '../src/gameplay/traffic';
 import { TrafficBodies, laneSurface } from '../src/gameplay/trafficBodies';
 import { TRACK_TRAFFIC } from '../src/gameplay/raceField';
+import { SLIDE_BRAKE, type SlideAdvice, mudAt, mudGrip, slideAdvice, slideField } from '../src/gameplay/landslides';
+import { LandslideView } from '../src/world/landslideView';
+import { groundHeightAt } from '../src/world/cityData';
 
-const [zone = 'papallacta', busId = 'popular', skillId = 'normal', trafficArg] = process.argv.slice(2);
+const [zone = 'papallacta', busId = 'popular', skillId = 'normal', ...flags] = process.argv.slice(2);
+const slidesOn = flags.includes('slides');
+const trafficArg = flags.find((f) => f !== 'slides');
 const city: CityData = JSON.parse(readFileSync(`data/cities/${zone}.json`, 'utf8'));
 const race = city.race!;
 await initRapier();
@@ -31,6 +38,9 @@ const graph = buildRoadGraph(city);
 buildCity(city, world, new THREE.Scene(), graph);
 const preset = busById(busId);
 const start = trackStartPose(race, 12);
+const field = slidesOn ? slideField(race, Number(process.env.SEED ?? 1), (p) => groundHeightAt(city, p)) : null;
+const view = field ? new LandslideView(new THREE.Scene(), world, race, field, null, (p) => groundHeightAt(city, p)) : null;
+const advice: SlideAdvice = { lane: NaN, s0: Infinity, limit: Infinity, landed: false, ramp: 0 };
 const bus = new BusPhysics(world, preset, { x: start.pos.x, y: start.y, z: start.pos.z, heading: start.heading, pitch: start.pitch });
 const carCount = trafficArg === undefined ? 0 : Number(trafficArg) || TRACK_TRAFFIC;
 // As the session sets it up (gameplay/session.ts): one edge each way, kept off the grid.
@@ -63,11 +73,28 @@ let hits = 0;
 let following = 0;
 let recycle = 0;
 let rescues = 0;
+let mudTime = 0;
 const p = { x: 0, y: 0, z: 0 };
 const cars: TrafficCar[] = [];
 const home = driver.lane;
 while (t < 900) {
   let limit = Infinity;
+  if (field) {
+    const here = locateOnTrack(race, bus.nose(p), driver.s, 60);
+    const mud = mudAt(field, t, here.s - preset.body.length * 0.4, here.off, wet, race.width / 2);
+    bus.mud = mud;
+    bus.grip = gripFor(wet) * mudGrip(mud, wet);
+    driver.wet = Math.max(wet, mud);
+    mudTime += mud > 0.3 ? PHYSICS_STEP : 0;
+    view!.step(t);
+    const l = vehicleLimits(preset);
+    slideAdvice(field.sites, t, here.s, preset.body.length, l.brake * skill.brake * SLIDE_BRAKE, advice);
+    if (!sim) {
+      const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], [], home, skill.passClear, advice);
+      driver.lane = way.lane;
+      limit = way.limit;
+    }
+  }
   if (sim) {
     cars.length = 0;
     for (const c of sim.cars) {
@@ -77,7 +104,7 @@ while (t < 900) {
       cars.push({ s, off: dir * Math.abs(c.offset), v: c.speed, dir, len: c.kind.length });
     }
     const here = locateOnTrack(race, bus.nose(p), driver.s, 60);
-    const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], cars, home, skill.passClear);
+    const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], cars, home, skill.passClear, field ? advice : null);
     driver.lane = way.lane;
     limit = way.limit;
     if (limit < Infinity) following += PHYSICS_STEP;
@@ -106,6 +133,7 @@ while (t < 900) {
       }
   }
   t += PHYSICS_STEP;
+  if (process.env.TRACE && t > Number(process.env.TRACE) && t < Number(process.env.TRACE) + 12 && Math.floor(t * 60) % 30 === 0) console.log(`t ${t.toFixed(1)} s ${driver.s.toFixed(0)} v ${bus.speed.toFixed(1)} lane ${driver.lane} limit ${limit.toFixed(1)} advice s0 ${advice.s0.toFixed(0)} lim ${advice.limit.toFixed(1)} off ${locateOnTrack(race, bus.position(p), driver.s, 60).off.toFixed(2)} mud ${bus.mud}`);
   // As the race does: wedged for good, back on the road where it was.
   if (driver.needsRescue) {
     console.log(`rescue at ${driver.s.toFixed(0)} m, ${t.toFixed(1)} s`);
@@ -131,6 +159,6 @@ while (t < 900) {
 }
 const raced = race.finish - race.start;
 console.log(
-  `${busId}/${skillId}${sim ? ` with ${carCount} cars` : ''}: ${driver.s >= race.finish ? 'finished' : 'did not finish'} in ${t.toFixed(1)} s (${((raced / t) * 3.6).toFixed(0)} km/h avg), off the asphalt ${off.toFixed(1)} s, ${rescues} rescues, worst ${worstDrop.toFixed(1)} m below the road` +
+  `${busId}/${skillId}${field ? ' with slides' : ''}${sim ? ` with ${carCount} cars` : ''}: ${driver.s >= race.finish ? 'finished' : 'did not finish'} in ${t.toFixed(1)} s (${((raced / t) * 3.6).toFixed(0)} km/h avg), off the asphalt ${off.toFixed(1)} s, ${rescues} rescues${field ? `, ${mudTime.toFixed(1)} s in deep mud` : ''}, worst ${worstDrop.toFixed(1)} m below the road` +
     (sim ? `, hit ${hits} cars, followed one for ${following.toFixed(0)} s` : ''),
 );

@@ -27,6 +27,10 @@ test('two players race online: shared start, each sees the other, results from t
   await b.page.getByRole('button', { name: 'Unirse' }).click();
   await expect(a.page.locator('.mn-seat[data-seat]')).toHaveCount(2);
   await a.page.locator('input[name="ai"][value="0"]').check();
+  // The Silante has landslides, on by default: the lobby asks (guests see the answer) and the link carries it.
+  await a.page.locator('input[name="track"][value="silante"]').check();
+  await expect(a.page.locator('input[name="slides"][value="on"]')).toBeChecked();
+  await expect(b.page.locator('.mn-sum')).toContainText('Derrumbes');
   // The host picks the light and the rain: the same for everyone, whatever each one's own Ajustes say.
   await a.page.locator('input[name="tod"][value="sunset"]').check();
   await a.page.locator('input[name="rain"][value="always"]').check();
@@ -46,6 +50,13 @@ test('two players race online: shared start, each sees the other, results from t
   const goA = (await q(a.page, 'q.online.goIn()')) as number;
   const goB = (await q(b.page, 'q.online.goIn()')) as number;
   expect(Math.abs(goA - goB)).toBeLessThan(3);
+  // The landslides come from the room's seed and the race clock: both pages have the same sites, the same trigger times, and the same phases about now.
+  const slidesOf = (p: Page) => q(p, 'JSON.stringify(q.racing.slideState())') as Promise<string>;
+  const [sa, sb] = (await Promise.all([slidesOf(a.page), slidesOf(b.page)])).map((j) => JSON.parse(j) as { phase: string; s: number; side: number; trigger: number }[]);
+  expect(sa.length).toBeGreaterThan(0);
+  expect(sb.map(({ s, side, trigger }) => ({ s, side, trigger }))).toEqual(sa.map(({ s, side, trigger }) => ({ s, side, trigger })));
+  const phases = (x: typeof sa) => x.map((v) => v.phase);
+  expect(phases(sb)).toEqual(phases(sa));
   await expect(b.page.locator('.rh-place')).toContainText('/ 2');
   for (const p of [a.page, b.page]) {
     expect(await q(p, 'q.timeOfDay')).toBe('sunset');

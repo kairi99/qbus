@@ -7,6 +7,9 @@ const MAX_PUFFS = 220;
 const RATE = 36;
 const SMOKE = new THREE.Color('#e4e2de');
 const DUST = new THREE.Color('#a08a6a');
+const MUD = new THREE.Color('#5a4330');
+/** Earth thrown up by a landslide: a little redder than the road's dust. */
+const EARTH = new THREE.Color('#8f7757');
 
 /**
  * How hard the tires smoke (0..1): sliding past 10° (a drift, a spin), or spinning on the spot
@@ -92,8 +95,33 @@ export class TireSmoke {
     scene.add(this.mesh);
   }
 
-  /** This frame's smoke and dust (0..1 each) off `bus`'s driven wheels. */
-  emit(bus: BusPhysics, smoke: number, dust: number, dt: number): void {
+  /** One puff of earth dust at a point, with its own velocity, growth (m of radius), life (s) and thickness (0..1): landslides. */
+  kick(x: number, y: number, z: number, vx: number, vy: number, vz: number, grow: number, life: number, thick: number): void {
+    const i = this.next;
+    this.next = (this.next + 1) % MAX_PUFFS;
+    this.pos[i * 3] = x;
+    this.pos[i * 3 + 1] = y;
+    this.pos[i * 3 + 2] = z;
+    this.vel[i * 3] = vx;
+    this.vel[i * 3 + 1] = vy;
+    this.vel[i * 3 + 2] = vz;
+    this.age[i] = 0;
+    this.life[i] = life;
+    this.grow[i] = grow;
+    this.thick[i] = thick;
+    const c = this.c.copy(EARTH).multiplyScalar(this.light);
+    this.tint.setXYZ(i, c.r, c.g, c.b);
+    this.alive = MAX_PUFFS;
+  }
+
+  /**
+   * This frame's smoke and dust (0..1 each) off `bus`'s driven wheels; `mud` (0..1: how deep in
+   * it the wheels are) flings brown spatter instead, the faster the more.
+   */
+  emit(bus: BusPhysics, smoke: number, dust: number, dt: number, mud = 0): void {
+    const flung = mud > 0.1 ? Math.min(1, mud * Math.abs(bus.speed) / 10) : 0;
+    const muddy = flung > dust && flung > smoke;
+    if (muddy) dust = flung;
     const k = Math.max(smoke, dust);
     if (k <= 0.02) return;
     let owed = (this.owed.get(bus) ?? 0) + RATE * k * dt;
@@ -105,7 +133,7 @@ export class TireSmoke {
     const fz = -Math.sin(h);
     const v = bus.body.linvel();
     const y = bus.roadHeight() + 0.35;
-    const color = this.c.copy(dust > smoke ? DUST : SMOKE).multiplyScalar(this.light);
+    const color = this.c.copy(muddy ? MUD : dust > smoke ? DUST : SMOKE).multiplyScalar(this.light);
     for (let side = 0; owed >= 1; owed--, side ^= 1) {
       const across = side ? w.track : -w.track;
       const i = this.next;
