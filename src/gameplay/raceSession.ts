@@ -19,6 +19,8 @@ import { FALL_BACK, FallWatch } from './fallWatch';
 import { GHOST_TIME, Ghost } from './ghost';
 import { LAUNCH_EFFECT, type LaunchGrade, LaunchRev, aiGrade } from './launch';
 import { PlaceCaller, RaceGame } from './raceGame';
+import { SpectatorCycle, type Watchable } from './spectator';
+import type { CameraTarget } from '../camera/cameraRig';
 import { bestOnline, recordOnline, settleOnlinePlace } from './onlineRecords';
 import { bestRace, recordRace } from './raceRecords';
 import { CREWS, MAX_RIVALS, RESET_WAIT } from './raceField';
@@ -58,6 +60,10 @@ const RELOCATE_GAP = 2;
 const RELOCATE_LANE = 3.2;
 /** A rival this close (s) to the player's time at the line makes it a photo finish. */
 const PHOTO_GAP = 1;
+/** A racer who crossed the line stays watchable this long (s): its own finish is seen before the camera moves on. */
+const WATCH_HOLD = 2.5;
+/** The live results beside the spectator view refresh this often (s). */
+const LIVE_EVERY = 0.5;
 
 interface Rival {
   preset: BusPreset;
@@ -209,6 +215,18 @@ export class RaceSession {
   /** Where the trackside camera stands at the finish, and time left on it (s). */
   private finishSpot: { x: number; y: number; z: number };
   private finishIn = 0;
+  /** Past the finish camera with others still on the road: the camera follows them (see `spectating`). */
+  private watching = false;
+  private spectator = new SpectatorCycle();
+  /** Seconds since each racer crossed the line (0 while it is racing). */
+  private doneFor: number[];
+  private watchList: Watchable[] = [];
+  private watchOut = { name: '', place: 0, gap: null as number | null, vehicle: '' };
+  private liveIn = 0;
+  /** The full results card is up (over the live panel). */
+  private cardOpen = false;
+  /** The player's bus is out of the picture (a ghost parked past the line, hidden once the finish camera is done). */
+  playerHidden = false;
   private results: RaceResults | null = null;
   private remotes: Remote[] = [];
   /** Online: the other racers' name tags; placed for `camera` each frame. */
@@ -274,6 +292,8 @@ export class RaceSession {
     const total = 1 + others.length;
     this.game = new RaceGame(['Tú', ...this.rivals.map((r) => r.preset.name), ...this.remotes.map((r) => r.name)], track.finish - track.start, { estimate: !this.online });
     this.progress = new Array(total).fill(0);
+    this.doneFor = new Array(total).fill(0);
+    this.watchList = Array.from({ length: total - 1 }, (_, i) => ({ racer: i + 1, place: 0, racing: false }));
     this.users = Array.from({ length: total }, (_, k) => ({ s: 0, off: 0, v: 0, len: k ? others[k - 1].body.length : player.preset.body.length }));
     this.slips = Array.from({ length: 1 + this.rivals.length }, () => new Slipstream());
     this.draftTarget = this.slips.map(() => 0);
@@ -314,11 +334,13 @@ export class RaceSession {
 
   /** The player's bus is held still: before GO, or waiting out an R reset (no throttle, no nitro). */
   get playerHeld(): boolean {
-    return !this.game.green || this.wait > 0;
+    return !this.game.green || this.wait > 0 || this.game.phase === 'over';
   }
 
   /** What the player's bus gets this step: held still until GO (and after an R reset), then the launch's effect on its input. */
   playerInput(drive: { throttle: number; steer: number; handbrake: boolean; boost?: boolean }, nitroBoost: boolean): DriveInput {
+    // Over the line: brakes, then parked (the camera moves on to the others).
+    if (this.game.phase === 'over') return Math.abs(this.player.bus.speed) > 2 ? { throttle: -1, steer: 0, handbrake: false, boost: false } : { throttle: 0, steer: 0, handbrake: false, boost: false, parked: true };
     if (this.playerHeld) return { throttle: 0, steer: drive.steer, handbrake: false, boost: false, parked: true };
     const e = this.grade && this.effect > 0 ? LAUNCH_EFFECT[this.grade] : null;
     return { throttle: drive.throttle * (e?.throttle ?? 1), steer: drive.steer, handbrake: drive.handbrake, boost: nitroBoost || (!!e && e.boost > 0) };
@@ -383,7 +405,13 @@ export class RaceSession {
    * Each frame: runs a racer's ghost, applying it to its physics and model. Past its time it stays
    * a ghost while it overlaps another vehicle; past the cap it is moved to a free spot (`k`: its place in `users`).
    */
-  private tickGhost(k: number, g: Ghost, bus: BusPhysics, model: BusModel | null, dt: number): void {
+  private tickGhost(k: number, g: Ghost, bus: BusPhysics, model: BusModel | null, dt: number, done = false): void {
+    // Over the line: a ghost for good (the others pass through it).
+    if (done) {
+      if (!bus.ghost) bus.setGhost(true);
+      model?.setGhost(REMOTE_GHOST_OPACITY);
+      return;
+    }
     if (!g.active) {
       if (bus.ghost) bus.setGhost(false);
       model?.setGhost(1);
@@ -622,14 +650,14 @@ export class RaceSession {
         this.noseS[i + 1] = -1;
         this.becomeGhost(r.ghost, r.bus, RESET_WAIT + GHOST_TIME);
       }
-      this.tickGhost(i + 1, r.ghost, r.bus, r.model, dt);
+      this.tickGhost(i + 1, r.ghost, r.bus, r.model, dt, r.driver.finished);
       r.model.sync(r.bus);
       if (this.smoke && !r.fall.falling) {
         const spin = r.grade === 'spin' && r.effect > 0 ? r.throttle : 0;
         this.smoke.emit(r.bus, smokeOf(r.bus.slipAngle, r.bus.speed, spin), dustOf(Math.abs(s.off) - t.width / 2, r.bus.speed), dt, r.mud);
       }
     });
-    this.tickGhost(0, this.ghost, this.player.bus, null, dt);
+    this.tickGhost(0, this.ghost, this.player.bus, null, dt, g.racers[0].time !== null);
     this.syncRemotes(dt);
     // Slipstream: who sits close behind whom (remotes pull us too; their own clients pull them).
     for (let k = 0; k < this.slips.length; k++) this.draftTarget[k] = g.phase === 'racing' ? draftOf(this.users[k], this.users) : 0;
@@ -639,11 +667,9 @@ export class RaceSession {
     if (g.phase === 'racing') this.callPlace(dt);
     if (this.finishIn > 0) {
       this.finishIn -= dt;
-      if (this.finishIn <= 0) {
-        this.hud.photo(null);
-        this.hud.showResults(this.results);
-      }
+      if (this.finishIn <= 0) this.afterFinishCam();
     }
+    this.watchFrame(dt);
     for (const e of g.update(dt, this.progress, begun, this.online?.goIn())) {
       if (e.type === 'count') {
         this.hud.count(String(e.n));
@@ -651,6 +677,8 @@ export class RaceSession {
       }
       if (e.type === 'go') this.go();
       if (e.type === 'over') this.finish();
+      // Another racer's real time: the results and the live panel follow.
+      if (e.type === 'finish' && e.racer > 0) this.refreshResults();
       // Online: the player's time and the local AI's go to the server (a remote's own client reports it).
       if (e.type === 'finish' && this.online && e.racer <= this.rivals.length) this.finishes.push({ key: this.online.keys[e.racer], time: e.time });
     }
@@ -658,7 +686,7 @@ export class RaceSession {
       rpm: g.green ? null : this.launch.shown,
       place: g.placeOf(0) || this.progress.length,
       racers: this.progress.length,
-      time: g.time,
+      time: g.racers[0].time ?? g.time,
       progress: this.progress,
       length: g.length,
       wait: g.phase === 'racing' ? this.wait : 0,
@@ -715,6 +743,8 @@ export class RaceSession {
       v.speedFrac = quiet ? 0 : Math.abs(m.remote.speed) / (m.preset.topSpeedKmh / 3.6);
       v.load = quiet ? 0 : engineLoad(m.remote.throttle, m.remote.speed, bus.boosting);
       v.horn = m.hornHold.step(!quiet && m.remote.horn, dt);
+      // Over the line it's a ghost here too, whatever its snapshots say.
+      if (this.game.racers[k].time !== null) m.remote.forceGhost = true;
       m.model.setGhost(m.remote.ghost ? REMOTE_GHOST_OPACITY : 1);
       m.model.sync(bus, m.remote.wheels);
     });
@@ -744,7 +774,7 @@ export class RaceSession {
       this.hud.hideDot(k);
       return;
     }
-    m.remote.forceGhost = life === 'ghost';
+    m.remote.forceGhost = life === 'ghost' || this.game.racers[k].time !== null;
     this.tags?.setNote(m.remote.bus, life === 'ghost');
   }
 
@@ -769,8 +799,9 @@ export class RaceSession {
     this.offline = true;
     this.final = true;
     if (this.results) {
+      this.stopWatching();
       this.results = this.resultsCard();
-      if (this.finishIn <= 0) this.hud.showResults(this.results);
+      if (this.finishIn <= 0) this.openResults();
     }
   }
 
@@ -790,10 +821,7 @@ export class RaceSession {
     }
     if (final && !this.final && this.online && this.myTime !== null) settleOnlinePlace(this.zone, this.myTime, g.placeOf(0));
     this.final ||= final;
-    if (!this.results) return;
-    this.results = this.resultsCard();
-    // Shown already (past the finish camera): refresh it.
-    if (this.finishIn <= 0) this.hud.showResults(this.results);
+    this.refreshResults();
   }
 
   private resultsCard(): RaceResults {
@@ -865,9 +893,133 @@ export class RaceSession {
     this.results.newBest = newBest;
     // The trackside camera first; the results card after it. A rival at the line within a second: a photo finish.
     this.finishIn = FINISH_CAM;
-    const gap = Math.min(...g.racers.slice(1).map((r) => Math.abs((r.time ?? Infinity) - mine)));
+    // Within a second of a rival at the line: one already over it, or one on its way (from its distance and speed).
+    const gap = Math.min(...g.racers.slice(1).map((r, i) => Math.abs((r.time ?? mine + (g.length - this.progress[i + 1]) / Math.max(this.users[i + 1].v, 5)) - mine)));
+    // The player's bus is a ghost from here on, parked past the line.
+    this.ghost.reset();
+    this.player.bus.setGhost(true);
     this.hud.photo(gap < PHOTO_GAP ? `¡FOTO FINISH! ${g.placeOf(0) === 1 ? '+' : '−'}${gap.toFixed(2)} s` : '');
     this.audio.cue('shutter');
+  }
+
+  /** The finish camera is done: the player's bus leaves the picture, and the camera follows the others, or the full results come up. */
+  private afterFinishCam(): void {
+    this.hud.photo(null);
+    this.playerHidden = true;
+    this.listWatchable();
+    if (this.watchList.some((w) => w.racing)) {
+      this.watching = true;
+      this.liveIn = 0;
+    } else this.openResults();
+  }
+
+  /** Who may be watched: the others still on the road (just over the line, a moment longer), not a bus that left. */
+  private listWatchable(): void {
+    const g = this.game;
+    const mine = this.rivals.length;
+    for (const w of this.watchList) {
+      const k = w.racer;
+      const gone = k > mine && this.remotes[k - 1 - mine].life === 'gone';
+      w.place = g.placeOf(k);
+      w.racing = !gone && this.doneFor[k] < WATCH_HOLD;
+    }
+  }
+
+  private watchFrame(dt: number): void {
+    const g = this.game;
+    for (let k = 0; k < this.doneFor.length; k++) this.doneFor[k] = g.racers[k].time !== null ? this.doneFor[k] + dt : 0;
+    if (!this.watching) return;
+    this.listWatchable();
+    this.spectator.update(this.watchList);
+    // Nobody left to watch (or the room closed the results: whoever is still a ghost on the road is out): the whole result.
+    if (this.spectator.target === null || this.final) {
+      this.stopWatching();
+      this.openResults();
+      return;
+    }
+    this.hud.watch(this.watchInfo);
+    if (!this.cardOpen && (this.liveIn -= dt) <= 0 && this.results) {
+      this.liveIn = LIVE_EVERY;
+      this.hud.live(this.resultsCard());
+    }
+  }
+
+  private stopWatching(): void {
+    this.watching = false;
+    this.spectator.reset();
+    this.hud.watch(null);
+    this.hud.live(null);
+  }
+
+  /** The racer the camera follows (its index in the race, 0 = the player, never while spectating); null when not watching. */
+  get spectating(): number | null {
+    return this.watching ? this.spectator.target : null;
+  }
+
+  /** What the camera follows while spectating. */
+  spectateTarget(): CameraTarget | null {
+    const k = this.spectating;
+    if (k === null) return null;
+    return k <= this.rivals.length ? this.rivals[k - 1].bus : this.remotes[k - 1 - this.rivals.length].remote.view;
+  }
+
+  /** ◀ ▶: the next racer still out (by place). */
+  spectateStep(dir: 1 | -1): void {
+    if (this.watching) this.spectator.step(dir);
+  }
+
+  /** The strip's text: who, their place and the gap (s) to the one ahead (null: leading). */
+  get watchInfo(): { name: string; place: number; gap: number | null; vehicle: string } | null {
+    const k = this.spectating;
+    if (k === null) return null;
+    const g = this.game;
+    const place = g.placeOf(k);
+    const o = this.watchOut;
+    o.name = g.racers[k].name;
+    o.place = place;
+    o.vehicle = k <= this.rivals.length ? this.rivals[k - 1].base.name : this.remotes[k - 1 - this.rivals.length].vehicle;
+    const ahead = place > 1 ? g.racerAt(place - 1) : -1;
+    o.gap = ahead < 0 ? null : Math.max(0, Math.min(this.progress[ahead], g.length) - this.progress[k]) / Math.max(this.users[k].v, 8);
+    return o;
+  }
+
+  /** The full results card (over the live panel); Esc / "Ver resultados". */
+  openResults(): void {
+    if (!this.results) return;
+    this.cardOpen = true;
+    this.hud.live(null);
+    this.hud.showResults(this.results, this.watching);
+  }
+
+  /** "Seguir viendo": the card goes, the live panel and the view stay. */
+  closeResults(): void {
+    if (!this.watching) return;
+    this.cardOpen = false;
+    this.hud.closeResults();
+    this.liveIn = 0;
+  }
+
+  /** The full card is up. */
+  get resultsOpen(): boolean {
+    return this.cardOpen;
+  }
+
+  /** "Terminar ya" (solo): everyone still on the road gets the time its pace says, and the full results come up. */
+  endNow(): void {
+    if (!this.results) return;
+    this.game.estimateRest();
+    this.stopWatching();
+    this.results = this.resultsCard();
+    this.openResults();
+  }
+
+  /** A racer's time came in: the card and the live panel are rebuilt. */
+  private refreshResults(): void {
+    if (!this.results) return;
+    this.results = this.resultsCard();
+    if (this.cardOpen) this.hud.showResults(this.results, this.watching);
+    else if (this.watching) this.liveIn = 0;
+    else if (this.finishIn <= 0) this.openResults();
   }
 
   /** Everyone back on the grid for another go. */
@@ -875,6 +1027,7 @@ export class RaceSession {
     for (const r of this.rivals) {
       r.bus.reset({ x: r.slot.pos.x, y: r.slot.y, z: r.slot.pos.z, heading: r.slot.heading, pitch: r.slot.pitch });
       r.driver.rescued();
+      r.driver.newRace();
       r.tires.reset();
       r.nitro.reset();
       r.fall.reset();
@@ -899,6 +1052,13 @@ export class RaceSession {
     this.noseS.fill(-1);
     this.finishIn = 0;
     this.results = null;
+    this.watching = false;
+    this.cardOpen = false;
+    this.spectator.reset();
+    this.doneFor.fill(0);
+    this.playerHidden = false;
+    this.hud.watch(null);
+    this.hud.live(null);
     this.hud.photo(null);
     this.smoke?.clear();
     this.slideView?.reset();

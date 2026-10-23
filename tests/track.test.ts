@@ -218,6 +218,28 @@ describe.each(ZONES)('$name', (zone) => {
       expect(deepest).toBeLessThan(0.5);
     });
 
+    it.each(['popular', 'articulado', 'trailer'])('a finished AI rival (%s) stops past the line and turns ghost', (id) => {
+      // Starts 200 m short of the line, so it reaches the finish at speed.
+      const start = trackPose(race, race.finish - 200, 0);
+      const bus = new BusPhysics(world, busById(id), { x: start.pos.x, y: start.y, z: start.pos.z, heading: start.heading, pitch: start.pitch });
+      const driver = new RaceDriver(race, SKILLS.hard, vehicleLimits(busById(id)));
+      let crossed = -1;
+      let t = 0;
+      for (; t < 90; t += PHYSICS_STEP) {
+        bus.update(driver.drive(bus, PHYSICS_STEP), PHYSICS_STEP);
+        world.step();
+        // As the session does: a finisher is a ghost.
+        if (driver.finished && !bus.ghost) bus.setGhost(true);
+        if (crossed < 0 && driver.finished) crossed = t;
+        if (crossed >= 0 && t > crossed + 15) break;
+      }
+      expect(crossed).toBeGreaterThan(0);
+      expect(Math.abs(bus.speed)).toBeLessThan(0.5);
+      expect(driver.s - race.finish).toBeLessThan(150);
+      expect(bus.ghost).toBe(true);
+      for (const b of bus.bodies) world.removeRigidBody(b);
+    });
+
     it.each([
       ['two', ['interparroquial', 'popular'], 4],
       ['six (all the vehicles)', ['interparroquial', 'buseta', 'popular', 'articulado', 'gusanito', 'ae86'], 8],

@@ -112,6 +112,17 @@ export class RaceDriver {
     this.wetProfile = speedProfile(track, skill.corner * limits.wetCorner, skill.brake * limits.wetBrake, this.boostTop);
   }
 
+  /** Its front axle has been over the finish line: it brakes to a stop (stays set through a rescue). */
+  get finished(): boolean {
+    return this.over;
+  }
+  private over = false;
+
+  /** A new race: not finished any more. */
+  newRace(): void {
+    this.over = false;
+  }
+
   /** Put back on the road (after a rescue or a fall): the progress check starts over. */
   rescued(): void {
     this.s = -1;
@@ -138,12 +149,13 @@ export class RaceDriver {
     const p = bus.nose(this.nose);
     const here = locateOnTrack(t, p, this.s, 60);
     this.s = here.s;
+    if (here.s >= t.finish) this.over = true;
     const v = bus.speed;
     // What the bends allow, and on top of that the top speed (higher with the nitro burning).
     const bends = Math.min(this.plannedAt(here.s + 4) * Math.min(1, pace), limit);
     const top = this.boosting && nitro ? this.boostTop : this.cruise * pace;
-    // Past the finish it pulls up on the runoff.
-    const target = here.s > t.finish + 30 ? 0 : Math.min(top, bends);
+    // Over the line it brakes to a stop in its lane (a ghost by then, so it can sit on the runoff).
+    const target = this.over ? 0 : Math.min(top, bends);
     const look = Math.max(8, Math.abs(v) * 0.75);
     const a = trackPoint(t, here.s + look, this.aim);
     const ax = a.x - a.dz * this.lane;
@@ -153,7 +165,8 @@ export class RaceDriver {
     // Over the target: brakes for a bend (or a car ahead), but only lifts off past its top speed (after a burst of nitro).
     o.throttle = target === 0 ? (v > 0.5 ? -1 : 0) : v < target - 0.6 ? 1 : v > bends + 0.8 ? -1 : v > target + 0.8 ? 0 : 0.25;
     o.steer = Math.max(-1, Math.min(1, -err * 2.4));
-    o.handbrake = false;
+    // Stopped past the line: the handbrake holds it (a downhill runoff would let it roll).
+    o.handbrake = this.over && Math.abs(v) < 2;
     // Stuck against a rail or a wagon: back up for a moment, steering the other way.
     this.stuck = Math.abs(v) < 0.6 && this.reverse <= 0 && target > 1 ? this.stuck + dt : 0;
     if (this.stuck > 2) (this.reverse = 1.4), (this.stuck = 0);

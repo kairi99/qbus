@@ -3,6 +3,9 @@ import type { BusPhysics } from '../vehicle/bus';
 
 export type CameraMode = 'chase' | 'cockpit';
 
+/** What the camera follows: the player's bus, or any other vehicle (a rival, a remote player's). */
+export type CameraTarget = Pick<BusPhysics, 'body' | 'position' | 'heading' | 'preset' | 'speed' | 'boosting' | 'frontLength'>;
+
 const BASE_FOV = 68;
 const SPEED_FOV = 14;
 /** Extra widening while the nitro burns. */
@@ -69,11 +72,14 @@ export class CameraRig {
   /** A trackside camera (the race's finish): it stands here, zoomed in, and turns to follow the bus. */
   trackside: THREE.Vector3Like | null = null;
 
+  /** Chase view whatever the mode (watching another racer: the driver's seat isn't theirs). */
+  forceChase = false;
+
   /** Dev/testing: fixed viewpoint instead of following the bus. */
   debugView: { pos: THREE.Vector3Like; look: THREE.Vector3Like } | null = null;
 
   /** `lookBack`: camera in front of the bus, facing it (held button). Works from either mode. */
-  update(dt: number, bus: BusPhysics, lookBack = false): void {
+  update(dt: number, bus: CameraTarget, lookBack = false): void {
     if (this.debugView) {
       this.camera.position.copy(this.debugView.pos);
       this.camera.lookAt(this.debugView.look.x, this.debugView.look.y, this.debugView.look.z);
@@ -121,12 +127,12 @@ export class CameraRig {
     this.camera.fov = BASE_FOV + SPEED_FOV * speedFrac + this.nitroFov;
     this.camera.updateProjectionMatrix();
 
-    if (this.mode === 'chase') this.chase(dt, bus, speedFrac);
+    if (this.mode === 'chase' || this.forceChase) this.chase(dt, bus, speedFrac);
     else this.cockpit(dt, bus);
     this.first = false;
   }
 
-  private chase(dt: number, bus: BusPhysics, speedFrac: number): void {
+  private chase(dt: number, bus: CameraTarget, speedFrac: number): void {
     // Scaled to the vehicle: high and far behind a bus, lower and closer behind a car.
     const { length, height } = bus.preset.body;
     // A long (articulated) bus doesn't need to be framed as far back as its length would suggest.
@@ -177,7 +183,7 @@ export class CameraRig {
     if (this.reach < dist) cam.copy(p).addScaledVector(d, this.reach);
   }
 
-  private cockpit(dt: number, bus: BusPhysics): void {
+  private cockpit(dt: number, bus: CameraTarget): void {
     const { width, height } = bus.preset.body;
     // The seat is in the front section's space.
     const [sx, sy, sz] = bus.preset.cockpit?.seat ?? [bus.frontLength / 2 - 1.6, height * 0.32, -width / 2 + 0.75];

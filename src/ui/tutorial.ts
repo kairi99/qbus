@@ -77,6 +77,7 @@ function pages(free: boolean, targets: StarThresholds | null, brt: boolean, race
         <li><b>Barrancos:</b> hay tramos sin baranda. Si te vas abajo vuelves a la vía un poco más atrás.</li>
         <li><b>Fuera de la vía:</b> si andas por el cerro más de un par de segundos, cuenta regresiva y vuelves a la vía donde te saliste.</li>
         <li>Con <b>R</b> vuelves a la vía donde estabas, pero esperas ${RESET_WAIT} s antes de seguir.</li>
+        <li>Al terminar, <b>◀ ▶</b> para ver a los demás.</li>
         ${race.slides ? '<li><b>Derrumbes:</b> suena un retumbo y bajan piedras por el cerro. Un carril siempre queda libre: lo tapado es lodo y rocas, y en el lodo el bus pesa y patina; las llantas se quedan embarradas un buen rato.</li>' : ''}
         ${race.traffic ? '<li><b>Tráfico:</b> carros y camiones en los dos sentidos. Rebasa solo con la vía libre.</li>' : ''}
       </ul>`,

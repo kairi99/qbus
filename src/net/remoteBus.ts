@@ -3,6 +3,7 @@ import type { BusPreset } from '../vehicle/busPreset';
 import type { WheelPose } from '../vehicle/busModel';
 import type { RAPIER } from '../physics/world';
 import type { CarState } from './protocol';
+import type { CameraTarget } from '../camera/cameraRig';
 import { RENDER_DELAY, SnapshotBuffer, newPose } from './snapshots';
 
 /** A predicted shove (`RemoteBus.shove`) is shown for this long (s) at the speed it was given... */
@@ -41,6 +42,8 @@ export class RemoteBus {
   private lastP = { x: 0, y: 0, z: 0, ok: false };
   private removed = false;
   readonly wheels: WheelPose;
+  /** What the spectator camera follows: the bus, with the speed from the snapshots (a kinematic body reports none). */
+  readonly view: CameraTarget;
   private pose = newPose();
   private spins: number[][] = [];
   private radius: number;
@@ -49,6 +52,23 @@ export class RemoteBus {
   constructor(world: RAPIER.World, preset: BusPreset, spawn: Spawn) {
     this.bus = new BusPhysics(world, preset, spawn);
     this.bus.makeRemote();
+    const bus = this.bus;
+    const self = this;
+    this.view = {
+      body: bus.body,
+      preset: bus.preset,
+      frontLength: bus.frontLength,
+      get heading() {
+        return bus.heading;
+      },
+      get boosting() {
+        return bus.boosting;
+      },
+      get speed() {
+        return self.speed;
+      },
+      position: (out) => bus.position(out),
+    };
     this.radius = preset.wheels.radius;
     this.rest = preset.suspension.restLength;
     const sections = 1 + this.bus.rears.length;

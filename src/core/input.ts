@@ -11,12 +11,12 @@ export interface DriveInput {
   parked?: boolean;
 }
 
-export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause' | 'radio' | 'confirm';
+export type Action = 'camera' | 'reset' | 'horn' | 'restart' | 'pause' | 'radio' | 'confirm' | 'watchPrev' | 'watchNext';
 
-const KEY_ACTIONS: Record<string, Action> = { KeyC: 'camera', KeyR: 'reset', KeyH: 'horn', Enter: 'restart', NumpadEnter: 'restart', Escape: 'pause', KeyP: 'pause', KeyM: 'radio' };
+const KEY_ACTIONS: Record<string, Action> = { KeyC: 'camera', KeyR: 'reset', KeyH: 'horn', Enter: 'restart', NumpadEnter: 'restart', Escape: 'pause', KeyP: 'pause', KeyM: 'radio', ArrowLeft: 'watchPrev', KeyA: 'watchPrev', ArrowRight: 'watchNext', KeyD: 'watchNext' };
 // Standard gamepad mapping: Y toggles camera, Back resets, left stick press honks, Start pauses,
-// X changes the radio station. A (also the handbrake while driving) confirms on screens like the tutorial.
-const PAD_ACTIONS: Record<number, Action> = { 0: 'confirm', 3: 'camera', 8: 'reset', 10: 'horn', 9: 'pause', 2: 'radio' };
+// X changes the radio station. LB / RB step through the racers being watched after a race finish. A (also the handbrake while driving) confirms on screens like the tutorial.
+const PAD_ACTIONS: Record<number, Action> = { 0: 'confirm', 3: 'camera', 8: 'reset', 10: 'horn', 9: 'pause', 2: 'radio', 4: 'watchPrev', 5: 'watchNext' };
 
 /** What the on-screen touch controls are holding (written by `ui/touchControls.ts`). */
 export interface TouchState {

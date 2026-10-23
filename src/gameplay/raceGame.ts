@@ -1,8 +1,8 @@
 /**
  * The rules of a race, pure: a grid wait, the 3-2-1 countdown, then each racer's progress along
  * the track (meters from the start line) until the player crosses the finish. Positions come
- * from progress (the finished first, by time). When the player finishes the race is over; a
- * racer still on the road gets a time from its own pace so far (with a small cushion).
+ * from progress (the finished first, by time). When the player finishes the phase is 'over' but
+ * scoring goes on; `estimateRest` gives a racer still on the road a time from its own pace.
  */
 
 /** Seconds per count (3, 2, 1) and of the grid wait before it. */
@@ -41,8 +41,8 @@ export class RaceGame {
   private shown = 0;
 
   /**
-   * `names[0]` is the player. `length`: start line to finish (m). `estimate: false` (online): racers
-   * still on the road when the player finishes keep a null time until `setTime`.
+   * `names[0]` is the player. `length`: start line to finish (m). `estimate: false` (online):
+   * `estimateRest` does nothing, racers still on the road keep a null time until `setTime`.
    */
   constructor(
     names: string[],
@@ -115,10 +115,9 @@ export class RaceGame {
       } else if (now !== before) ev.push({ type: 'count', n: now });
       return ev;
     }
-    // Online the race goes on after the player's finish: the others' crossings still count (the
-    // host reports its AI's times to the server).
+    // The race goes on after the player's finish: the others' crossings still count (online the
+    // host reports its AI's times to the server; solo they can be watched, or `estimateRest`).
     const over = this.phase === 'over';
-    if (over && this.opts.estimate !== false) return ev;
     this.time = goIn !== undefined ? -goIn : this.time + dt;
     this.racers.forEach((r, i) => {
       r.s = progress[i];
@@ -134,20 +133,30 @@ export class RaceGame {
     this.lastPlace = place;
     if (this.racers[0].time !== null) {
       this.phase = 'over';
-      // Everyone still racing gets a time from their pace so far (and a 3% cushion: they'd tire).
-      // Online the real times come from the server instead.
-      if (this.opts.estimate !== false) {
-        for (const r of this.racers)
-          if (r.time === null) {
-            const pace = Math.max(1, r.s) / this.time;
-            r.time = this.time + ((this.length - r.s) / pace) * 1.03;
-            r.estimated = true;
-          }
-      }
       this.order = this.ranking();
       ev.push({ type: 'over' });
     }
     return ev;
+  }
+
+  /** Every racer has a time. */
+  get allDone(): boolean {
+    return this.racers.every((r) => r.time !== null);
+  }
+
+  /**
+   * Gives everyone still racing a time from their pace so far (and a 3% cushion: they'd tire).
+   * No-op online (`estimate: false`): the real times come from the server.
+   */
+  estimateRest(): void {
+    if (this.opts.estimate === false) return;
+    for (const r of this.racers)
+      if (r.time === null) {
+        const pace = Math.max(1, r.s) / this.time;
+        r.time = this.time + ((this.length - r.s) / pace) * 1.03;
+        r.estimated = true;
+      }
+    this.order = this.ranking();
   }
 
   /** Fills racer `i`'s real time (the server's results) and re-ranks. */
@@ -168,6 +177,11 @@ export class RaceGame {
         if (rb.time !== null) return 1;
         return rb.s - ra.s;
       });
+  }
+
+  /** Racer at 1-based `place` as of the last update (no allocation, unlike `ranking`). */
+  racerAt(place: number): number {
+    return this.order[place - 1];
   }
 
   /** 1-based place of racer `i`. */

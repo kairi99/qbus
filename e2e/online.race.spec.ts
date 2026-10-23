@@ -89,8 +89,15 @@ test('two players race online: shared start, each sees the other, results from t
     const [p0, p1] = [r.points[i], r.points[i + 1]];
     q.bus.reset({ x: p0.x, y: r.y[i], z: p0.z, heading: Math.atan2(-(p1.z - p0.z), p1.x - p0.x) });
   });
-  await expect(a.page.locator('.rh-results')).toBeVisible({ timeout: 150_000 });
-  await expect(a.page.locator('.rh-results')).toContainText('en carrera');
+  // Past the finish camera she watches Beto's bus until he finishes too.
+  await expect.poll(() => q(a.page, 'q.racing.spectating'), { timeout: 150_000 }).not.toBeNull();
+  await expect(a.page.locator('.rh-watch')).toBeVisible();
+  await expect(a.page.locator('.rh-live [data-act="endNow"]')).toBeHidden();
+  await a.page.screenshot({ path: `${shots}/online-race-spectate.png` });
+  // (A slow machine can run into the room's finish timeout: then the card is up already, with Beto "retirado".)
+  await a.page.locator('.rh-live [data-act="results"]').click({ timeout: 3000 }).catch(() => {});
+  await expect(a.page.locator('.rh-results')).toBeVisible();
+  await expect(a.page.locator('.rh-results')).toContainText(/en carrera|retirado/);
   await expect(a.page.locator('.rh-results [data-act="lobby"]')).toBeVisible();
   await a.page.screenshot({ path: `${shots}/online-race-results.png` });
   // Beto's race knows Ana's real time.

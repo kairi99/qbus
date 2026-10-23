@@ -73,7 +73,7 @@ describe('the race', () => {
     const g = new RaceGame(['Tú', 'Rival'], 1000);
     step(g, GRID_WAIT + 3 * COUNT_STEP + 0.1, [0, 0]);
     // The rival leads, then the player passes it and finishes first.
-    const ev = step(g, 60, (t) => [t * 20, t < 20 ? t * 22 : 440 + (t - 20) * 15]);
+    const ev = step(g, 55, (t) => [t * 20, t < 20 ? t * 22 : 440 + (t - 20) * 15]);
     expect(ev).toContain('overtake');
     expect(ev.filter((e) => e === 'finish')).toHaveLength(1);
     expect(ev[ev.length - 1]).toBe('over');
@@ -81,8 +81,35 @@ describe('the race', () => {
     expect(g.ranking()).toEqual([0, 1]);
     expect(g.racers[0].time).toBeCloseTo(50, 0);
     // The rival's time is estimated from its pace, behind the player's.
+    g.estimateRest();
     expect(g.racers[1].estimated).toBe(true);
     expect(g.racers[1].time!).toBeGreaterThan(g.racers[0].time!);
+  });
+
+  it("solo: rivals still racing at the player's finish get real times later", () => {
+    const g = new RaceGame(['Tú', 'Rival'], 1000);
+    step(g, GRID_WAIT + 3 * COUNT_STEP + 0.1, [0, 0]);
+    step(g, 45, (t) => [t * 25, t * 20]);
+    expect(g.phase).toBe('over');
+    expect(g.racers[1].time).toBeNull();
+    expect(g.allDone).toBe(false);
+    const ev = g.update(0.1, [1100, 1001]);
+    expect(ev.map((e) => e.type)).toEqual(['finish']);
+    expect(g.racers[1].time).toBe(g.time);
+    expect(g.racers[1].estimated).toBe(false);
+    expect(g.allDone).toBe(true);
+  });
+
+  it('estimateRest fills the rest from pace', () => {
+    const g = new RaceGame(['Tú', 'Rival'], 1000);
+    step(g, GRID_WAIT + 3 * COUNT_STEP + 0.1, [0, 0]);
+    step(g, 45, (t) => [t * 25, t * 20]);
+    const t = g.time;
+    const s = g.racers[1].s;
+    g.estimateRest();
+    expect(g.racers[1].estimated).toBe(true);
+    expect(g.racers[1].time).toBeCloseTo(t + ((1000 - s) / (s / t)) * 1.03);
+    expect(g.allDone).toBe(true);
   });
 
   it('a rival that finishes first keeps its real time and first place', () => {

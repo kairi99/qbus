@@ -47,6 +47,9 @@ test('a race on the Papallacta track: countdown, a perfect launch, a rival, the 
   await expect.poll(() => page.evaluate(() => (window as any).__qbus.racing.finishView !== null), { timeout: 90_000 }).toBe(true);
   expect(await page.locator('.rh-results').isVisible()).toBe(false);
   await page.screenshot({ path: `${shots}/b3-race-finish-cam.png` });
+  // Past the camera the rival is still racing: the view follows it, "Terminar ya" gives the results.
+  await expect(page.locator('.rh-watch')).toBeVisible({ timeout: 90_000 });
+  await page.locator('.rh-live [data-act="endNow"]').click();
   await expect(page.locator('.rh-results')).toBeVisible({ timeout: 90_000 });
   await expect(page.locator('.rh-results')).toContainText(/GANASTE|Llegaste/);
   await expect(page.locator('.rh-results')).toContainText('Récord');
@@ -55,6 +58,42 @@ test('a race on the Papallacta track: countdown, a perfect launch, a rival, the 
   await page.locator('.rh-results [data-act="again"]').click();
   await expect.poll(() => page.evaluate(() => (window as any).__qbus.racing.game.phase), { timeout: 30_000 }).not.toBe('over');
   await expect(page.locator('.rh-results')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('after the finish the camera watches a rival and ←/→ switch', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?play=1&mode=race&city=papallacta&tutorial=0&rain=0&rivals=3');
+  await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 90_000 });
+  await page.keyboard.down('KeyW');
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.racing.game.green), { timeout: 60_000 }).toBe(true);
+  // Over the line (W still held: the bus drives the last 60 m) with all three rivals still on the road.
+  await page.evaluate(() => {
+    const q = (window as any).__qbus;
+    const r = q.city.race;
+    const i = Math.round((r.finish - 60) / 3);
+    const [a, b] = [r.points[i], r.points[i + 1]];
+    q.bus.reset({ x: a.x, y: r.y[i], z: a.z, heading: Math.atan2(-(b.z - a.z), b.x - a.x) });
+  });
+  const watched = () => page.evaluate(() => (window as any).__qbus.racing.spectating);
+  await expect.poll(watched, { timeout: 90_000 }).toBeGreaterThan(0);
+  await expect(page.locator('.rh-watch')).toBeVisible();
+  await expect(page.locator('.rh-live')).toBeVisible();
+  // The player's own bus is out of the picture, and a ghost.
+  expect(await page.evaluate(() => (window as any).__qbus.racing.playerHidden)).toBe(true);
+  expect(await page.evaluate(() => (window as any).__qbus.bus.ghost)).toBe(true);
+  const first = await watched();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(watched).not.toBe(first);
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(watched).toBe(first);
+  await page.screenshot({ path: `${shots}/r9-spectate.png` });
+  // "Terminar ya": the full results, nobody watched any more.
+  await page.locator('.rh-live [data-act="endNow"]').click();
+  await expect(page.locator('.rh-results')).toBeVisible();
+  expect(await watched()).toBeNull();
+  await page.keyboard.up('KeyW');
   expect(errors).toEqual([]);
 });
 

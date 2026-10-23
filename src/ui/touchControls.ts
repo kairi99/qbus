@@ -29,6 +29,8 @@ export class TouchControls {
         <button class="tc-small" data-tap="reset" aria-label="Volver a la calle">↺</button>
         <button class="tc-small" data-tap="radio" aria-label="Radio">📻</button>
       </div>
+      <button class="tc-small tc-watch tc-watch-prev" data-tap="watchPrev" aria-label="Ver al anterior">◀</button>
+      <button class="tc-small tc-watch tc-watch-next" data-tap="watchNext" aria-label="Ver al siguiente">▶</button>
       <button class="tc-small tc-horn" data-hold="horn" data-tap="horn" aria-label="Pito">📯</button>
       <button class="tc-small tc-look" data-hold="lookBack" aria-label="Mirar atrás">👀</button>
       <button class="tc-btn tc-hand" data-hold="handbrake">Mano</button>

@@ -32,7 +32,7 @@ export interface RaceResults {
   online?: boolean;
 }
 
-export type RaceHudAction = 'again' | 'menu' | 'lobby';
+export type RaceHudAction = 'again' | 'menu' | 'lobby' | 'watchPrev' | 'watchNext' | 'results' | 'endNow' | 'keep';
 
 /**
  * The race's HUD (Spanish): the route and the player's place and time (top left), the big
@@ -75,6 +75,19 @@ export class RaceHud {
       <div class="rh-off" data-k="off" hidden>¡Vuelve a la vía! <b data-k="offN">6</b></div>
       <div class="rh-mud" data-k="mud" hidden>¡Llantas con lodo! Menos agarre<i class="rh-mud-bar"><i data-k="mudBar"></i></i></div>
       <div class="rh-net" data-k="net" hidden><span data-k="netText"></span><button class="gh-btn rh-net-btn" data-act="retry" hidden>Reconectar</button></div>
+      <div class="rh-watch" data-k="watch" hidden>
+        <button class="gh-btn rh-watch-btn" data-act="watchPrev" aria-label="Anterior">◀</button>
+        <span class="rh-watch-text">Viendo: <b data-k="wName"></b> · <span data-k="wPlace"></span> · <span data-k="wGap"></span></span>
+        <button class="gh-btn rh-watch-btn" data-act="watchNext" aria-label="Siguiente">▶</button>
+      </div>
+      <div class="rh-live" data-k="live" hidden>
+        <h3>Resultados</h3>
+        <ol class="rh-table" data-k="liveTable"></ol>
+        <div class="rh-live-btns">
+          <button class="gh-btn" data-act="results">Ver resultados <small>Esc</small></button>
+          <button class="gh-btn" data-act="endNow" data-k="endNow">Terminar ya</button>
+        </div>
+      </div>
       <div class="rh-hint" data-k="hint">Acelera <span class="keys-only">con <b>W</b></span> y mantén la aguja en lo <b class="rh-green">verde</b>: ¡salida perfecta!</div>
       <div class="rh-strip"><div class="rh-flag">🏁</div></div>
       <div class="rh-tach" data-k="tach">
@@ -97,6 +110,7 @@ export class RaceHud {
           <div class="gh-actions">
             <button class="gh-btn gh-btn-go" data-act="again">Otra carrera <small>Enter</small></button>
             <button class="gh-btn" data-act="menu">Menú</button>
+            <button class="gh-btn" data-act="keep" data-k="keep" hidden>Seguir viendo <small>Esc</small></button>
           </div>
         </div>
       </div>`;
@@ -171,9 +185,40 @@ export class RaceHud {
     });
   }
 
-  showResults(r: RaceResults | null): void {
+  /**
+   * The spectator strip: who the camera follows, their place and the gap (s) to the one ahead
+   * (null gap: leading); null hides it.
+   */
+  watch(info: { name: string; place: number; gap: number | null } | null): void {
+    const el = this.k.watch;
+    if (el.hidden !== !info) el.hidden = !info;
+    if (!info) return;
+    setText(this.k.wName, info.name);
+    setText(this.k.wPlace, `${info.place}º`);
+    setText(this.k.wGap, info.gap === null ? 'va primero' : `+${info.gap.toFixed(1)} s`);
+  }
+
+  /** The compact results beside the view, rebuilt when its rows change; null hides it. */
+  live(r: RaceResults | null): void {
+    const el = this.k.live;
+    if (el.hidden !== !r) el.hidden = !r;
+    if (!r) return;
+    const html = r.rows
+      .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span><b>${row.time === null ? 'en carrera' : `${row.estimated ? '≈ ' : ''}${raceClock(row.time)}`}</b></li>`)
+      .join('');
+    if (this.k.liveTable.innerHTML !== html) this.k.liveTable.innerHTML = html;
+  }
+
+  /** Hides the full card only (the view behind it stays as it is). */
+  closeResults(): void {
+    this.k.results.hidden = true;
+  }
+
+  /** `keep`: others still race, so the card can be put away ("Seguir viendo"). */
+  showResults(r: RaceResults | null, keep = false): void {
     const box = this.k.results;
     box.hidden = !r;
+    this.k.keep.hidden = !keep;
     if (!r) {
       this.k.tach.classList.remove('rh-tach-off');
       this.k.hint.hidden = false;
@@ -195,6 +240,8 @@ export class RaceHud {
     const again = this.el.querySelector<HTMLElement>('[data-act="again"]')!;
     again.dataset.act = 'lobby';
     again.innerHTML = 'Volver a la sala <small>Enter</small>';
+    // "Terminar ya" guesses times from pace: online they come from the server.
+    this.k.endNow.hidden = true;
   }
 
   /** Online: the connection banner ("Reconectando…", with a button to try again now); null hides it. */

@@ -2739,3 +2739,110 @@ body {
 .ol-wait [hidden] {
   display: none;
 }
+
+/* ---- Race HUD: watching the others after the finish ---------------------- */
+
+.rh-watch {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 60%);
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.rh-watch-btn {
+  padding: 4px 12px;
+  font-size: 16px;
+}
+
+.rh-watch b {
+  color: #ffd21f;
+}
+
+.rh-live {
+  position: absolute;
+  top: 88px;
+  right: 20px;
+  width: min(300px, 40vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 60%);
+  font-size: 14px;
+  pointer-events: auto;
+}
+
+.rh-live h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: #ffb000;
+}
+
+.rh-live .rh-table {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  counter-reset: place;
+}
+
+.rh-live .rh-table li {
+  grid-template-columns: 2em 1fr auto;
+  gap: 0 8px;
+}
+
+.rh-live-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rh-live-btns .gh-btn {
+  padding: 5px 10px;
+  font-size: 14px;
+}
+
+.rh-watch[hidden],
+.rh-live[hidden],
+.rh-live-btns [hidden] {
+  display: none;
+}
+
+body.touch .rh-live {
+  top: 56px;
+  width: min(220px, 34vw);
+  font-size: 12px;
+}
+
+body.touch .rh-watch {
+  top: 30px;
+}
+
+/* Watching the others after the finish (body.watching): ◀ ▶ under the view. */
+.tc-watch {
+  display: none;
+  position: absolute;
+  bottom: var(--tc-b);
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+}
+
+.tc-watch-prev {
+  left: calc(50% - 64px);
+}
+
+.tc-watch-next {
+  left: calc(50% + 12px);
+}
+
+body.watching .tc-watch {
+  display: block;
+}

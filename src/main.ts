@@ -199,7 +199,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     if (a === 'menu') toMenu();
     if (a === 'again') again();
   };
-  if (racing) racing.hud.onAction = (a) => (a === 'menu' ? (net ? net.leave() : toMenu()) : a === 'lobby' ? net?.toLobby() : again());
+  if (racing) racing.hud.onAction = (a) => (a === 'menu' ? (net ? net.leave() : toMenu()) : a === 'lobby' ? net?.toLobby() : a === 'watchPrev' ? racing.spectateStep(-1) : a === 'watchNext' ? racing.spectateStep(1) : a === 'results' ? racing.openResults() : a === 'endNow' ? racing.endNow() : a === 'keep' ? racing.closeResults() : again());
   if (net && racing) net.attach(racing);
   // A page back in a race already running (reload, reopened tab): the bus goes where the room last saw it.
   if (net && racing) {
@@ -325,6 +325,16 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         // Cars aren't static world, so the spot can still hold one: send them elsewhere.
         session.trafficBodies.clearSpot({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading }, preset.body.length, preset.body.width);
       }
+      // Watching the others after the finish: ←/→ (LB/RB, touch arrows) switch, Esc the full results (and back).
+      if (racing && racing.spectating !== null && !paused) {
+        if (action === 'watchPrev') racing.spectateStep(-1);
+        if (action === 'watchNext') racing.spectateStep(1);
+        if (action === 'pause') {
+          if (racing.resultsOpen) racing.closeResults();
+          else racing.openResults();
+          continue;
+        }
+      }
       if (action === 'pause') setPaused(!paused);
       if (action === 'radio') {
         radioToast.show(radio.next(), radio.onAir()?.song ?? null);
@@ -333,7 +343,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       }
       if (paused) continue;
       if (action === 'restart' && session.game?.over) session.restart();
-      if (action === 'restart' && racing?.over) {
+      if (action === 'restart' && racing?.over && (racing.resultsOpen || racing.spectating === null)) {
         if (net) net.toLobby();
         else again();
       }
@@ -450,9 +460,14 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     const lookBack = input.lookBackHeld;
     // The finish line's trackside camera, while it rolls.
     rig.trackside = racing?.finishView ?? null;
+    // After the finish the camera follows another racer (chase view, no looking back).
+    const watched = racing?.spectateTarget() ?? null;
+    rig.forceChase = !!watched;
+    document.body.classList.toggle('watching', !!watched);
+    model.root.visible = !racing?.playerHidden;
     // Looking back from the driver's seat (or from beside the road) needs the bus's outside to be there to look at.
-    model.setCockpitView(rig.mode === 'cockpit' && !lookBack && !rig.trackside);
-    rig.update(dt, bus, lookBack);
+    model.setCockpitView(rig.mode === 'cockpit' && !lookBack && !rig.trackside && !watched);
+    rig.update(dt, watched ?? bus, watched ? false : lookBack);
     followSun(sun, model.root.position);
     const spray = bus.wade > 0.05 ? Math.min(1, Math.abs(bus.speed) / 10) * Math.min(1, bus.wade / 0.4) : 0;
     model.setSpray(spray);
