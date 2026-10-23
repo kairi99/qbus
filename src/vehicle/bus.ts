@@ -1,4 +1,4 @@
-import { GROUP, RAPIER, VEHICLE_GROUPS, groups } from '../physics/world';
+import { GROUP, REMOTE_SOLVER, RAPIER, VEHICLE_GROUPS, VEHICLE_SOLVER, groups } from '../physics/world';
 import type { DriveInput } from '../core/input';
 import type { BusPreset } from './busPreset';
 
@@ -57,6 +57,13 @@ const trainGroups = () => {
   const bit = GROUP.TRAIN << trains++ % GROUP.TRAINS;
   return groups(bit, GROUP.ALL & ~bit);
 };
+
+/** A bump's spin (share of the physical one), its cap (rad/s), and the loose tires after a sideways one. */
+const BUMP_SPIN = 0.6;
+const BUMP_SPIN_MAX = 0.8;
+const BUMP_SLIDE_MIN = 0.8;
+const BUMP_SLIDE_TIME = 0.6;
+const BUMP_SLIDE_WET = 0.85;
 
 const REMOTE_GROUPS = groups(GROUP.REMOTE, GROUP.ALL & ~GROUP.STATIC & ~GROUP.TRAFFIC & ~GROUP.REMOTE);
 /** A ghost: nothing but the static world (and a membership no wheel ray stands on). */
@@ -118,6 +125,8 @@ export class BusPhysics {
   private wheelGroups: number | undefined;
   /** Nitro fired on the last update. */
   boosting = false;
+  /** Seconds left of loose tires after a sideways bump (`shove`): the shove would otherwise be eaten by the tires at once. */
+  bumpSlide = 0;
 
   constructor(
     private world: RAPIER.World,
@@ -155,7 +164,7 @@ export class BusPhysics {
       motor(joint, RAPIER.JointAxis.AngX, 0, TURNTABLE_STIFFNESS, TURNTABLE_DAMPING);
       this.rears.push({ body, vehicle, joint, length: art!.rearLength, lockedBend: null });
     }
-    for (const c of this.colliders) c.setCollisionGroups(train ?? VEHICLE_GROUPS);
+    for (const c of this.colliders) (c.setCollisionGroups(train ?? VEHICLE_GROUPS), c.setSolverGroups(VEHICLE_SOLVER));
 
     this.reset(spawn);
   }
@@ -380,6 +389,7 @@ export class BusPhysics {
     const fg = p.articulated?.driftFrontGrip;
     if (fg) for (const i of FRONT) this.vehicle.setWheelFrictionSlip(i, input.handbrake ? Math.min(p.wheels.frictionSlip, this.rearGrip * fg) : p.wheels.frictionSlip);
 
+    this.bumpSlide = Math.max(0, this.bumpSlide - dt);
     this.wetTires(this.vehicle);
     this.vehicle.updateVehicle(dt, undefined, this.wheelGroups);
     this.reversing = input.throttle < 0 || speed < -1;
@@ -411,7 +421,7 @@ export class BusPhysics {
    * than AQUAPLANE the tires float and lose more.
    */
   private wetTires(v: RAPIER.DynamicRayCastVehicleController): void {
-    const wet = this.wetness;
+    const wet = Math.max(this.wetness, this.bumpSlide > 0 ? BUMP_SLIDE_WET : 0);
     if (wet <= 0) return;
     const dry = this.preset.wheels.frictionSlip;
     const caps = this.preset.wet ?? { front: dry, rear: dry };
@@ -561,6 +571,7 @@ export class BusPhysics {
     this.wade = 0;
     this.mud = 0;
     this.draft = 0;
+    this.bumpSlide = 0;
   }
 
   /** Collision groups to restore when the ghost ends (null while solid). */
@@ -625,6 +636,45 @@ export class BusPhysics {
     return hit;
   }
 
+  /** Mass of the whole vehicle (all sections), kg. */
+  get totalMass(): number {
+    let m = 0;
+    for (const b of this.bodies) m += b.mass();
+    return m;
+  }
+
+  /**
+   * A collision's impulse `j` (N s, horizontal) at world point `at`: every section gets the same
+   * velocity change (each its share of `j`), the section nearest `at` also a spin from the
+   * off-center hit (a little: `BUMP_SPIN`, capped at `BUMP_SPIN_MAX` rad/s). A sideways one
+   * loosens the tires for a moment so it carries the bus over instead of being scrubbed off.
+   */
+  shove(j: { x: number; y: number; z: number }, at: { x: number; y: number; z: number }): void {
+    const bodies = this.bodies;
+    const total = this.totalMass;
+    let near = bodies[0];
+    let best = Infinity;
+    for (const b of bodies) {
+      const t = b.translation();
+      const d = (t.x - at.x) ** 2 + (t.z - at.z) ** 2;
+      if (d < best) (best = d), (near = b);
+    }
+    for (const b of bodies) {
+      const k = b.mass() / total;
+      b.applyImpulse({ x: j.x * k, y: 0, z: j.z * k }, true);
+    }
+    const c = near.translation();
+    // Yaw impulse: the y component of r x j.
+    const torque = (at.z - c.z) * j.x - (at.x - c.x) * j.z;
+    const inertia = Math.max(1, near.principalInertia().y);
+    const dw = Math.max(-BUMP_SPIN_MAX, Math.min(BUMP_SPIN_MAX, (torque / inertia) * BUMP_SPIN));
+    near.applyTorqueImpulse({ x: 0, y: dw * inertia, z: 0 }, true);
+    // Sideways, relative to the front section's heading.
+    const f = this.forwardOf(this.body.rotation(), 1);
+    const lateral = Math.abs(j.x * -f.z + j.z * f.x) / total;
+    if (lateral > BUMP_SLIDE_MIN) this.bumpSlide = BUMP_SLIDE_TIME;
+  }
+
   /**
    * Turns this bus into another player's: every body kinematic (moved by `setPose` from snapshots,
    * never `update()`d), colliders in the REMOTE group. Kinematic bodies ignore the turntable
@@ -636,6 +686,7 @@ export class BusPhysics {
       for (let i = 0; i < b.numColliders(); i++) {
         const c = b.collider(i);
         c.setCollisionGroups(REMOTE_GROUPS);
+        c.setSolverGroups(REMOTE_SOLVER);
         c.setRestitution(0);
       }
     }

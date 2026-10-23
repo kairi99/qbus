@@ -102,6 +102,21 @@ export interface ResultRow {
   time: number | null;
 }
 
+/**
+ * A collision's share for another racer's bus (`physics/bump.ts`): the impulse (N s, level: x, z)
+ * on racer `to` at a world point, dealt by the sender's bus `from` (a seat of the sender, or an AI
+ * of the host). Relayed to whoever simulates `to` (its seat; the host for an AI). Optional: older
+ * clients and servers never send or understand it.
+ */
+export interface Bump {
+  from: Racer;
+  to: Racer;
+  j: [number, number];
+  at: [number, number, number];
+}
+/** Largest impulse accepted (N s): a heavy articulated bus hit at full tilt is a fraction of this. */
+export const BUMP_MAX_J = 250_000;
+
 export type C2S =
   | { t: 'hello'; v: number; name: string; vehicle: string; token?: string }
   | { t: 'set'; settings: RoomSettings }
@@ -110,6 +125,7 @@ export type C2S =
   | { t: 'loaded' }
   | { t: 'st'; at: number; cars: CarState[] }
   | { t: 'fin'; who: Racer; time: number }
+  | ({ t: 'bump' } & Bump)
   | { t: 'ping'; c: number }
   | { t: 'leave' };
 
@@ -122,6 +138,7 @@ export type S2C =
   | { t: 'go'; grid: GridEntry[]; seed: number; goAt: number; resume?: Record<string, number> }
   | { t: 'st'; from: number; at: number; cars: CarState[] }
   | { t: 'result'; rows: ResultRow[]; final: boolean }
+  | ({ t: 'bump' } & Bump)
   | { t: 'pong'; c: number; s: number }
   | { t: 'error'; code: ErrorCode };
 
@@ -133,8 +150,8 @@ export function sameRacer(a: Racer, b: Racer): boolean {
   return racerKey(a) === racerKey(b);
 }
 
-const C2S_TAGS = ['hello', 'set', 'me', 'start', 'loaded', 'st', 'fin', 'ping', 'leave'];
-const S2C_TAGS = ['welcome', 'room', 'go', 'st', 'result', 'pong', 'error'];
+const C2S_TAGS = ['hello', 'set', 'me', 'start', 'loaded', 'st', 'fin', 'bump', 'ping', 'leave'];
+const S2C_TAGS = ['welcome', 'room', 'go', 'st', 'result', 'bump', 'pong', 'error'];
 const ERRORS = ['full', 'racing', 'version', 'nohost', 'unknown', 'notready', 'bad'];
 const PHASES = ['lobby', 'loading', 'racing', 'results'];
 const SKILLS = ['easy', 'normal', 'hard'];
@@ -188,6 +205,16 @@ export function cleanCar(c: CarState): CarState {
   return out;
 }
 
+/** A bump's fields, copied (a client can't smuggle extra data through the relay), or null when they aren't valid. */
+export function cleanBump(m: Record<string, unknown>): Bump | null {
+  if (!isRacer(m.from) || !isRacer(m.to) || !nums(m.j, 2) || !nums(m.at, 3)) return null;
+  const j = m.j as [number, number];
+  if (Math.hypot(j[0], j[1]) > BUMP_MAX_J) return null;
+  const at = m.at as [number, number, number];
+  const r = (x: Racer): Racer => ('seat' in x ? { seat: x.seat } : { ai: x.ai });
+  return { from: r(m.from), to: r(m.to), j: [j[0], j[1]], at: [at[0], at[1], at[2]] };
+}
+
 /** Parses a client message; null when it isn't one (bad JSON, unknown tag, wrong field types, oversize strings). */
 export function parseC2S(raw: string): C2S | null {
   let m: unknown;
@@ -220,6 +247,10 @@ export function parseC2S(raw: string): C2S | null {
       return isNum(m.at) && validCars(m.cars) ? { t: 'st', at: m.at, cars: (m.cars as CarState[]).map(cleanCar) } : null;
     case 'fin':
       return isRacer(m.who) && isNum(m.time) && m.time >= 0 ? { t: 'fin', who: m.who, time: m.time } : null;
+    case 'bump': {
+      const b = cleanBump(m);
+      return b ? { t: 'bump', ...b } : null;
+    }
     case 'ping':
       return isNum(m.c) ? { t: 'ping', c: m.c } : null;
     default:
@@ -247,6 +278,10 @@ export function parseS2C(raw: string): S2C | null {
       return isInt(m.from) && isNum(m.at) && validCars(m.cars) ? (m as unknown as S2C) : null;
     case 'result':
       return Array.isArray(m.rows) && m.rows.every((r) => isObj(r) && isRacer(r.who) && (r.time === null || isNum(r.time))) && typeof m.final === 'boolean' ? (m as unknown as S2C) : null;
+    case 'bump': {
+      const b = cleanBump(m);
+      return b ? { t: 'bump', ...b } : null;
+    }
     case 'pong':
       return isNum(m.c) && isNum(m.s) ? (m as unknown as S2C) : null;
     default:

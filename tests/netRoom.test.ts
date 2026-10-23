@@ -303,6 +303,54 @@ describe('loading and racing', () => {
   });
 });
 
+describe('new joiners after a race', () => {
+  const FINISHED = (r: RoomLogic) => {
+    r.handle(0, { t: 'fin', who: { seat: 0 }, time: 60 }, 5000);
+    r.handle(1, { t: 'fin', who: { seat: 1 }, time: 62 }, 5100);
+    r.handle(0, { t: 'fin', who: { ai: 0 }, time: 64 }, 5200);
+  };
+  it('results phase, everyone gone offline: a new player gets the lobby, not "racing"', () => {
+    const r = racing(2);
+    FINISHED(r);
+    expect(r.phase).toBe('results');
+    r.drop(0, 6000);
+    r.drop(1, 6000);
+    const j = r.join(hello('New'), 7000);
+    expect(j.seat).not.toBeNull();
+    expect(r.phase).toBe('lobby');
+    expect(last(j.out, 'room').phase).toBe('lobby');
+    expect(r.state.seats).toHaveLength(1);
+    expect(r.state.seats[0].host).toBe(true);
+  });
+  it('results phase with players still looking at it: new player joins the lobby, they stay', () => {
+    const r = racing(2);
+    FINISHED(r);
+    const j = r.join(hello('New'), 7000);
+    expect(j.seat).toBe(2);
+    expect(r.phase).toBe('lobby');
+    expect(r.state.seats.map((x) => x.id)).toEqual([0, 1, 2]);
+    expect(r.state.seats.every((x) => !x.ready)).toBe(true);
+  });
+  it('race abandoned (nobody online, nobody finished): a new player is not locked out for the grace', () => {
+    const r = racing(2);
+    r.drop(0, 3000);
+    r.drop(1, 3000);
+    expect(r.phase).toBe('racing');
+    expect(r.join(hello('New'), 4000).seat).not.toBeNull();
+    expect(r.phase).toBe('lobby');
+    expect(r.state.seats).toHaveLength(1);
+  });
+  it('race truly on (someone online): rejected as racing; a returning token still gets in', () => {
+    const r = racing(2);
+    const tok = r.state.seats[1].token;
+    r.drop(1, 3000);
+    const j = r.join(hello('New'), 4000);
+    expect(j.seat).toBeNull();
+    expect(j.out[0].msg).toEqual({ t: 'error', code: 'racing' });
+    expect(r.join(hello('P1', tok), 4100).seat).toBe(1);
+  });
+});
+
 describe('drops and timers', () => {
   it('grace in the lobby, then the seat is gone and wake values are right', () => {
     const r = room(2);

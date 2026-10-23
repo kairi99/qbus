@@ -10,8 +10,10 @@ import type { BusAudio, RivalVoice } from '../core/audio';
 import type { DriveInput } from '../core/input';
 import { engineLoad } from '../core/soundModel';
 import { Rng } from '../core/rng';
+import { BumpTracker, type V3 } from '../physics/bump';
 import { Nitro } from './nitro';
 import { draftOf, Slipstream } from './slipstream';
+import { TireMud } from './tireMud';
 import { KEEP_RIGHT, RaceDriver, type RoadUser, SKILLS, type TrafficCar, chooseLane, vehicleLimits } from './raceDriver';
 import { FALL_BACK, FallWatch } from './fallWatch';
 import { GHOST_TIME, Ghost } from './ghost';
@@ -80,6 +82,8 @@ interface Rival {
   throttle: number;
   /** How deep in mud it is (0..1). */
   mud: number;
+  /** Mud caked on its tires. */
+  tires: TireMud;
   /** Braking it plans slides with (m/s²). */
   slideBrake: number;
 }
@@ -183,6 +187,10 @@ export class RaceSession {
   private sub = 0;
   /** How deep in mud the player is (0..1). */
   private playerMud = 0;
+  /** Mud caked on the player's tires: it lingers after the mud. */
+  readonly tires = new TireMud();
+  /** Seconds left on main's off-road countdown (0: none), for the heads-up. */
+  offRoad = 0;
   private ear = { x: 0, z: 0 };
   /** Where the slides that have started are (the minimap's marks; one record per site, the list reused). */
   readonly slideMarks: { x: number; z: number }[] = [];
@@ -216,6 +224,10 @@ export class RaceSession {
   private offline = false;
   /** Online: finish times to report to the server (the player's, and the AI simulated here). Read and cleared by the caller. */
   readonly finishes: { key: string; time: number }[] = [];
+  /** Vehicle-vehicle collisions (`physics/bump.ts`): every bus simulated here, the remote ones. */
+  private bump: BumpTracker;
+  /** Online: the share of a bump that belongs to another client's bus, to send (read and cleared by the caller). */
+  readonly bumpsOut: { from: string; to: string; j: V3; at: V3 }[] = [];
 
   constructor(
     private world: RAPIER.World,
@@ -243,7 +255,7 @@ export class RaceSession {
       scene.add(model.root);
       // The middle of the road, a little to either side; with traffic about, the right half.
       const home = busy ? KEEP_RIGHT - (i % 2) * 0.3 : (i % 2 ? 1 : -1) * 0.6;
-      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], vehicleLimits(preset), home), nitro: new Nitro(), fall: new FallWatch(), ghost: new Ghost(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, throttle: 0, mud: 0, slideBrake: vehicleLimits(preset).brake * SKILLS[this.skill].brake * SLIDE_BRAKE });
+      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], vehicleLimits(preset), home), nitro: new Nitro(), fall: new FallWatch(), ghost: new Ghost(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, throttle: 0, mud: 0, tires: new TireMud(), slideBrake: vehicleLimits(preset).brake * SKILLS[this.skill].brake * SLIDE_BRAKE });
     }
     this.online = opts.online ?? null;
     for (const e of this.online?.remotes ?? []) {
@@ -251,6 +263,13 @@ export class RaceSession {
       scene.add(model.root);
       this.remotes.push({ ...e, model, lastS: -1, life: 'live', hornHold: new HornHold() });
     }
+    // Collisions: the player and the local AI take their share of every hit; a remote bus's is sent to its owner.
+    const keys = this.online?.keys;
+    this.bump = new BumpTracker(world);
+    this.bump.own.push({ key: keys?.[0] ?? 'p', bus: player.bus });
+    this.rivals.forEach((r, i) => this.bump.own.push({ key: keys?.[1 + i] ?? `r${i}`, bus: r.bus }));
+    this.remotes.forEach((m, j) => this.bump.far.push({ key: keys?.[1 + this.rivals.length + j] ?? `x${j}`, bus: m.remote.bus, vel: m.remote.vel, shove: (dv) => m.remote.shove(dv) }));
+    if (this.online) this.bump.send = (to, from, j, at) => this.bumpsOut.push({ from, to, j: { x: j.x, y: 0, z: j.z }, at: { x: at.x, y: at.y, z: at.z } });
     const others = [...this.rivals.map((r) => r.preset), ...this.remotes.map((r) => r.preset)];
     const total = 1 + others.length;
     this.game = new RaceGame(['Tú', ...this.rivals.map((r) => r.preset.name), ...this.remotes.map((r) => r.name)], track.finish - track.start, { estimate: !this.online });
@@ -308,6 +327,7 @@ export class RaceSession {
   /** The player was put back on the road (R): it waits RESET_WAIT seconds before it may go on. */
   playerReset(): void {
     this.wait = RESET_WAIT;
+    this.tires.reset();
     this.playerS = -1;
     this.noseS[0] = -1;
     this.becomeGhost(this.ghost, this.player.bus, RESET_WAIT + GHOST_TIME);
@@ -332,6 +352,7 @@ export class RaceSession {
       const at = trackPose(t, Math.max(t.start - 12, s - r.preset.body.length / 2), r.driver.lane);
       r.bus.reset({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading, pitch: at.pitch });
       r.driver.rescued();
+      r.tires.reset();
       r.lastS = -1;
       r.wait = RESET_WAIT;
       this.noseS[i + 1] = -1;
@@ -346,6 +367,7 @@ export class RaceSession {
 
   /** The player fell off the road and was put back (no wait): a ghost for a few seconds. */
   playerFell(): void {
+    this.tires.reset();
     this.playerS = -1;
     this.noseS[0] = -1;
     this.becomeGhost(this.ghost, this.player.bus, GHOST_TIME);
@@ -429,7 +451,7 @@ export class RaceSession {
 
   /** Grip the player's tires have from the launch (wheelspin), 1 otherwise. */
   get playerGrip(): number {
-    return (this.grade && this.effect > 0 ? LAUNCH_EFFECT[this.grade].grip : 1) * mudGrip(this.playerMud, this.wet);
+    return (this.grade && this.effect > 0 ? LAUNCH_EFFECT[this.grade].grip : 1) * mudGrip(Math.max(this.playerMud, this.tires.effective), this.wet);
   }
 
   /** Racer `k`'s lane and speed limit (`chooseLane`), against the other racers and the traffic. */
@@ -449,9 +471,11 @@ export class RaceSession {
     }
     const playerS = this.progress[0];
     this.player.bus.draft = this.slips[0].step(this.playerHeld ? 0 : this.draftTarget[0], dt);
+    this.player.nitro.drafting(this.player.bus.draft, dt);
     this.rivals.forEach((r, i) => {
       if (r.wait > 0) r.wait -= dt;
       r.bus.draft = this.slips[i + 1].step(r.fall.falling || r.wait > 0 ? 0 : this.draftTarget[i + 1], dt);
+      r.nitro.drafting(r.bus.draft, dt);
       if (!this.game.green || r.fall.falling || r.wait > 0) {
         r.throttle = 0;
         r.bus.update(this.hold, dt);
@@ -466,9 +490,9 @@ export class RaceSession {
       const input = r.driver.drive(r.bus, dt, pace, r.nitro.ready || r.nitro.active, way.limit);
       const e = r.grade && r.effect > 0 ? LAUNCH_EFFECT[r.grade] : null;
       if (r.effect > 0) r.effect -= dt;
-      r.bus.grip = this.weatherGrip * (e?.grip ?? 1) * mudGrip(r.mud, this.wet);
+      r.bus.grip = this.weatherGrip * (e?.grip ?? 1) * mudGrip(Math.max(r.mud, r.tires.effective), this.wet);
       r.bus.mud = r.mud;
-      r.driver.wet = Math.max(this.wet, r.mud);
+      r.driver.wet = Math.max(this.wet, r.mud, r.tires.effective);
       r.throttle = input.throttle * (e?.throttle ?? 1);
       r.bus.update({ throttle: r.throttle, steer: input.steer, handbrake: input.handbrake, boost: r.nitro.step(!!input.boost, dt) || (!!e && e.boost > 0) }, dt);
     });
@@ -488,7 +512,11 @@ export class RaceSession {
     const mudOf = (u: RoadUser) => mudAt(field, g.time, u.s - u.len * 0.4, u.off, this.wet, hw);
     this.playerMud = g.green ? mudOf(this.users[0]) : 0;
     this.player.bus.mud = this.playerMud;
-    this.rivals.forEach((r, i) => (r.mud = g.green ? mudOf(this.users[i + 1]) : 0));
+    this.tires.step(this.playerMud, dt);
+    this.rivals.forEach((r, i) => {
+      r.mud = g.green ? mudOf(this.users[i + 1]) : 0;
+      r.tires.step(r.mud, dt);
+    });
     const cam = this.camera?.position;
     const p = cam ?? this.player.bus.position(this.nose);
     this.ear.x = p.x;
@@ -581,6 +609,7 @@ export class RaceSession {
         const back = trackPose(t, Math.max(t.start - 12, r.lastS - FALL_BACK), r.driver.lane);
         r.bus.reset({ x: back.pos.x, y: back.y, z: back.pos.z, heading: back.heading, pitch: back.pitch });
         r.driver.rescued();
+        r.tires.reset();
         this.noseS[i + 1] = -1;
         this.becomeGhost(r.ghost, r.bus, GHOST_TIME);
       }
@@ -633,6 +662,8 @@ export class RaceSession {
       progress: this.progress,
       length: g.length,
       wait: g.phase === 'racing' ? this.wait : 0,
+      tires: this.tires.visible ? this.tires.level : 0,
+      offRoad: g.phase === 'racing' ? this.offRoad : 0,
     });
   }
 
@@ -700,6 +731,8 @@ export class RaceSession {
     m.life = life;
     const k = 1 + this.rivals.length + j;
     if (life === 'gone') {
+      const at = this.bump.far.findIndex((f) => f.bus === m.remote.bus);
+      if (at >= 0) this.bump.far.splice(at, 1);
       m.remote.dispose(this.world);
       this.scene.remove(m.model.root);
       this.tags?.remove(m.remote.bus);
@@ -713,6 +746,19 @@ export class RaceSession {
     }
     m.remote.forceGhost = life === 'ghost';
     this.tags?.setNote(m.remote.bus, life === 'ghost');
+  }
+
+  /** Around each physics step (before and after `world.step()`): vehicles that hit each other bounce apart. */
+  bumpBefore(): void {
+    this.bump.before();
+  }
+  bumpAfter(dt: number): void {
+    this.bump.after(dt);
+  }
+
+  /** Online: another client's bump on one of our buses (racer keys, impulse N s). */
+  receiveBump(from: string, to: string, j: V3, at: V3): void {
+    this.bump.receive(from, to, j, at);
   }
 
   /** Online: our own link to the room. Reconnecting shows a banner; closed for good, the race goes on alone. */
@@ -829,6 +875,7 @@ export class RaceSession {
     for (const r of this.rivals) {
       r.bus.reset({ x: r.slot.pos.x, y: r.slot.y, z: r.slot.pos.z, heading: r.slot.heading, pitch: r.slot.pitch });
       r.driver.rescued();
+      r.tires.reset();
       r.nitro.reset();
       r.fall.reset();
       r.grade = null;
@@ -859,6 +906,8 @@ export class RaceSession {
     this.clock = 0;
     this.sub = 0;
     this.playerMud = 0;
+    this.tires.reset();
+    this.offRoad = 0;
     this.player.bus.mud = 0;
     for (const r of this.rivals) (r.mud = 0), (r.bus.mud = 0);
     this.game = new RaceGame(this.game.racers.map((r) => r.name), this.track.finish - this.track.start);

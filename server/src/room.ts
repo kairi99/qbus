@@ -29,6 +29,8 @@ export const GO_DELAY = 4500;
 export const FINISH_TIMEOUT = 90_000;
 /** An empty room (no online seat) is forgotten this long after its last activity. */
 export const EXPIRE_AFTER = 600_000;
+/** Most bumps relayed per seat per second (a pile-up is a handful). */
+export const BUMPS_PER_SEC = 20;
 /** `Out.to` of the reply to a rejected `hello` (that socket has no seat). */
 export const REJECT = -1;
 
@@ -76,7 +78,8 @@ const TOKEN_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456
  * One room's rules, pure (no sockets, no clock of its own): every input is a message with the
  * time it arrived, every answer a list of `Out`. Phases: lobby -> loading (everyone loads the
  * track) -> racing (from `go`) -> results; from results the host's `set` or anyone's `me {ready}`
- * returns the room to the lobby (ready flags cleared, offline seats gone).
+ * returns the room to the lobby (ready flags cleared, offline seats gone); so does a new player
+ * arriving at results, or at a race every seat has left.
  */
 export class RoomLogic {
   private s: RoomState;
@@ -109,6 +112,12 @@ export class RoomLogic {
   get empty(): boolean {
     return !this.s.seats.some((x) => x.online);
   }
+  /** What a new player would find: results and a race nobody is in count as the lobby (offline seats would go). */
+  joinInfo(): { phase: RoomPhase; seats: number } {
+    const s = this.s;
+    if (s.phase === 'results' || (s.phase === 'racing' && this.empty)) return { phase: 'lobby', seats: s.seats.filter((x) => x.online).length };
+    return { phase: s.phase, seats: s.seats.length };
+  }
   expired(now: number): boolean {
     return this.empty && now >= this.s.lastActivity + EXPIRE_AFTER;
   }
@@ -125,6 +134,9 @@ export class RoomLogic {
       seat.online = true;
       seat.droppedAt = null;
     } else {
+      // A race nobody is in any more (every seat offline) is over; results nobody left is the lobby for the next one.
+      if (s.phase === 'racing' && this.empty) this.finish();
+      if (s.phase === 'results') this.toLobby();
       if (s.phase !== 'lobby') return reject('racing');
       if (s.seats.length >= MAX_SEATS) return reject('full');
       let id = 0;
@@ -181,6 +193,8 @@ export class RoomLogic {
         s.last ??= {};
         for (const c of msg.cars) if ('seat' in c.who ? c.who.seat === seat : me.host) s.last[racerKey(c.who)] = c.s;
         return [{ to: 'others', from: seat, msg: { t: 'st', from: seat, at: msg.at, cars: msg.cars } }];
+      case 'bump':
+        return this.bump(me, msg, now);
       case 'fin':
         return this.fin(me, msg.who, msg.time, now);
       case 'ping':
@@ -346,6 +360,29 @@ export class RoomLogic {
       const who: Racer = g.kind === 'human' ? { seat: g.seat } : { ai: g.idx };
       return { who, time: this.s.times[racerKey(who)] ?? null };
     });
+  }
+
+  /** Bumps each seat sent in the current second (not persisted: a restart forgets it, which is harmless). */
+  private bumps = new Map<number, { sec: number; n: number }>();
+
+  /**
+   * A collision's share for another racer, relayed to whoever simulates it: only in a race, only
+   * for one of the sender's own buses (its seat, or an AI when it is the host), to another
+   * online seat (the host for an AI), `BUMPS_PER_SEC` a second at most.
+   */
+  private bump(me: SeatState, msg: Extract<C2S, { t: 'bump' }>, now: number): Out[] {
+    const s = this.s;
+    if (s.phase !== 'racing') return [];
+    const mine = 'seat' in msg.from ? msg.from.seat === me.id : me.host;
+    if (!mine) return [];
+    const owner = 'seat' in msg.to ? msg.to.seat : (s.seats.find((x) => x.host)?.id ?? -1);
+    const target = s.seats.find((x) => x.id === owner);
+    if (!target || !target.online || owner === me.id) return [];
+    const sec = Math.floor(now / 1000);
+    const r = this.bumps.get(me.id);
+    if (!r || r.sec !== sec) this.bumps.set(me.id, { sec, n: 1 });
+    else if (++r.n > BUMPS_PER_SEC) return [];
+    return [{ to: owner, from: me.id, msg: { t: 'bump', from: msg.from, to: msg.to, j: msg.j, at: msg.at } }];
   }
 
   private fin(me: SeatState, who: Racer, time: number, now: number): Out[] {

@@ -433,19 +433,29 @@ export class Menu {
       }
       busy(true);
       note.textContent = 'Buscando la sala…';
-      try {
-        const info = await roomInfo(c);
-        if (!info) note.textContent = 'No existe esa sala';
-        else {
-          // A seat this browser had in that room (same name) comes back to it, even to a race on.
-          const mine = savedSeat(c);
-          const token = mine && mine.name === cleanName(name.value) ? mine.token : undefined;
-          if (info.phase !== 'lobby' && !token) note.textContent = 'Esa sala ya está corriendo';
-          else if (info.seats >= MAX_SEATS && !token) note.textContent = 'Sala llena';
-          else return this.lobby(new RoomConnection(c, { name: cleanName(name.value), vehicle: this.onlineVehicle, token }, { giveUpMs: LOBBY_GIVE_UP }), c);
+      // A race on: wait for it to end (asking every few seconds), then walk in.
+      for (let waited = 0; ; waited += RACE_POLL_MS) {
+        try {
+          const info = await roomInfo(c);
+          if (!info) note.textContent = 'No existe esa sala';
+          else {
+            // A seat this browser had in that room (same name) comes back to it, even to a race on.
+            const mine = savedSeat(c);
+            const token = mine && mine.name === cleanName(name.value) ? mine.token : undefined;
+            if (info.phase !== 'lobby' && !token) {
+              note.textContent = RACE_ON;
+              if (waited < RACE_WAIT_MS && note.isConnected) {
+                await new Promise((r) => setTimeout(r, RACE_POLL_MS));
+                if (note.isConnected) continue;
+                return;
+              }
+            } else if (info.seats >= MAX_SEATS && !token) note.textContent = 'Sala llena';
+            else return this.lobby(new RoomConnection(c, { name: cleanName(name.value), vehicle: this.onlineVehicle, token }, { giveUpMs: LOBBY_GIVE_UP }), c);
+          }
+        } catch {
+          note.textContent = NO_SERVER;
         }
-      } catch {
-        note.textContent = NO_SERVER;
+        break;
       }
       busy(false);
     });
@@ -589,25 +599,32 @@ export class Menu {
     if (host) {
       const aiChoices = Array.from({ length: maxAi + 1 }, (_, n) => n);
       options = `
+        <div class="mn-box mn-box-race" role="group" aria-label="Carrera">
+        <h3 class="mn-box-title">Carrera</h3>
         <fieldset><legend>Pista</legend>${TRACK_LIST.map((t) => choice('track', t.id, t.name, st.track === t.id, `track-${t.id}`)).join('')}</fieldset>
-        <fieldset><legend>Rivales de la IA</legend>${aiChoices.map((n) => choice('ai', String(n), String(n), ai === n, `ai-${n}`)).join('')}</fieldset>
+        <fieldset><legend>Hora</legend>${TIME_OPTIONS.map((o) => choice('tod', o.value, o.label, st.tod === o.value, `tod-${o.value}`)).join('')}</fieldset>
+        <fieldset><legend>Lluvia</legend>${RAIN_OPTIONS.map((o) => choice('rain', o.value, o.label, st.rain === o.value, `rain-${o.value}`)).join('')}</fieldset>${slidesHere ? `
+        <fieldset><legend>Derrumbes</legend>${choice('slides', 'on', 'Sí', st.slides, 'slides-on')}${choice('slides', 'off', 'No', !st.slides, 'slides-off')}</fieldset>` : ''}
+        </div>
+        <div class="mn-box mn-box-ai" role="group" aria-label="Rivales de la IA">
+        <h3 class="mn-box-title">Rivales de la IA</h3>
+        <fieldset><legend>Cuántos</legend>${aiChoices.map((n) => choice('ai', String(n), String(n), ai === n, `ai-${n}`)).join('')}</fieldset>
         <fieldset><legend>Choferes</legend>${SKILL_OPTIONS.map((o) => choice('skill', o.value, o.label, st.skill === o.value, `skill-${o.value}`)).join('')}</fieldset>
         <fieldset><legend>Qué manejan</legend>
           ${choice('rivalBus', 'mixed', 'De todo un poco', st.rivalBus === 'mixed', 'rb-mixed')}
           ${choice('rivalBus', 'same', 'Lo mismo que los panas', st.rivalBus === 'same', 'rb-same')}
           ${VEHICLES.map((v) => choice('rivalBus', v.preset.id, v.preset.name, st.rivalBus === v.preset.id, `rb-${v.preset.id}`)).join('')}
         </fieldset>
-        <fieldset><legend>Hora</legend>${TIME_OPTIONS.map((o) => choice('tod', o.value, o.label, st.tod === o.value, `tod-${o.value}`)).join('')}</fieldset>
-        <fieldset><legend>Lluvia</legend>${RAIN_OPTIONS.map((o) => choice('rain', o.value, o.label, st.rain === o.value, `rain-${o.value}`)).join('')}</fieldset>${slidesHere ? `
-        <fieldset><legend>Derrumbes</legend>${choice('slides', 'on', 'Sí', st.slides, 'slides-on')}${choice('slides', 'off', 'No', !st.slides, 'slides-off')}</fieldset>` : ''}`;
+        </div>`;
     } else {
-      options = `<dl class="mn-sum">
+      options = `<div class="mn-box mn-box-race" role="group" aria-label="Carrera"><h3 class="mn-box-title">Carrera</h3><dl class="mn-sum">
         <div><dt>Pista</dt><dd>${esc(track)}</dd></div>
-        <div><dt>Rivales de la IA</dt><dd>${ai}</dd></div>
-        <div><dt>Choferes</dt><dd>${esc(skill)}</dd></div>
-        <div><dt>Qué manejan</dt><dd>${esc(who)}</dd></div>
         <div><dt>Hora</dt><dd>${esc(time)}</dd></div>
-        <div><dt>Lluvia</dt><dd>${esc(rain)}</dd></div>${slidesHere ? `<div><dt>Derrumbes</dt><dd>${st.slides ? 'Sí' : 'No'}</dd></div>` : ''}</dl>`;
+        <div><dt>Lluvia</dt><dd>${esc(rain)}</dd></div>${slidesHere ? `<div><dt>Derrumbes</dt><dd>${st.slides ? 'Sí' : 'No'}</dd></div>` : ''}</dl></div>
+        <div class="mn-box mn-box-ai" role="group" aria-label="Rivales de la IA"><h3 class="mn-box-title">Rivales de la IA</h3><dl class="mn-sum">
+        <div><dt>Cuántos</dt><dd>${ai}</dd></div>
+        <div><dt>Choferes</dt><dd>${esc(skill)}</dd></div>
+        <div><dt>Qué manejan</dt><dd>${esc(who)}</dd></div></dl></div>`;
     }
     const best = bestOnline(st.track);
     const others = room.seats.filter((x) => !x.host && x.online);
@@ -621,7 +638,7 @@ export class Menu {
     return `
       <h2>En la sala (${humans}/${MAX_SEATS})</h2>
       <ul class="mn-seats">${rows.join('')}</ul>
-      <div class="mn-opts"><h2>La carrera</h2>${options}${best ? `<p class="mn-best" data-k="best">Tu mejor en línea en ${esc(track)}: <b>${raceClock(best.time)}</b> · ${esc(best.bus)} · ${best.place}º de ${best.racers}</p>` : ''}</div>
+      <div class="mn-opts">${options}${best ? `<p class="mn-best" data-k="best">Tu mejor en línea en ${esc(track)}: <b>${raceClock(best.time)}</b> · ${esc(best.bus)} · ${best.place}º de ${best.racers}</p>` : ''}</div>
       <div class="mn-lobby-actions">${action}</div>
       <p class="mn-note" role="status" aria-live="polite">${esc(note)}</p>`;
   }
@@ -728,6 +745,8 @@ export class Menu {
     if (!['mixed', 'same'].includes(r.rivalBus) && !VEHICLES.some((v) => v.preset.id === r.rivalBus)) r.rivalBus = 'mixed';
     const opts = this.root.querySelector<HTMLElement>('.mn-race-opts')!;
     opts.innerHTML = `
+      <div class="mn-box mn-box-ai" role="group" aria-label="Rivales de la IA">
+      <h3 class="mn-box-title">Rivales de la IA</h3>
       <fieldset>
         <legend>Rivales</legend>
         ${RIVAL_COUNTS.map((n) => choice('rivals', String(n), String(n), r.rivals === n)).join('')}
@@ -742,6 +761,7 @@ export class Menu {
         <legend>Choferes</legend>
         ${SKILL_OPTIONS.map((o) => choice('skill', o.value, o.label, r.skill === o.value)).join('')}
       </fieldset>
+      </div>
       <fieldset>
         <legend>Tráfico en la vía</legend>
         ${choice('traffic', 'off', 'Vía libre', !r.traffic)}
@@ -982,13 +1002,17 @@ function choice(name: string, value: string, label: string, checked: boolean, ke
   return `<label class="mn-choice"><input type="radio" name="${name}" value="${value}" ${key ? `data-k="${key}"` : ''} ${checked ? 'checked' : ''} /><span>${label}</span></label>`;
 }
 
+const RACE_ON = 'Carrera en curso: espera a que termine y entras solo…';
+/** How often a join to a room with a race on asks again, and how long it keeps waiting. */
+const RACE_POLL_MS = 3000;
+const RACE_WAIT_MS = 600_000;
 const NO_SERVER = 'No hay conexión con el servidor de salas';
 /** The lobby keeps trying a lost link a little past the room's grace for a seat. */
 const LOBBY_GIVE_UP = 65_000;
 
 const ERROR_TEXT: Record<string, string> = {
   full: 'Sala llena',
-  racing: 'Esa sala ya está corriendo',
+  racing: 'Carrera en curso: espera a que termine',
   version: 'Actualiza la página',
   unknown: 'No existe esa sala',
 };

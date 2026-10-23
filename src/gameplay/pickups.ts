@@ -1,7 +1,7 @@
 /** Each pickup fills this much of the tank. */
 export const PICKUP_FILL = 0.5;
 /** Seconds until a taken pickup is back on the road. */
-export const PICKUP_RESPAWN = 8;
+export const PICKUP_RESPAWN = 15;
 /** A racer takes a pickup this far beyond its own sides (m): the canister's radius and some. */
 const REACH = 0.6;
 

@@ -42,7 +42,7 @@ test('two players meet in an online lobby', async ({ browser }) => {
 
   // The host's options reach the guest.
   await a.page.locator('input[name="ai"][value="1"]').check();
-  await expect(b.page.locator('.mn-sum')).toContainText('Rivales de la IA1');
+  await expect(b.page.locator('.mn-box-ai')).toContainText('Cuántos1');
   await expect(b.page.locator('.mn-seat-empty').first()).toHaveText('IA');
   await expect(a.page.locator('.mn-seat-empty').nth(1)).toHaveText('Libre');
 
@@ -52,8 +52,11 @@ test('two players meet in an online lobby', async ({ browser }) => {
   await b.page.getByRole('button', { name: '¡Listo!' }).click();
   await expect(start).toBeEnabled();
   await expect(a.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('Listo');
-  await a.page.screenshot({ path: `${shots}/online-lobby-host.png` });
-  await b.page.screenshot({ path: `${shots}/online-lobby-guest.png` });
+  await a.page.screenshot({ path: `${shots}/online-lobby-host.png`, fullPage: true });
+  await b.page.screenshot({ path: `${shots}/online-lobby-guest.png`, fullPage: true });
+  await a.page.setViewportSize({ width: 390, height: 780 });
+  await a.page.screenshot({ path: `${shots}/online-lobby-host-phone.png`, fullPage: true });
+  await a.page.setViewportSize({ width: 1280, height: 720 });
 
   // B reloads the page: back in the same room, same seat (still ready), the host unchanged.
   await b.page.reload();

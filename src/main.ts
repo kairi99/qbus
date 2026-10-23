@@ -30,8 +30,9 @@ import { Tutorial } from './ui/tutorial';
 import { Weather, gripFor, parseRainSetting } from './gameplay/weather';
 import { FloodWater, floodBasins, floodedEdges, waterDepth } from './world/floods';
 import { RainView } from './world/rain';
-import { locateOnTrack, trackPose } from './world/track';
+import { type TrackData, locateOnTrack, trackPose } from './world/track';
 import { FALL_BACK, FallWatch } from './gameplay/fallWatch';
+import { OffRoad } from './gameplay/offRoad';
 import { RaceSession } from './gameplay/raceSession';
 import { TireSmoke, dustOf, smokeOf } from './vehicle/tireSmoke';
 import { distToPolyline } from './world/geom';
@@ -186,6 +187,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     session.restart();
     racing?.restart();
     fall.reset();
+    offRoad.reset();
     trackS = -1;
     smoke.clear();
   };
@@ -237,6 +239,17 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // On a mountain track: going over the edge puts the bus back on the road a little behind.
   const race = city.race ?? null;
   const fall = new FallWatch();
+  const offRoad = new OffRoad();
+  // An R reset or the off-road countdown running out: back in lane `off` at `s`, then the wait.
+  const putBackOnTrack = (race: TrackData, s: number, off: number) => {
+    const at = trackPose(race, s, off);
+    bus.reset({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading, pitch: at.pitch });
+    session.trafficBodies.clearSpot({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading }, preset.body.length, preset.body.width);
+    racing?.playerReset();
+    fall.reset();
+    offRoad.reset();
+    trackS = -1;
+  };
   let trackS = -1;
   /** How far past the asphalt's edge the bus is (m, negative on it), on a track. */
   let offEdge = -1;
@@ -296,12 +309,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         if (!racing.canReset) continue;
         const p = bus.position(scratchPos);
         const at = trackS >= 0 ? locateOnTrack(race, p, trackS, 120) : locateOnTrack(race, p);
-        const s = trackPose(race, Math.max(race.start, trackS >= 0 ? trackS : at.s), at.off < 0 ? -2.1 : 2.1);
-        bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
-        session.trafficBodies.clearSpot({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading }, preset.body.length, preset.body.width);
-        racing.playerReset();
-        fall.reset();
-        trackS = -1;
+        putBackOnTrack(race, Math.max(race.start, trackS >= 0 ? trackS : at.s), at.off < 0 ? -2.1 : 2.1);
       } else if (action === 'reset') {
         const t = bus.position();
         // A road at the level the bus is on, on a spot where it fits (clear of walls and roofs).
@@ -380,7 +388,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         net.tick(PHYSICS_STEP, bus, drive.throttle, input.hornHeld);
       }
       session.beforeStep(PHYSICS_STEP);
+      racing?.bumpBefore();
       world.step();
+      racing?.bumpAfter(PHYSICS_STEP);
       session.physicsStep(PHYSICS_STEP);
       acc -= PHYSICS_STEP;
     }
@@ -406,6 +416,16 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         bus.reset({ x: s.pos.x, y: s.y, z: s.pos.z, heading: s.heading, pitch: s.pitch });
         trackS = -1;
         racing?.playerFell();
+        offRoad.reset();
+      }
+      // Wandering on the mountain: a countdown, then back on the road where it left.
+      if (racing) {
+        const lost = offRoad.update(dt, { edge: offEdge, s: here.s, off: here.off, wheels: bus.wheelsOnGround, active: racing.canReset && !racing.playerHeld && !fall.falling });
+        racing.offRoad = offRoad.countdown;
+        if (lost) {
+          session.notice('¡Fuera de la vía!', 'bad');
+          putBackOnTrack(race, Math.max(race.start, offRoad.departS), offRoad.side * 2.1);
+        }
       }
     }
     props.sync();

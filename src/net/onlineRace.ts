@@ -198,6 +198,8 @@ export class OnlineRace {
     });
     conn.on('room', (m) => (this.seats = m.seats));
     conn.on('result', (m) => this.race?.applyResults(m.rows, m.final));
+    // Another client's collision share for one of our buses (the player, or the AI simulated here).
+    conn.on('bump', (m) => this.race?.receiveBump(racerKey(m.from), racerKey(m.to), { x: m.j[0], y: 0, z: m.j[1] }, { x: m.at[0], y: m.at[1], z: m.at[2] }));
   }
 
   /** The race this feeds (made after the grid is known). */
@@ -265,6 +267,8 @@ export class OnlineRace {
     this.horn.feed(hornHeld);
     for (const f of race.finishes) this.conn.send({ t: 'fin', who: racerFromKey(f.key), time: f.time });
     race.finishes.length = 0;
+    for (const b of race.bumpsOut) this.conn.send({ t: 'bump', from: racerFromKey(b.from), to: racerFromKey(b.to), j: [Math.round(b.j.x), Math.round(b.j.z)], at: [Math.round(b.at.x * 100) / 100, Math.round(b.at.y * 100) / 100, Math.round(b.at.z * 100) / 100] });
+    race.bumpsOut.length = 0;
     this.clockAcc += dt;
     if (this.clockAcc < 1 / SNAP_HZ) return;
     this.clockAcc %= 1 / SNAP_HZ;

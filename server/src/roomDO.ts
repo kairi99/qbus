@@ -43,7 +43,7 @@ export class Room extends DurableObject<Env> {
     if (url.pathname === '/info') {
       if (!this.inited) return new Response(JSON.stringify({ exists: false }), { status: 404 });
       const r = this.logic();
-      return new Response(JSON.stringify({ exists: true, phase: r.phase, seats: r.state.seats.length }));
+      return new Response(JSON.stringify({ exists: true, ...r.joinInfo() }));
     }
     if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('expected websocket', { status: 426 });
     if (!this.inited) return new Response('no such room', { status: 404 });
@@ -132,7 +132,7 @@ export class Room extends DurableObject<Env> {
     }
     const outs = logic.handle(seat, msg, now);
     this.route(outs, ws);
-    if (msg.t !== 'st' && msg.t !== 'ping') await this.persist(now);
+    if (msg.t !== 'st' && msg.t !== 'bump' && msg.t !== 'ping') await this.persist(now);
   }
 
   private async dropSocket(ws: WebSocket): Promise<void> {

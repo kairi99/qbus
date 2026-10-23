@@ -30,12 +30,12 @@ test('two players race online: shared start, each sees the other, results from t
   // The Silante has landslides, on by default: the lobby asks (guests see the answer) and the link carries it.
   await a.page.locator('input[name="track"][value="silante"]').check();
   await expect(a.page.locator('input[name="slides"][value="on"]')).toBeChecked();
-  await expect(b.page.locator('.mn-sum')).toContainText('Derrumbes');
+  await expect(b.page.locator('.mn-opts')).toContainText('Derrumbes');
   // The host picks the light and the rain: the same for everyone, whatever each one's own Ajustes say.
   await a.page.locator('input[name="tod"][value="sunset"]').check();
   await a.page.locator('input[name="rain"][value="always"]').check();
-  await expect(b.page.locator('.mn-sum')).toContainText('Atardecer');
-  await expect(b.page.locator('.mn-sum')).toContainText('Siempre');
+  await expect(b.page.locator('.mn-opts')).toContainText('Atardecer');
+  await expect(b.page.locator('.mn-opts')).toContainText('Siempre');
   await b.page.getByRole('button', { name: '¡Listo!' }).click();
   const start = a.page.getByRole('button', { name: '¡Arrancar!' });
   await expect(start).toBeEnabled();

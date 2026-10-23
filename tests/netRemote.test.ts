@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { addGround, createWorld, initRapier, PHYSICS_STEP, GROUP, groups } from '../src/physics/world';
 import { BusPhysics } from '../src/vehicle/bus';
 import { RemoteBus } from '../src/net/remoteBus';
+import { BumpTracker } from '../src/physics/bump';
 import { MAX_EXTRAPOLATE, RENDER_DELAY, SNAP_DIST, SnapshotBuffer, carState, newPose } from '../src/net/snapshots';
 import type { CarState } from '../src/net/protocol';
 import type { BusPreset } from '../src/vehicle/busPreset';
@@ -86,14 +87,13 @@ describe('physics', () => {
     expect(carState(popularBus, { ai: 0 }, 0, 0).rears).toBeUndefined();
   });
 
-  it('a remote bus shoves a parked local bus and follows its poses exactly', () => {
+  it('a remote bus exchanges no force with a local one (its collision is the bump layer\'s) and follows its poses exactly', () => {
     const world = createWorld();
     addGround(world, 500);
     const local = new BusPhysics(world, popular as BusPreset, { x: 0, y: 1, z: 0, heading: 0 });
     for (let i = 0; i < 120; i++) { local.update({ throttle: 0, steer: 0, handbrake: false }, PHYSICS_STEP); world.step(); }
     const x0 = local.body.translation().x;
     const remote = new RemoteBus(world, popular as BusPreset, { x: -30, y: 1, z: 0, heading: 0 });
-    const L = (popular as BusPreset).body.length;
     const y = remote.bus.body.translation().y;
     let t = 0;
     for (let i = 0; i < 300; i++) {
@@ -103,11 +103,43 @@ describe('physics', () => {
       local.update({ throttle: 0, steer: 0, handbrake: false }, PHYSICS_STEP);
       world.step();
     }
-    expect(local.body.translation().x - x0).toBeGreaterThan(0.5);
+    // The remote drove through: no solver contact between them, nothing pushed.
+    expect(Math.abs(local.body.translation().x - x0)).toBeLessThan(0.1);
     // follows snapshots (within the one-step lag of the interpolation)
     expect(remote.bus.body.translation().x).toBeGreaterThan(-30 + 299 * 0.15 - 0.2);
     expect(remote.bus.body.translation().y).toBeCloseTo(y, 3);
-    expect(L).toBeGreaterThan(0);
+    expect(remote.vel.x).toBeGreaterThan(7);
+  });
+
+  it('with the bump layer a remote bus shoves a parked local bus, which is dealt its share and the remote its share to send', () => {
+    const world = createWorld();
+    addGround(world, 500);
+    const local = new BusPhysics(world, popular as BusPreset, { x: 0, y: 1, z: 0, heading: 0 });
+    for (let i = 0; i < 120; i++) { local.update({ throttle: 0, steer: 0, handbrake: false }, PHYSICS_STEP); world.step(); }
+    const remote = new RemoteBus(world, popular as BusPreset, { x: -30, y: 1, z: 0, heading: 0 });
+    const y = remote.bus.body.translation().y;
+    const bump = new BumpTracker(world);
+    bump.own.push({ key: 's0', bus: local });
+    bump.far.push({ key: 's1', bus: remote.bus, vel: remote.vel, shove: (dv) => remote.shove(dv) });
+    const sent: { to: string; j: number }[] = [];
+    bump.send = (to, _from, j) => sent.push({ to, j: j.x });
+    let t = 0;
+    let vmax = 0;
+    for (let i = 0; i < 300; i++) {
+      t += 1000 / 60;
+      remote.push(t, { ...car(0), p: [-30 + (i + 1) * 0.15, y, 0] });
+      remote.apply(t + RENDER_DELAY, PHYSICS_STEP);
+      local.update({ throttle: 0, steer: 0, handbrake: false }, PHYSICS_STEP);
+      bump.before();
+      world.step();
+      bump.after(PHYSICS_STEP);
+      vmax = Math.max(vmax, local.body.linvel().x);
+    }
+    expect(vmax).toBeGreaterThan(5);
+    expect(sent.length).toBeGreaterThanOrEqual(1);
+    expect(sent[0].to).toBe('s1');
+    // The remote comes from behind: its share pushes it back.
+    expect(sent[0].j).toBeLessThan(0);
   });
 
   it('remote buses ignore each other and static; wheel ray filter excludes REMOTE', () => {

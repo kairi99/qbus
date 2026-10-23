@@ -226,6 +226,30 @@ describe('online rooms (wrangler dev)', () => {
     expect(gone.seats[0]).toMatchObject({ id: wb.you, host: true });
   });
 
+  it('a new player: refused while the race is on, in the lobby once it is over (players left or not)', async () => {
+    const { code, a, b, wa, wb } = await startRace();
+    const info = async () => (await (await fetch(`${HTTP}/rooms/${code}`, { headers: { Origin: ORIGIN } })).json()) as { phase: string };
+    expect((await info()).phase).toBe('racing');
+    const early = client(code);
+    await early.send(hello('Pronto'));
+    expect(await early.waitFor((m) => m.t === 'error')).toEqual({ t: 'error', code: 'racing' });
+    await a.send({ t: 'fin', who: { seat: wa.you }, time: 70 });
+    await b.send({ t: 'fin', who: { seat: wb.you }, time: 71 });
+    await a.send({ t: 'fin', who: { ai: 0 }, time: 72 });
+    await a.waitFor((m) => isResult(m) && m.final);
+    // Results, everybody gone without going back to the lobby.
+    a.close();
+    b.close();
+    await new Promise((r) => setTimeout(r, 200));
+    expect((await info()).phase).toBe('lobby');
+    const late = client(code);
+    await late.send(hello('Tarde'));
+    await late.waitFor(isWelcome);
+    const room = await late.waitFor((m): m is Extract<S2C, { t: 'room' }> => isRoom(m) && m.phase === 'lobby');
+    expect(room.seats).toHaveLength(1);
+    expect(room.seats[0].host).toBe(true);
+  });
+
   it('a lobby seat comes back with its name, vehicle and ready flag', async () => {
     const code = await createRoom();
     const a = client(code);

@@ -51,3 +51,23 @@ describe('Nitro', () => {
     expect(n.step(true, DT)).toBe(true);
   });
 });
+
+describe('Nitro slipstream refill', () => {
+  it('a full pull fills an empty tank in 8-10 s, a half pull in twice that, none while burning', () => {
+    const full = new Nitro();
+    full.level = 0;
+    let t = 0;
+    while (full.level < 1 && t < 30) (full.drafting(1, 0.05), (t += 0.05));
+    expect(t).toBeGreaterThan(8);
+    expect(t).toBeLessThan(10);
+    const half = new Nitro();
+    half.level = 0;
+    for (let i = 0; i < 100; i++) half.drafting(0.5, 0.05);
+    expect(half.level).toBeCloseTo(5 / 9 / 2, 1);
+    const burning = new Nitro();
+    burning.step(true, 0.1);
+    const before = burning.level;
+    burning.drafting(1, 0.5);
+    expect(burning.level).toBe(before);
+  });
+});

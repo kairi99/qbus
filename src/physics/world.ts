@@ -55,6 +55,16 @@ export function addTerrainCollider(world: RAPIER.World, t: Terrain, sink?: { pit
 export const GROUP = { STATIC: 0x0001, TRAFFIC: 0x0002, REMOTE: 0x0004, TRAIN: 0x0010, TRAINS: 8, ALL: 0xffff };
 export const groups = (member: number, filter: number) => (member << 16) | filter;
 /**
+ * Solver groups (which contacts push, as opposed to which are detected): a remote player's bus
+ * and a local vehicle detect each other but exchange no force, so the dynamic bus is not stopped
+ * dead against a kinematic one of infinite mass. `bump.ts` computes the collision response instead.
+ */
+export const SOLVER = { REMOTE: 0x4000, VEHICLE: 0x8000 };
+// Unsigned: a negative group number would set no group at all.
+export const VEHICLE_SOLVER = groups(SOLVER.VEHICLE, 0xffff & ~SOLVER.REMOTE) >>> 0;
+export const REMOTE_SOLVER = groups(SOLVER.REMOTE, 0xffff & ~SOLVER.VEHICLE) >>> 0;
+
+/**
  * A plain vehicle's own group: everything but STATIC (the world's), so that a ghost, which
  * touches only STATIC, passes through it. Wrecks and other buses share it.
  */

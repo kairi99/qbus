@@ -6,12 +6,14 @@ const DRIFT_FILL_PER_SEC = 0.2;
 const NEAR_MISS_FILL = 0.2;
 /** Tank refilled by each red light run. */
 const RED_LIGHT_FILL = 0.25;
+/** Tank refilled per second in a full slipstream pull (a full tank in about 9 s). */
+export const DRAFT_FILL_PER_SEC = 1 / 9;
 /** A new burst needs at least half a tank (no tapping it on fumes); a burst in progress runs dry. */
 export const MIN_TO_START = 0.5;
 
 /**
  * Nitro tank: starts full, burns out fast while held, and only refills by driving recklessly
- * (drifting, close calls and running red lights), never by waiting.
+ * (drifting, close calls, running red lights and, in a race, slipstream), never by waiting.
  */
 export class Nitro {
   /** 0..1 */
@@ -33,6 +35,11 @@ export class Nitro {
 
   drifting(dt: number): void {
     this.fill(DRIFT_FILL_PER_SEC * dt);
+  }
+
+  /** Slipstream: `pull` (0..1) of the draft refills the tank, but not while it burns. */
+  drafting(pull: number, dt: number): void {
+    if (!this.active) this.fill(DRAFT_FILL_PER_SEC * Math.max(0, pull) * dt);
   }
 
   nearMiss(count = 1): void {

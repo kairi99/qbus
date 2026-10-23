@@ -1,6 +1,6 @@
 import { IDLE, WINDOW } from '../gameplay/launch';
 import { type Racer, raceClock } from '../gameplay/raceGame';
-import { setText } from './dom';
+import { setStyle, setText } from './dom';
 
 /** The tachometer's scale: 0 to 8 (×1000 rpm), the needle sweeping 240°. */
 const TACH_MAX = 8;
@@ -72,6 +72,8 @@ export class RaceHud {
       <div class="rh-flash" data-k="flash" hidden></div>
       <div class="rh-photo" data-k="photo" hidden></div>
       <div class="rh-wait" data-k="wait" hidden>De vuelta en la vía… <b data-k="waitN">3</b></div>
+      <div class="rh-off" data-k="off" hidden>¡Vuelve a la vía! <b data-k="offN">6</b></div>
+      <div class="rh-mud" data-k="mud" hidden>¡Llantas con lodo! Menos agarre<i class="rh-mud-bar"><i data-k="mudBar"></i></i></div>
       <div class="rh-net" data-k="net" hidden><span data-k="netText"></span><button class="gh-btn rh-net-btn" data-act="retry" hidden>Reconectar</button></div>
       <div class="rh-hint" data-k="hint">Acelera <span class="keys-only">con <b>W</b></span> y mantén la aguja en lo <b class="rh-green">verde</b>: ¡salida perfecta!</div>
       <div class="rh-strip"><div class="rh-flag">🏁</div></div>
@@ -146,11 +148,17 @@ export class RaceHud {
   }
 
   /** `wait`: seconds before the player may go on after an R reset (0: none). */
-  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; wait: number }): void {
+  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; wait: number; tires: number; offRoad: number }): void {
     setText(this.k.place, `${f.place} / ${f.racers}`);
     const waiting = f.wait > 0;
     if (this.k.wait.hidden === waiting) this.k.wait.hidden = !waiting;
     if (waiting) setText(this.k.waitN, String(Math.ceil(f.wait)));
+    const lost = f.offRoad > 0;
+    if (this.k.off.hidden === lost) this.k.off.hidden = !lost;
+    if (lost) setText(this.k.offN, String(Math.ceil(f.offRoad)));
+    const muddy = f.tires > 0;
+    if (this.k.mud.hidden === muddy) this.k.mud.hidden = !muddy;
+    if (muddy) setStyle(this.k.mudBar, 'width', `${Math.round(f.tires * 20) * 5}%`);
     setText(this.k.time, raceClock(f.time));
     if (f.rpm !== null) this.needle.setAttribute('transform', `rotate(${angle(dial(f.rpm)).toFixed(1)} 100 100)`);
     if (this.tachHideIn > 0 && (this.tachHideIn -= dt) <= 0) {
