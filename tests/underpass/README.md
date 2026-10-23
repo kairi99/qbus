@@ -132,8 +132,17 @@ its 1 m step at node 257 is gone), the street beside the main cut no longer hang
 El Ejido kink (S2) is a knock, not a stall. Left: the interparroquial still knocks the ground beside
 the link's last meter of cut once, at 35 and 70 km/h. Moving streets renumbers the graph's edges
 and can move a structure's center by a meter: rename the entries (map old to new by catalog
-order). The traffic suite's dice move with them: the (-876,-220) stall passes at seeds 1/2 now and
-an overlap of two lanes merging into node 172 (reproduced on the older city with seed 10) shows up instead.
+order). The traffic suite's dice move with them (seed-dependent
+stalls and overlaps at the cut sin nombre @(-876,-220), 10 de Agosto and 12 de Octubre show and
+vanish as the road layout moves them).
+
+2026-10-23: the (-876,-220) cut is fixed for good (seeds 1-20 clean): its two incoming edges (e524, 3
+lanes, e745, 1 lane) are drawn over the same road for their last 60 m and merge into one exit, so
+cars from both sat in each other's path. `traffic.ts` now keeps the standoff winner on record (the
+blocker flickered, so it crept), lets it ignore only the safety margin, widens the berth to a car
+merging alongside from another edge (`MERGE_BERTH`, corner skew), gives up a junction claim against
+a car stopped in the way (`YIELD_AFTER`), and keeps lane changes off lanes another edge's car sits
+over. Still dice-dependent elsewhere: 10 de Agosto overlap (seed 6), 12 de Octubre stuck (seed 6).
 
 2026-10-18: the S→N link to Patria (Q2) passes: Ladrón de Guevara, a street crossing over the main
 12 de Octubre cut by Patria, was never pushed aside (the whole street counted as "on the roof"),
@@ -149,3 +158,32 @@ The harness measures a car's height against a junction at street level as the gr
 isn't a step (a big junction's paving slopes with the ground).
 
 Each entry in the suites carries the exact numbers observed.
+
+2026-10-23 (strict run: 23 failures; 16 left, all in `known` lists, with the edge ids moved up by 9 by the busway change):
+- Fixed: the Patria bridge railing was one convex hull per 2 m section, and on a bend their square ends were teeth a car at
+  speed caught (the AE86 @ 90 km/h at (-658.3, 279.8), Δv 15 m/s): each side's railing is now one smooth frictionless
+  trimesh (`railSolid`, as on the mountain tracks), which also closes the Guambra up-ramp's drawn-but-not-solid rail
+  (e167 lanes 0/1) and the two swept-volume hull hits at (-588, 346) / (-587.5, 339). The Queseras link (Q1, wall at
+  (-57.4, 713.6)): the wall's 1 m parapet stood on ground only 0.25 m above the floor, its blunt end in the way where the ramp
+  tops out; the parapet now grows with the cut's depth (`SHALLOW`).
+- Harness fixes, not looser thresholds: (1) the surface check compares each lane with where it should be (`surfaceY`
+  of the center height, or the ground at the lane itself on street level), not the center's height: on a slope the road
+  follows the ground across (4 lanes, 5% cross slope = 0.4 m "mismatch"); (2) lips are measured on samples 0.5 m of path
+  length apart (the points where one edge meets the next sit centimeters apart, and a sample there turned any 8% grade into a
+  "6 cm lip"); (3) the drawn-vs-solid rays look 1 m past `SIDE_REACH`, only a wall inside it counts (a hull's near face at 9.7 m,
+  its drawn face at 10.0 m was "solid but not drawn"); `QBUS_LIST=n` lists n findings per test (default 8).
+- Not fixed: El Ejido (e694→e195). The kink is real (65 degrees in 10 m, radius ~7 m, tighter than a 12.5 m bus turns) and the
+  cut is boxed in: Av. 10 de Agosto runs over its east lane, another carriageway of it along the west wall, so neither the
+  wall nor the centerline has room. Tried: easing the line to a minimum radius of 10-28 m (`easeBends`, a Laplacian pull on the
+  tight points, ends and junctions fixed), wider bend room (`BEND_MAX` 3.5 and a tightness factor), pushing the west
+  street out (`clearCuts` taper/roof reach): the hit just moves to the next wall tip (the north wall under the crossing
+  street jogs 1.2 m in, or the bend's far end), at best Δv 3.2 instead of 4.6. Needs the street network there redrawn, not the cut.
+- Left in the surface check: seams of 7-18 cm where two road pieces meet. Their lifts differ by up to 9 cm at the shared
+  vertex (the grade smoothing averages each copy with its own neighbours); making the copies one vertex removes most of the
+  steps (0.27 m -> 0.10 m at (-82.9, 761.5)) but moves a wall tip closer to the 12 de Octubre N->S lane (the interparroquial
+  @ 35 then wedges at (-65.5, 751.5), 1.2 m from lane center), so it is not in. The 0.18 m seam at the top of the 12 de
+  Octubre ramp (-129.6, 782.4) and the one at the Guambra deck joint (-622.6, 312.8) stay with the lifts joined: a floor ending
+  below the ground and a junction slab, not a lift step.
+- Cut by the Guambra, articulado @ 60: Δv 0.95-1.16 against 1.0, flips with centimeters (now listed).
+
+- Follow-up 2026-10-23: cut walls (the two hulls of each retaining wall) are frictionless (`solidHull(..., true)`): a graze slides instead of grabbing. El Ejido no longer stalls (stuck 2.8 s -> 0 / 0.3 s; Δv 4.6 -> 2.8 @ 35, 6.4 -> 8.3 @ 70, still over 1.0: at 70 km/h in a radius-7 bend the bus meets the wall head-on) and the Guambra articulado graze passes (its entry is gone). One trimesh per wall side with chamfered tips was not built: hulls are what the drawn walls and the parity test use. Wider bend room (`BEND_MAX` 3.5, sweep x2.2) was tried again: Δv 1.6 @ 35 but it stalls the 12 de Octubre N->S passage (-72, 752) for all vehicles, so not in.

@@ -97,12 +97,12 @@ describe('ambient BRT buses', () => {
     const buses = sim.cars.filter((c) => c.kind === BRT_KIND);
     expect(buses).toHaveLength(count);
     // Bring them next to a station, as the session's recycle does around the player.
-    const st = mariscal.stops.find((s) => s.system)!;
-    sim.recycle({ pos: st.pos, heading: st.heading }, true);
+    // A station on a lane buses use (a busway stub that runs nowhere is closed to them: see `traps`).
+    const edge = graph.edges.find((e) => e.access === 'brt' && e.len > 100 && (sim as any).stations[e.id].length && (sim as any).brtEdges.includes(e))!;
+    const at = (sim as any).stations[edge.id][0] as number;
+    sim.recycle({ pos: lanePoint(edge, at, 0), heading: 0 }, true);
     expect(buses.some((b) => b.state === 'driving')).toBe(true);
     // One bus 60 m before a station on its lane.
-    const edge = graph.edges.find((e) => e.access === 'brt' && e.len > 100 && (sim as any).stations[e.id].length)!;
-    const at = (sim as any).stations[edge.id][0] as number;
     const bus = buses[0];
     const dir = edgeDir(edge, at - 60);
     Object.assign(bus, { state: 'driving', edge: edge.id, s: at - 60, lane: 0, offset: laneOffset(edge, 0), pos: lanePoint(edge, at - 60, 0), heading: Math.atan2(-dir.z, dir.x), speed: 8, dwell: 0, served: -1, turn: null, reserved: null });

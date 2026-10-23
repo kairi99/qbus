@@ -5,7 +5,7 @@
   "body": { "length": 17.7, "width": 2.55, "height": 3.4, "color": "#c8321e", "stripe": "#1f7a8c", "roof": "#e9e4d8" },
   "articulated": { "rearLength": 12.2, "gap": -2, "rearAxle": -2.5, "rearAxles": [-3.8, -5.1], "rearHeight": 3.9, "hingeY": -0.7, "rearMass": 5400, "yawLimitDeg": 75, "pitchLimitDeg": 9, "bevel": 1.2, "driftLock": 900, "driftYawRate": 1.2, "driftFrontGrip": 1, "reverseLock": 1200 },
   "capacity": 1,
-  "race": { "corner": 12, "brake": 5, "wetCorner": 4.2, "wetBrake": 3.6 },
+  "race": { "corner": 12, "brake": 5, "wetCorner": 3.2, "wetBrake": 2.8 },
   "mass": 3600,
   "centerOfMassHeight": 0.7,
   "engineForce": 7000,
@@ -26,7 +26,7 @@
     "sideFrictionStiffness": 1.0,
     "handbrakeFrictionSlip": 0.15
   },
-  "wet": { "front": 1.0, "rear": 0.4 },
+  "wet": { "front": 2.2, "rear": 0.25 },
   "drift": { "maxAngleDeg": 40, "gripRecovery": 2.5 },
   "cockpit": { "seat": [0.45, 0.95, -0.62] },
   "nitro": { "accel": 5, "topSpeedBonusKmh": 20 },

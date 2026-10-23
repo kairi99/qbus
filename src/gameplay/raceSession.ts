@@ -460,7 +460,7 @@ export class RaceSession {
     this.near.length = 0;
     for (let j = 0; j < this.users.length; j++) if (j !== k) this.near.push(this.users[j]);
     const slide = this.slides ? slideAdvice(this.slides.sites, this.game.time, me.s, me.len, brake, this.advice) : null;
-    return chooseLane(me, this.near, this.cars, home, SKILLS[this.skill].passClear, slide);
+    return chooseLane(me, this.near, this.cars, home, SKILLS[this.skill].passClear, slide, this.track.tunnels ?? null);
   }
 
   /** Each physics step, before the world steps: the rivals drive. */

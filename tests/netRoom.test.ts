@@ -392,6 +392,24 @@ describe('drops and timers', () => {
     r.tick(2000 + RACE_GRACE);
     expect(r.state.seats).toHaveLength(1);
   });
+  it('a seat back before the green light gets a normal start, no resume', () => {
+    const r = racing(2, 1);
+    const token = r.state.seats[1].token;
+    r.drop(1, 1500);
+    const j = r.join(hello('P1', token), 2000);
+    const go = last(j.out, 'go');
+    expect(go.goAt).toBe(1000 + GO_DELAY);
+    expect(go.resume).toBeUndefined();
+  });
+
+  it('start refused: not ready, or a grid missing a seat', () => {
+    const r = room(2);
+    expect(last(r.handle(0, { t: 'start', grid: humans(0, 1), seed: 1 }, 0), 'error').code).toBe('notready');
+    r.handle(1, { t: 'me', ready: true }, 0);
+    expect(last(r.handle(0, { t: 'start', grid: humans(0), seed: 1 }, 0), 'error').code).toBe('bad');
+    expect(r.state.phase).toBe('lobby');
+  });
+
   it('a seat back mid-race gets the start with where the room last saw everyone, and the times so far', () => {
     const r = racing(3, 1);
     const car = (who: any, s: number): CarState => ({ who, s, p: [0, 0, 0], q: [0, 0, 0, 1], v: [0, 0, 0], steer: 0, speed: 0, thr: 0, boost: 0 });
@@ -400,7 +418,7 @@ describe('drops and timers', () => {
     r.handle(2, { t: 'fin', who: { seat: 2 }, time: 55 }, 2500);
     const token = r.state.seats[1].token;
     r.drop(1, 3000);
-    const j = r.join(hello('P1', token), 4000);
+    const j = r.join(hello('P1', token), 6000);
     expect(j.seat).toBe(1);
     const go = last(j.out, 'go');
     expect(go.resume).toEqual({ s0: 120, a0: 90, s1: 77 });

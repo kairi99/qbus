@@ -17,8 +17,9 @@ const DIM_SUN = 0.7;
 const FOG_IN = 0.5;
 /** Inside a tunnel: the fog's color, how far one sees (m) and how much of the sky light stays. */
 const TUNNEL_FOG = '#0a0a0c';
-const TUNNEL_SEE = 90;
-const TUNNEL_DIM = 0.45;
+const TUNNEL_SEE = 190;
+const TUNNEL_NEAR = 14;
+const TUNNEL_DIM = 0.3;
 /** Lightning only in rain this heavy, every LIGHTNING_EVERY seconds or so. */
 const LIGHTNING_RAIN = 0.75;
 const LIGHTNING_EVERY: [number, number] = [9, 26];
@@ -59,6 +60,8 @@ export class RainView {
   private thunderIn = -1;
   private thunderDistance = 0.5;
   private tmp = new THREE.Color();
+  private tmp2 = new THREE.Color();
+  private white = new THREE.Color('#ffffff');
 
   constructor(
     private scene: THREE.Scene,
@@ -152,6 +155,9 @@ export class RainView {
 
   /** How deep in a tunnel the camera is (0 out, 1 in): set each frame before `update`. */
   tunnel = 0;
+  /** 0..1: how near a portal the camera is inside a tunnel (daylight ahead), set with `tunnel`. */
+  tunnelOpen = 0;
+  private glows: THREE.Object3D[] | null = null;
 
   /** `covered`: the camera is under a roof (a tunnel, a deck). */
   update(w: WeatherState, camera: THREE.Camera, dt: number, covered: boolean): void {
@@ -181,10 +187,17 @@ export class RainView {
     // In a tunnel (0..1) it is dark: the fog goes black and close, the sun and sky light mostly off.
     const dark = this.tunnel;
     if (dark > 0.001) {
-      fog.color.lerp(this.tmp.set(TUNNEL_FOG), dark * 0.96);
-      fog.near = fog.near + (4 - fog.near) * dark;
+      // Near a mouth the fog turns the sky's color: the walls fade into daylight, not black.
+      const glow = this.tmp.copy(fog.color).lerp(this.white, 0.45);
+      fog.color.lerp(this.tmp2.set(TUNNEL_FOG).lerp(glow, this.tunnelOpen * 0.8), dark * 0.96);
+      fog.near = fog.near + (TUNNEL_NEAR - fog.near) * dark;
       fog.far = fog.far + (TUNNEL_SEE - fog.far) * dark;
-    }
+      this.glows ??= this.scene.children.filter((o) => o.userData.tunnelGlow);
+      for (const o of this.glows) {
+        o.visible = dark > 0.3;
+        ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).color.copy(glow);
+      }
+    } else if (this.glows) for (const o of this.glows) o.visible = false;
     for (const h of this.base.hemi) h.light.intensity = (h.intensity * (1 - DIM_HEMI * k) + flash * 2.2) * (1 - TUNNEL_DIM * dark);
     for (const l of this.base.sun) l.light.intensity = l.intensity * (1 - DIM_SUN * k) * (1 - 0.95 * dark);
     if (s && flash > 0) {

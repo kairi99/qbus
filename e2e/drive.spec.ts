@@ -70,9 +70,17 @@ test('R rescues a bus stuck off-road back onto the street', async ({ page }) => 
     bus.reset({ x: (b[0].x + b[1].x) / 2 + 3, y: 0, z: (b[0].z + b[2].z) / 2, heading: 0.4 });
     bus.body.setRotation({ x: 0.5, y: 0, z: 0, w: 0.866 }, true);
   });
-  await page.waitForTimeout(500);
   await page.keyboard.press('KeyR');
-  await page.waitForTimeout(1500);
+  // Reset done: upright, on the ground, aligned with the grid.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const { bus } = (window as any).__qbus;
+        const q = bus.body.rotation();
+        return bus.wheelsOnGround === 4 && 1 - 2 * (q.x * q.x + q.z * q.z) > 0.95 && Math.abs(Math.sin(2 * bus.heading)) < 0.05;
+      }),
+    )
+    .toBe(true);
   const s = await page.evaluate(() => {
     const { bus, city } = (window as any).__qbus;
     const t = bus.body.translation();

@@ -240,7 +240,7 @@ describe.each(ZONES)('$name', (zone) => {
           users[k].v = b.speed;
         });
         buses.forEach((b, k) => {
-          const way = chooseLane(users[k], users.filter((_, j) => j !== k), [], homes[k], SKILLS.hard.passClear);
+          const way = chooseLane(users[k], users.filter((_, j) => j !== k), [], homes[k], SKILLS.hard.passClear, null, race.tunnels ?? null);
           drivers[k].lane = way.lane;
           b.update(drivers[k].drive(b, PHYSICS_STEP, 1, false, way.limit), PHYSICS_STEP);
         });

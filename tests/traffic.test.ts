@@ -4,12 +4,14 @@ import { buildRoadGraph } from '../src/world/roadGraph';
 import { TrafficLights } from '../src/gameplay/trafficLights';
 import { TrafficSim, BRT_KIND, brtBusCount, CAR_KINDS, RECYCLE_RADIUS, SPAWN_BEHIND_DIST, SPAWN_HIDDEN_DIST, type Obstacle, type TrafficEvent } from '../src/gameplay/traffic';
 import { distToPolyline, pointInPolygon } from '../src/world/geom';
+import { lanePoint } from '../src/world/roadGraph';
 import { forward, right, type Vec2 } from '../src/world/cityData';
 
 const city = generateCity({ seed: 42 });
 const graph = buildRoadGraph(city);
 const lights = new TrafficLights(graph, city.signals ?? []);
 const DT = 1 / 30;
+const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.z * b.z;
 
 function simulate(seconds: number, opts: { count?: number; seed?: number; obstacles?: Obstacle[] } = {}, each?: (sim: TrafficSim, ev: TrafficEvent[]) => void) {
   const sim = new TrafficSim(graph, city, { seed: opts.seed ?? 1, count: opts.count ?? 30, lights });
@@ -282,5 +284,62 @@ describe('TrafficSim on La Mariscal (real map, one-way streets)', () => {
     expect(noseToNose).toBe(0);
     expect(moving).toBeGreaterThan(0);
     for (const c of sim.cars) if (c.kind !== BRT_KIND && c.state === 'driving' && !c.turn) expect(g.edges[c.edge].access).toBe('general');
+  }, 90_000);
+
+  // Real busways end: the bus turns round at the terminal instead of standing there in view.
+  it.each([1, 2])('busway buses never stand at a busway end in view for long (seed %i)', (seed) => {
+    const sim = new TrafficSim(g, real, { seed, count: 40, brt: brtBusCount(g), lights: realLights });
+    const ends = g.edges.filter((e) => {
+      if (e.access !== 'brt' || !e.brtDrivable) return false;
+      const out = g.nodes[e.to].out.map((id) => g.edges[id]);
+      return e.len > 60 && !out.some((o) => o.access === 'brt' && o.brtDrivable && dot(e.endDir, o.dir) > 0.7);
+    });
+    expect(ends.length).toBeGreaterThan(0);
+    const focus = { pos: { x: 0, z: 0 }, heading: 0 };
+    const stood = new Map<number, number>();
+    let longest = 0;
+    const turning = new Set<number>();
+    const stands: number[] = [];
+    const followers = new Set<number>();
+    let swept = 0;
+    let turned = 0;
+    // 600 s, the player lingering 60 s at a time 40 m short of each busway end in turn.
+    for (let t = 0; t < 600; t += DT) {
+      if (Math.round(t / DT) % (60 * 30) === 0) {
+        const e = ends[Math.floor(t / 60) % ends.length];
+        const p = lanePoint(e, Math.max(0, e.len - 40), 0);
+        focus.pos = p;
+        focus.heading = Math.atan2(-e.endDir.z, e.endDir.x);
+        sim.recycle(focus, true);
+      }
+      sim.step(DT, []);
+      if (Math.round(t / DT) % 15 === 0) sim.recycle(focus);
+      for (const b of sim.cars) {
+        if (b.kind !== BRT_KIND || b.state !== 'driving') continue;
+        const waiting = b.next < 0 && !b.turn && b.speed < 0.3 && Math.hypot(b.pos.x - focus.pos.x, b.pos.z - focus.pos.z) < 120;
+        const w = waiting ? (stood.get(b.id) ?? 0) + DT : 0;
+        // Stands of the bus at the end itself; one queued behind another bus only repeats its leader's wait.
+        const queued = waiting && !!b.blocker?.startsWith('car') && sim.cars[+b.blocker.slice(3)]?.kind === BRT_KIND;
+        if (queued) followers.add(b.id);
+        if (!waiting) {
+          if ((stood.get(b.id) ?? 0) > 1 && !followers.has(b.id)) stands.push(stood.get(b.id)!);
+          followers.delete(b.id);
+        }
+        stood.set(b.id, w);
+        longest = Math.max(longest, w);
+        const round = !!b.turn && b.next >= 0 && g.edges[b.next].access === 'brt' && dot(g.edges[b.edge].endDir, g.edges[b.next].dir) < -0.8;
+        if (round && !turning.has(b.id)) turned++;
+        // The swing round never sweeps through another vehicle.
+        if (round) for (const c of sim.cars) if (c !== b && c.state === 'driving' && overlaps(pose(sim, b.id), pose(sim, c.id))) swept++;
+        if (round) turning.add(b.id);
+        else turning.delete(b.id);
+      }
+    }
+    // Waiting for its green at a busy terminal junction is real; standing for good (the old 25 s recycle) is not.
+    stands.sort((a, b) => a - b);
+    expect(longest).toBeLessThan(30);
+    expect(stands[Math.floor(stands.length * 0.9)]).toBeLessThan(15);
+    expect(swept).toBe(0);
+    expect(turned).toBeGreaterThan(0);
   }, 90_000);
 });

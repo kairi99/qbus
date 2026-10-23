@@ -572,6 +572,13 @@ export class Menu {
         location.search = this.gameLink(room, code);
       }),
       conn.on('error', (m) => {
+        // The host's ¡Arrancar! refused (a guest un-readied or joined meanwhile): say why, the lobby stays usable.
+        const soft = SOFT_ERROR_TEXT[m.code];
+        if (soft) {
+          note = soft;
+          render();
+          return;
+        }
         failure = ERROR_TEXT[m.code] ?? 'No se pudo entrar a la sala';
         status();
         render();
@@ -1054,6 +1061,12 @@ const ERROR_TEXT: Record<string, string> = {
   racing: 'Carrera en curso: espera a que termine',
   version: 'Actualiza la página',
   unknown: 'No existe esa sala',
+};
+
+const SOFT_ERROR_TEXT: Record<string, string> = {
+  notready: 'Falta que todos estén listos',
+  bad: 'La sala cambió: intenta de nuevo',
+  nohost: 'Solo el anfitrión puede arrancar',
 };
 
 const esc = (t: string): string => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

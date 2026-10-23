@@ -12,15 +12,10 @@ import { DRIVE } from './thresholds';
 // Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS), updated after
 // the collision fixes of 2026-10-07 (what's left). Delete an entry once its bug is fixed (the
 // it.fails turns red to tell you).
-const G2 = 'Puente del Guambra, southbound: since the AE86 rides higher (2026-10-15) it no longer stops dead under the overlapping ramp decks at (-620.3, 313.0), but at 89 km/h its side brushes the bridge railing hulls at (-658.3, 279.8) (0.9 m over the deck, 6 contact steps, Δv 15 m/s on the 520 kg car; the same with any ride height tried) and drives on to the far end';
-const Q1 = '12 de Octubre N→S turn through its tunnel onto Queseras (e585→e523), interparroquial: since the junction dips to meet the link\'s mouth (2026-10-15) everyone gets through, but the 12.5 m bus starts the turn while still in the ramp\'s last meter of cut and its front corner knocks the ground beside it at (-63.7, 715.0) once (Δv ~5.6 m/s), then drives on';
-const S2 = 'Cut at (-820, 774) (sin nombre e682→e195): on the sharp OSM kink at (-829.2, 773.8) the interparroquial\'s front corner hits the outer tunnel wall at (-827.7, 771.0) (Δv 4.6–6.4 m/s); since the streets alongside the cut give it room (clearCuts, 2026-10-15) it no longer stalls there and drives on';
+const S2 = 'Cut at (-820, 774) (sin nombre e694→e195): the OSM line turns 65 degrees in about 10 m at (-829.2, 773.8), a tighter bend than a 12.5 m interparroquial can take, and the cut is boxed in there (Av. 10 de Agosto runs over its east lane, another carriageway of it along its west wall): the front corner hits the outer wall at (-827.8, 771.1) (Δv 2.8 at 35, 8.3 at 70 km/h since the walls went frictionless 2026-10-23: no stall any more, stuck 0–0.3 s instead of 2.8). Easing the line to a minimum radius, wider bend room and moving the streets all just moved the hit to the next wall (see README 2026-10-23)';
 known({
-  'drive bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e899] | ae86 @ 90 km/h': G2,
-  'drive cut Av. 12 de Octubre @(-42,733): sin nombre [e585→e523] | interparroquial @ 35 km/h': Q1,
-  'drive cut Av. 12 de Octubre @(-42,733): sin nombre [e585→e523] | interparroquial @ 70 km/h': Q1,
-  'drive cut sin nombre @(-820,774): sin nombre [e682→e195] | interparroquial @ 35 km/h': S2,
-  'drive cut sin nombre @(-820,774): sin nombre [e682→e195] | interparroquial @ 70 km/h': S2,
+  'drive cut sin nombre @(-820,774): sin nombre [e694→e195] | interparroquial @ 35 km/h': S2,
+  'drive cut sin nombre @(-820,774): sin nombre [e694→e195] | interparroquial @ 70 km/h': S2,
 });
 
 const base = cityAndCatalog();

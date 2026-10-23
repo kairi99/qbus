@@ -72,6 +72,8 @@ let lastLog = 0;
 let hits = 0;
 let following = 0;
 let recycle = 0;
+let fStart = -1;
+const tunnelsArg = process.env.NOTUNNEL ? null : race.tunnels;
 let rescues = 0;
 let mudTime = 0;
 const p = { x: 0, y: 0, z: 0 };
@@ -90,7 +92,7 @@ while (t < 900) {
     const l = vehicleLimits(preset);
     slideAdvice(field.sites, t, here.s, preset.body.length, l.brake * skill.brake * SLIDE_BRAKE, advice);
     if (!sim) {
-      const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], [], home, skill.passClear, advice);
+      const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], [], home, skill.passClear, advice, tunnelsArg);
       driver.lane = way.lane;
       limit = way.limit;
     }
@@ -104,10 +106,17 @@ while (t < 900) {
       cars.push({ s, off: dir * Math.abs(c.offset), v: c.speed, dir, len: c.kind.length });
     }
     const here = locateOnTrack(race, bus.nose(p), driver.s, 60);
-    const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], cars, home, skill.passClear, field ? advice : null);
+    const way = chooseLane({ s: here.s, off: here.off, v: bus.speed, len: preset.body.length }, [], cars, home, skill.passClear, field ? advice : null, tunnelsArg);
     driver.lane = way.lane;
     limit = way.limit;
     if (limit < Infinity) following += PHYSICS_STEP;
+    if (process.env.FOLLOW) {
+      if (limit < Infinity && fStart < 0) fStart = here.s;
+      if (limit === Infinity && fStart >= 0) {
+        console.log(`follow ${fStart.toFixed(0)} -> ${here.s.toFixed(0)} m (t ${t.toFixed(0)})`);
+        fStart = -1;
+      }
+    }
     if ((recycle += PHYSICS_STEP) > 0.5) {
       recycle = 0;
       const q = bus.position(p);

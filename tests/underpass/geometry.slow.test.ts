@@ -6,8 +6,8 @@
 import { beforeAll, describe, expect } from 'vitest';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import { groundHeightAt } from '../../src/world/cityData';
-import { profileAt, roadProfiles } from '../../src/world/elevation';
-import { dirAt, edgeY, lanePoint } from '../../src/world/roadGraph';
+import { profileAt, roadProfiles, surfaceY } from '../../src/world/elevation';
+import { dirAt, edgeLift, edgeY, lanePoint } from '../../src/world/roadGraph';
 import { type Passage, routePath } from './catalog';
 import { check, known } from './known';
 import { DrawnSoup, SMALL_SOLIDS, solidLooking } from './meshes';
@@ -15,48 +15,38 @@ import { fmt, intrusions, rayDistance, surfaceBelow, yawPitchRoll } from './prob
 import { type Built, buildAll, cityAndCatalog } from './setup';
 import { GEOMETRY } from './thresholds';
 
-// Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS), updated after
-// the collision fixes of 2026-10-07 (what's left): the test's own findings. Delete an entry once
-// its bug is fixed (the it.fails turns red to tell you).
+// Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS), updated
+// 2026-10-23 (what's left): the test's own findings. Delete an entry once its bug is fixed (the
+// it.fails turns red to tell you).
 known({
-  "swept bus volume is clear on every lane bridge Av. Patria @(-658,290): Av. Patria [e167→e516]":
-    "1 found: e516 Av. Patria lane 1 s 49–50: 0.27 m deep at (-588.5, 346.4, y 24.04) shape 9",
-  "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria [e167→e516]":
-    "3 found: lip 0.09 m at (-634.6, 324.7, y 28.89); lip 0.15 m at (-634.0, 325.1, y 28.74)",
-  "drawn walls and solid walls agree beside the lanes bridge Av. Patria @(-658,290): Av. Patria [e167→e516]":
-    "31 found: drawn but not solid: e167 lane 0 s 0 2 m up looking left from (-696.6, 233.7, y 24.81): drawn at 6.20 m, solid none; drawn but not solid: e167 lane 0 s 2 2 m up looking left from (-695.8, 235.6, y 24.84): drawn at 6.23 m, solid none",
-  "swept bus volume is clear on every lane bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e899]":
-    "1 found: e575 Av. Patria lane 1 s 82–86: 0.16 m deep at (-587.5, 339.1, y 24.12) shape 9",
-  "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e575→e899]":
-    "11 found: surface off the graph height by -0.30 m on e700 Av. Patria lane 2 at (-490.1, 394.0, y 24.14); surface off the graph height by -0.47 m on e700 Av. Patria lane 3 at (-492.7, 396.6, y 24.14)",
-  "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
-    "4 found: e276 Av. 10 de Agosto lane 2 s 61–61: 0.06 m deep at (-192.2, -820.0, y 17.85) shape 6; e276 Av. 10 de Agosto lane 2 s 71–71: 0.15 m deep at (-188.2, -829.0, y 16.67) shape 6",
-  "road surface has no lips, holes or height mismatches cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e276→e276]":
-    "1 found: surface off the graph height by 0.29 m on e276 Av. 10 de Agosto lane 2 at (-202.9, -792.2, y 20.40)",
-  "road surface has no lips, holes or height mismatches cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e564→e564]":
-    "3 found: surface off the graph height by 0.35 m on e564 Av. 10 de Agosto lane 0 at (-210.1, -805.0, y 21.32); surface off the graph height by -0.87 m on e564 Av. 10 de Agosto lane 2 at (-204.3, -800.1, y 21.40)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): sin nombre [e585→e523]":
-    "6 found: lip 0.15 m at (-4.3, 700.4, y 16.01); lip 0.08 m at (-4.8, 700.6, y 15.86)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): Av. 12 de Octubre [e586→e156]":
-    "8 found: lip 0.06 m at (-2.1, 705.1, y 16.03); lip 0.15 m at (-2.1, 705.1, y 16.03)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): sin nombre [e588→e160]":
-    "8 found: lip 0.06 m at (-127.7, 792.8, y 22.39); lip 0.09 m at (-127.2, 792.6, y 22.43)",
-  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): Av. 12 de Octubre [e589→e241]":
-    "10 found: surface off the graph height by 0.43 m on e589 Av. 12 de Octubre lane 1 at (-115.3, 776.9, y 20.57); lip 0.06 m at (-128.2, 789.3, y 22.50)",
-  "road surface has no lips, holes or height mismatches cut José Riofrío @(-867,851): sin nombre [e297→e297]":
-    "2 found: lip 0.13 m at (-788.8, 830.0, y 25.88); lip 0.12 m at (-788.4, 829.8, y 25.76)",
+  "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria [e167→e525]":
+    "1 found: lip 0.07 m at (-695.2, 236.8, y 25.03)",
+  "road surface has no lips, holes or height mismatches bridge Av. Patria @(-658,290): Av. Patria → Alfredo Perez Guerrero [e584→e917]":
+    "5 found: surface off the graph height by -0.32 m on e917 Alfredo Perez Guerrero lane 1 at (-694.9, 218.6, y 25.73); lip 0.14 m at (-622.6, 312.8, y 28.04)",
+  "swept bus volume is clear on every lane cut Av. 10 de Agosto @(-172,-870): Av. 10 de Agosto [e277→e277]":
+    "4 found: e277 Av. 10 de Agosto lane 2 s 61–61: 0.06 m deep at (-192.2, -820.0, y 17.85) shape 6; e277 Av. 10 de Agosto lane 2 s 71–71: 0.15 m deep at (-188.2, -829.0, y 16.67) shape 6",
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): sin nombre [e594→e532]":
+    "2 found: lip 0.06 m at (-3.9, 700.1, y 16.06); lip 0.07 m at (-61.3, 716.8, y 17.70)",
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): Av. 12 de Octubre [e595→e156]":
+    "8 found: lip 0.08 m at (45.3, 675.4, y 22.44); lip 0.08 m at (44.9, 675.7, y 22.34); lip 0.18 m at (-129.6, 782.4, y 22.92)",
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): sin nombre [e597→e160]":
+    "6 found: lip 0.06 m at (-127.4, 792.7, y 22.37); lip 0.08 m at (-127.0, 792.4, y 22.40)",
+  "road surface has no lips, holes or height mismatches cut Av. 12 de Octubre @(-42,733): Av. 12 de Octubre [e598→e241]":
+    "9 found: surface off the graph height by 0.43 m on e598 Av. 12 de Octubre lane 1 at (-113.1, 775.6, y 20.23); lip 0.12 m at (43.1, 688.3, y 22.37)",
+  "road surface has no lips, holes or height mismatches cut José Riofrío @(-867,851): sin nombre [e298→e298]":
+    "2 found: lip 0.14 m at (-788.8, 830.0, y 25.90); lip 0.13 m at (-788.3, 829.8, y 25.76)",
   "road surface has no lips, holes or height mismatches cut sin nombre @(-652,321): sin nombre [e197→e199]":
-    "6 found: surface off the graph height by -0.30 m on e700 Av. Patria lane 2 at (-490.1, 394.0, y 24.14); surface off the graph height by -0.47 m on e700 Av. Patria lane 3 at (-492.7, 396.6, y 24.14)",
+    "6 found: lip 0.08 m at (-625.5, 320.4, y 19.58); lip 0.06 m at (-625.9, 320.2, y 19.47)",
   "drawn walls and solid walls agree beside the lanes cut sin nombre @(-652,321): sin nombre [e197→e199]":
-    "8 found: drawn but not solid: e197 lane 0 s 88 0.6 m up looking right from (-590.2, 341.4, y 22.84): drawn at 2.56 m, solid 8.62 m; drawn but not solid: e197 lane 0 s 88 0.6 m up looking left from (-590.2, 341.4, y 22.84): drawn at 2.48 m, solid none",
-  "road surface has no lips, holes or height mismatches cut sin nombre @(-876,-220): sin nombre [e515→e515]":
-    "6 found: surface off the graph height by 0.27 m on e516 sin nombre lane 2 at (-845.3, -320.0, y 27.72); lip 0.10 m at (-862.0, -249.6, y 23.13)",
+    "6 found: drawn but not solid: e197 lane 0 s 88 0.6 m up looking left from (-590.2, 341.4, y 22.84): drawn at 2.48 m, solid none; drawn but not solid: e197 lane 0 s 90 0.6 m up looking left from (-592.0, 340.4, y 22.71): drawn at 2.49 m, solid 3.10 m",
+  "road surface has no lips, holes or height mismatches cut sin nombre @(-876,-220): sin nombre [e524→e524]":
+    "1 found: lip 0.10 m at (-862.0, -249.6, y 23.13)",
 });
 
 /** Approach/exit stretch next to the structure included in the checks (ramp ends, joints). */
 const JOINT_REACH = 25;
 /** Most findings listed per test (the count is always given). */
-const LIST = 8;
+const LIST = Number(process.env.QBUS_LIST ?? 8);
 
 const base = cityAndCatalog();
 const { city, graph, structures } = base;
@@ -128,7 +118,10 @@ for (const st of structures.filter((x) => x.passages.length))
             let worst: { off: number; at: string } | null = null;
             for (let s = s0; s <= s1; s += 0.5) {
               const q = lanePoint(e, s, k);
-              const y = ref(e, s);
+              // Where the lane should be: the graph's height at the center, followed across the road
+              // the way the road is built (near a ramp's end the surface follows the ground's cross slope).
+              const c = edgeY(e, s);
+              const y = c === null ? groundHeightAt(city, q) : surfaceY(city, { y: c, lift: edgeLift(e, s) }, q);
               const h = surfaceBelow(built.world, q, y + 1.5, 4);
               if (h === null) found.push(`hole: nothing under e${edge} lane ${k} at ${fmt({ ...q, y })}`);
               else if (Math.abs(h - y) > GEOMETRY.SURFACE_TOL && (!worst || Math.abs(h - y) > Math.abs(worst.off))) worst = { off: h - y, at: fmt({ ...q, y }) };
@@ -139,11 +132,16 @@ for (const st of structures.filter((x) => x.passages.length))
         // Along the curb lane's path straight through (junction crossings included): lips.
         const route = p.route.slice(Math.max(0, p.first - 1), p.first + p.edges.length + 1);
         const path = routePath(graph, route);
+        // (Sampled every 0.5 m of path length: the points where one edge meets the next sit a few
+        // centimeters apart, and a sample taken there would turn any grade into a "lip".)
         const pts: { x: number; z: number }[] = [];
+        let carry = 0;
         for (let i = 0; i < path.points.length - 1; i++) {
           const [a, b] = [path.points[i], path.points[i + 1]];
-          const n = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.z - a.z) / 0.5));
-          for (let j = 0; j < n; j++) pts.push({ x: a.x + ((b.x - a.x) * j) / n, z: a.z + ((b.z - a.z) * j) / n });
+          const len = Math.hypot(b.x - a.x, b.z - a.z);
+          let at = carry;
+          for (; at < len; at += 0.5) pts.push({ x: a.x + ((b.x - a.x) * at) / len, z: a.z + ((b.z - a.z) * at) / len });
+          carry = at - len;
         }
         let prevY = ref(graph.edges[route[0]], 0);
         const hs: (number | null)[] = pts.map((q) => {
@@ -181,12 +179,14 @@ for (const st of structures.filter((x) => x.passages.length))
                   ['left', d.z, -d.x],
                 ] as const) {
                   const o = { x: q.x, y: y + h, z: q.z };
-                  const phys = rayDistance(built.world, o, { x: dx, z: dz }, GEOMETRY.SIDE_REACH);
+                  const phys = rayDistance(built.world, o, { x: dx, z: dz }, GEOMETRY.SIDE_REACH + 1);
                   if (phys && SMALL_SOLIDS.has(phys.shape)) continue;
                   // A level ray grazing ground that rises to its height (a floor, not a wall) can
                   // hit the collider and miss the drawn surface by millimeters: not a wall.
                   if (phys && Math.abs(phys.ny) > 0.9) continue;
-                  const drawn = soup.ray(o, { x: dx, y: 0, z: dz }, GEOMETRY.SIDE_REACH);
+                  const drawn = soup.ray(o, { x: dx, y: 0, z: dz }, GEOMETRY.SIDE_REACH + 1);
+                  // (Both look 1 m past the reach, but only a wall inside it counts: a hull's near face can be within reach, its drawn face a thickness further.)
+                  if (Math.min(phys?.d ?? Infinity, drawn ?? Infinity) > GEOMETRY.SIDE_REACH) continue;
                   const where = `e${edge} lane ${k} s ${s.toFixed(0)} ${h} m up looking ${side} from ${fmt({ ...q, y })}`;
                   if (drawn !== null && (phys === null || phys.d > drawn + tol)) found.push(`drawn but not solid: ${where}: drawn at ${drawn.toFixed(2)} m, solid ${phys ? `${phys.d.toFixed(2)} m` : 'none'}`);
                   else if (phys !== null && (drawn === null || drawn > phys.d + tol)) found.push(`solid but not drawn: ${where}: solid (shape ${phys.shape}) at ${phys.d.toFixed(2)} m, drawn ${drawn !== null ? `${drawn.toFixed(2)} m` : 'none'}`);

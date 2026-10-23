@@ -5,7 +5,7 @@ import { distToPolyline, pointInPolygon, polygonToPolylineDistance } from '../ge
 import { type Terrain, smoothHeights, terrainHeight } from '../terrain';
 import { buildRoadGraph, dirAt, edgeAllows, projectOnPath } from '../roadGraph';
 import { importLines } from './lines';
-import { importStations, widenMedians } from './stations';
+import { clearCarriageways, importStations, widenMedians } from './stations';
 import { importCampuses } from './campus';
 import { BUSWAY_NAME, buswayWidth, clearBusways, clipBusways, generalRoads, isBusway } from './busways';
 import { CLEARANCE, type Level, separateGrades } from './grades';
@@ -143,7 +143,8 @@ export function importOsm(source: OsmJson, dem: Dem, opts: ImportOptions, extra:
   // busways, the avenue's lanes giving way) or, on plain avenues, in their median: make it before
   // anything else uses the roads.
   const imported = clearBusways(importRoads(osm, proj.toXZ, bounds));
-  const flat = stationsOsm && routesOsm ? widenMedians(imported, stationsOsm, routesOsm, proj.toXZ, (p) => inside(p)) : imported;
+  // (A carriageway the busways still overlap moves outward last, once the stations have made their room.)
+  const flat = clearCarriageways(stationsOsm && routesOsm ? widenMedians(imported, stationsOsm, routesOsm, proj.toXZ, (p) => inside(p)) : imported);
   // Bridges go up and underpasses down, with ramps; roads on different levels don't meet.
   // Then again with every junction's paved area (as the road graph clusters and trims them)
   // kept level on the ramps that run into it, until none still climbs there. One that would

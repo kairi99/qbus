@@ -64,70 +64,91 @@ const PIN = 0.06;
 /** The push tapers to nothing this far from a pinned point. */
 const TAPER = 14;
 
+/** Relaxation passes of `clearBusways` (each moves a point part of the way to where it fits). */
+const PASSES = 60;
+
 /**
- * Pushes each busway sideways, off the asphalt of ordinary roads it would overlap (OSM draws the
- * median busway right against the carriageways, and ours are drawn with generic lane widths), so
- * it keeps `BUSWAY_GAP` of curb from their edge when the median has the room. The ends of the
- * way and every vertex shared with another road (a junction) stay exactly where OSM put them,
- * and the push tapers off toward them, so every join in the road graph stays exact.
+ * Pushes the busways sideways, off the asphalt of ordinary roads they would overlap (OSM draws the
+ * median busways right against the carriageways, and ours are drawn with generic lane widths), so
+ * each keeps `BUSWAY_GAP` of curb from their edge when the median has the room. They are solved
+ * together, not one by one: a pair of one-way busways in a median is squeezed by both carriageways
+ * and a lane apart from each other (or oncoming buses meet nose to nose), so when one carriageway
+ * is too close the whole pair slides toward the other carriageway, as far as that one has room.
+ * Where there still is not room, the pair keeps its lane apart and the carriageways give way.
+ * The ends of each way and every vertex shared with another road (a junction) stay exactly where
+ * OSM put them, and the push tapers off toward them, so every join in the road graph stays exact.
  */
 export function clearBusways(roads: Road[]): Road[] {
   const general = generalRoads(roads);
-  const busways = roads.filter((r) => r.access === 'brt');
-  return roads.map((road) => {
-    if (road.access !== 'brt' || road.points.length < 2) return road;
-    const { pts, pin, cum, toPin } = resampled(road, roads);
-    if (pts.length < 3) return road;
-    const hw = road.width / 2;
-    const need = hw + BUSWAY_GAP;
-    const push = pts.map((p, i): Vec2 => {
-      if (pin[i]) return { x: 0, z: 0 };
-      // Away from the nearest asphalt that's too close; skipped where the centerlines coincide.
-      let v = { x: 0, z: 0 };
-      for (const o of general) {
-        const q = nearestPoint(o.points, p);
-        const d = Math.hypot(p.x - q.x, p.z - q.z);
-        const m = d - o.width / 2;
-        if (d < 0.3 || m >= need) continue;
-        const k = Math.min(MAX_PUSH, need - m);
-        v = { x: v.x + ((p.x - q.x) / d) * k, z: v.z + ((p.z - q.z) / d) * k };
+  const lines = roads
+    .map((road, index) => ({ road, index }))
+    .filter(({ road }) => road.access === 'brt' && road.points.length >= 2)
+    .map(({ road, index }) => {
+      const r = resampled(road, roads);
+      return { index, road, ...r, disp: r.pts.map((): Vec2 => ({ x: 0, z: 0 })), hw: road.width / 2 };
+    })
+    .filter((l) => l.pts.length >= 3);
+  const at = (l: (typeof lines)[number], i: number): Vec2 => ({ x: l.pts[i].x + l.disp[i].x, z: l.pts[i].z + l.disp[i].z });
+  // A lane apart from a busway alongside (not the next piece of the way ahead): each gives half.
+  const apart = () => {
+    for (const l of lines)
+      for (let i = 0; i < l.pts.length; i++) {
+        if (l.pin[i]) continue;
+        const p = at(l, i);
+        const a = at(l, Math.max(0, i - 1));
+        const b = at(l, Math.min(l.pts.length - 1, i + 1));
+        const tl = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+        for (const m of lines) {
+          if (m === l) continue;
+          const q = nearestPoint(m.pts.map((_, j) => at(m, j)), p);
+          const d = Math.hypot(q.x - p.x, q.z - p.z);
+          if (d < 0.3) continue;
+          const n = { x: (q.x - p.x) / d, z: (q.z - p.z) / d };
+          if (Math.abs((n.x * (b.x - a.x) + n.z * (b.z - a.z)) / tl) > 0.5) continue;
+          const over = (l.hw + m.hw - d) / 2;
+          if (over > 0) l.disp[i] = { x: l.disp[i].x - n.x * over, z: l.disp[i].z - n.z * over };
+        }
       }
-      const l = Math.hypot(v.x, v.z);
-      if (l > MAX_PUSH) v = { x: (v.x / l) * MAX_PUSH, z: (v.z / l) * MAX_PUSH };
-      // A lane apart from a busway alongside: a pair of one-way busways in a median gets pushed
-      // inward by both carriageways and would merge into one lane, where oncoming buses meet nose
-      // to nose. Each keeps half of the room between their lanes (the other one moves too), and
-      // where OSM draws them closer (fanning out of a shared node) each moves half the shortfall
-      // away. Only a busway beside this one counts, not the next piece of the way ahead.
-      const a = pts[Math.max(0, i - 1)];
-      const b = pts[Math.min(pts.length - 1, i + 1)];
-      const tl = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-      for (const o of busways) {
-        if (o === road) continue;
-        const q = nearestPoint(o.points, p);
-        const d = Math.hypot(q.x - p.x, q.z - p.z);
-        if (d < 0.3) continue;
-        const n = { x: (q.x - p.x) / d, z: (q.z - p.z) / d };
-        if (Math.abs((n.x * (b.x - a.x) + n.z * (b.z - a.z)) / tl) > 0.5) continue;
-        const room = (d - hw - o.width / 2) / 2;
-        const over = v.x * n.x + v.z * n.z - room;
-        if (over > 0) v = { x: v.x - n.x * over, z: v.z - n.z * over };
+  };
+  for (let pass = 0; pass < PASSES; pass++) {
+    // The carriageways: a curb away from their asphalt.
+    for (const l of lines)
+      for (let i = 0; i < l.pts.length; i++) {
+        if (l.pin[i]) continue;
+        const p = at(l, i);
+        const need = l.hw + BUSWAY_GAP;
+        for (const o of general) {
+          const q = nearestPoint(o.points, p);
+          const d = Math.hypot(p.x - q.x, p.z - q.z);
+          const m = d - o.width / 2;
+          if (d < 0.3 || m >= need) continue;
+          const k = Math.min(MAX_PUSH, need - m) / 2;
+          l.disp[i] = { x: l.disp[i].x + ((p.x - q.x) / d) * k, z: l.disp[i].z + ((p.z - q.z) / d) * k };
+        }
       }
-      return v;
-    });
-    // Smooth the pushes along the way, then taper them toward the pinned points.
-    for (let pass = 0; pass < 3; pass++)
-      for (let i = 1; i < pts.length - 1; i++) {
-        if (pin[i]) continue;
-        push[i] = { x: (push[i - 1].x + 2 * push[i].x + push[i + 1].x) / 4, z: (push[i - 1].z + 2 * push[i].z + push[i + 1].z) / 4 };
-      }
-    const moved = pts.map((p, i) => {
-      if (pin[i]) return p;
-      const k = Math.min(1, toPin[i] / TAPER);
-      return { x: round(p.x + push[i].x * k, 2), z: round(p.z + push[i].z * k, 2) };
-    });
-    return { ...road, points: moved.filter((p, i) => i === 0 || Math.hypot(p.x - moved[i - 1].x, p.z - moved[i - 1].z) > 0.05 || i === moved.length - 1) };
-  });
+    // Smoothed along the way, never beyond MAX_PUSH, tapering to nothing toward the pinned points.
+    for (const l of lines) {
+      const next = l.disp.map((d, i) => {
+        if (l.pin[i]) return { x: 0, z: 0 };
+        const [u, w] = [l.disp[Math.max(0, i - 1)], l.disp[Math.min(l.pts.length - 1, i + 1)]];
+        const v = { x: (u.x + 2 * d.x + w.x) / 4, z: (u.z + 2 * d.z + w.z) / 4 };
+        const cap = MAX_PUSH * Math.min(1, l.toPin[i] / TAPER);
+        const len = Math.hypot(v.x, v.z);
+        return len > cap ? { x: (v.x / len) * cap, z: (v.z / len) * cap } : v;
+      });
+      l.disp = next;
+    }
+    apart();
+  }
+  // Where the median had no room the carriageways give way: the lane between the pair always stays.
+  for (let pass = 0; pass < PASSES / 2; pass++) apart();
+  const done = new Map(
+    lines.map((l) => {
+      const moved = l.pts.map((p, i) => (l.pin[i] ? p : { x: round(p.x + l.disp[i].x, 2), z: round(p.z + l.disp[i].z, 2) }));
+      return [l.index, { ...l.road, points: moved.filter((p, i) => i === 0 || Math.hypot(p.x - moved[i - 1].x, p.z - moved[i - 1].z) > 0.05 || i === moved.length - 1) }] as const;
+    }),
+  );
+  return roads.map((road, index) => done.get(index) ?? road);
 }
 
 /** A busway resampled every few meters; `pin` marks the points that must not move (ends, shared vertices), `toPin` the way-distance to the nearest one. */

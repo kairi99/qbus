@@ -12,32 +12,19 @@ import { PHYSICS_STEP } from '../../src/physics/world';
 import { BusPhysics } from '../../src/vehicle/bus';
 import { busById } from '../../src/vehicle/buses';
 import type { Structure } from './catalog';
-import { check, known } from './known';
+import { check } from './known';
 import { fmt, surfaceBelow } from './probe';
 import { type Built, buildAll, cityAndCatalog } from './setup';
 import { TRAFFIC } from './thresholds';
 
 // Observed on the harness's first run (2026-10-06, La Mariscal at DEFAULT_HILLS): the test's own
 // first findings. Delete an entry once its bug is fixed (the it.fails turns red to tell you).
-// (G2 in drive.slow.test.ts, Av. Patria eastbound's down-ramp deck (#358) overlapped 0.2–0.35 m
-// higher by the westbound up-ramp (#401) at the Puente del Guambra joint, was also seen here as a
-// sunk car on e516, but only under one draw of the traffic's dice: with traffic lights (2026-10-08)
-// no car happens to be there. The bug is still open; it's tracked by G2.)
-// Seed-dependent stalls (QBUS_SEEDS=n runs one seed; default 1,2). Failing checks per single seed,
-// master city+code (seeds 1-14) vs the busway branch (seeds 1-6, measured before the structure clip was
-// widened to 12 m):
-//   master: 3 sin nombre(-876,-220) stuck+overlap, 6 12 de Octubre passage, 7 sin nombre(-820,774) height,
-//           9 and 12 sin nombre(-876,-220) stuck, 11 12 de Octubre stuck; 1,2,4,5,8,10,13,14 clean
-//   branch: 10 de Agosto (-172,-870) in 2,3,5, José Riofrío in 2,4,5,6, sin nombre(-876,-220) in 1,4,
-//           Patria bridge overlap in 4
-// The branch's geometry at those structures equals master's and no ordinary car enters a busway; edge
-// ids/lengths shift, so the dice differ. 'sin nombre @(-876,-220)' stuck reproduces on master (seeds 3, 9,
-// 12), so it stays known. The 10 de Agosto and José Riofrío failures do NOT reproduce on master with any
-// seed 1-14; with the final data (busways kept 12 m from structures) they no longer fail at seeds 1/2.
-known({
-  'no car stuck in cut sin nombre @(-876,-220)': 'Reproduces on master with other seeds (3, 9, 12): dice-dependent stall in this cut (it and an overlap of the two lanes merging into node 172 trade places as the road layout moves the dice)',
-  "traffic rides at the road's height in bridge Av. Patria @(-658,290)": 'A car floating 0.40 m on e167 at (-691.9, 234.9), on the Guambra up-ramp where every vehicle sinks or floats (see the drive notes): nothing within 80 m changed in the 2026-10-18 city, the draw of the traffic\'s dice puts a car there (seed 1)',
-});
+// (The floating car on the Guambra up-ramp seen under one draw of the dice no longer shows with the
+// 2026-10-23 city; its entry is gone.)
+// Seed-dependent stalls (QBUS_SEEDS=n,m runs other seeds; default 1,2): the cut sin nombre @(-876,-220)
+// has two incoming edges (e524, 3 lanes, and e745, 1 lane) drawn over the same road for their last
+// 60 m, merging into one exit. Cars stopped at both lines sat in each other's path (a claim held
+// against a car waiting beside it; a standoff that flickered): fixed in `traffic.ts`, seeds 1-10 clean.
 
 const LIST = 8;
 const base = cityAndCatalog();

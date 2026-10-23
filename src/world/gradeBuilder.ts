@@ -6,6 +6,7 @@ import { terrainAt } from './cityData';
 import { type RoadProfile, profileAt, projectOnRoad, roadProfiles, surfaceY } from './elevation';
 import { pointInPolygon } from './geom';
 import type { ChunkedMeshBuilder } from './meshBuilder';
+import { railSolid } from './railSolid';
 import { type RoadGraph, convexHull, pointAt } from './roadGraph';
 
 /** Deck slab thickness under a bridge's road surface. */
@@ -14,6 +15,8 @@ const SLAB = 0.8;
 const SHOULDER = 0.6;
 const WALL = 0.5;
 const PARAPET = 1.0;
+/** A cut shallower than this (m) gets no parapet above its wall: it only grows as the cut gets deeper. */
+const SHALLOW = 0.25;
 /** A bridge higher than this over the ground stands on pillars; lower, on an embankment. */
 const PILLAR_CLEARANCE = 5.3;
 /** Lift at which a road counts as dug in (an underpass) or up on a deck. */
@@ -456,9 +459,10 @@ export function buildGrades(
   const hullBoxes = graph.nodes.map((n) => (n.hull ? boxOf(n.hull, 0) : null));
   const deck = new Tris();
   /** A solid collider with exactly the shape of the given corner points (so it matches what's drawn). */
-  const solidHull = (pts: THREE.Vector3Like[]) => {
+  const solidHull = (pts: THREE.Vector3Like[], slippery = false) => {
     const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(pts.flatMap((p) => [p.x, p.y, p.z])));
-    if (desc) world.createCollider(desc, fixed);
+    // A retaining wall is frictionless: a bus that grazes it slides along instead of stopping.
+    if (desc) world.createCollider(slippery ? desc.setFriction(0).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min) : desc, fixed);
   };
   /** Another road's asphalt at `p` at a clearly different height than `y` (passing under or over). */
   const otherLevel = (self: number, p: Vec2, y: number) =>
@@ -521,10 +525,19 @@ export function buildGrades(
     const half = road.width / 2;
     const secs = sections(road, prof, 2);
     let pillarAt = -Infinity;
+    // Each side's railing is one smooth solid along its whole run (a hull per 2 m section left teeth on bends).
+    const rails: Record<number, { x: number; z: number; y: number }[]> = { [-1]: [], [1]: [] };
+    const flushRail = (side: number) => {
+      railSolid(rails[side], PARAPET - 0.15, world, fixed);
+      rails[side] = [];
+    };
     for (let k = 1; k < secs.length; k++) {
       const a = secs[k - 1];
       const b = secs[k];
-      if (Math.max(a.lift, b.lift) <= RAISED) continue;
+      if (Math.max(a.lift, b.lift) <= RAISED) {
+        flushRail(-1), flushRail(1);
+        continue;
+      }
       const mb = solid.at((a.p.x + b.p.x) / 2, (a.p.z + b.p.z) / 2);
       const edge = (s: Sec, o: number) => ({ x: s.p.x - s.d.z * o, z: s.p.z + s.d.x * o });
       const slab = (s: Sec) => Math.min(SLAB, Math.max(0.05, s.lift));
@@ -555,8 +568,12 @@ export function buildGrades(
         // Railing along the edge, unless a street joins here at the same height.
         if (Math.min(a.lift, b.lift) > 0.4 && !joins(ri, out, y) && !onTraffic(ri, mid, y)) {
           wallStrip(mb, pa, pb, a.y, b.y, PARAPET, 0.3, CONCRETE);
-          solidHull(stripCorners(pa, pb, a.y - 0.2, b.y - 0.2, PARAPET + 0.2, 0.3));
-        }
+          // (A run is unbroken: where the deck's edge steps sideways, a new one starts.)
+          const run = rails[side];
+          if (run.length && Math.hypot(run[run.length - 1].x - pa.x, run[run.length - 1].z - pa.z) > 0.05) flushRail(side);
+          if (!rails[side].length) rails[side].push({ x: pa.x, z: pa.z, y: a.y });
+          rails[side].push({ x: pb.x, z: pb.z, y: b.y });
+        } else flushRail(side);
         // Under the edge: open over a road below, pillars when high, else an embankment wall.
         const g = Math.min(ground(pa), ground(pb));
         const bottom = Math.min(a.y - slab(a), b.y - slab(b));
@@ -578,6 +595,7 @@ export function buildGrades(
         world.createCollider(RAPIER.ColliderDesc.cylinder((top - g) / 2, 0.8).setTranslation(a.p.x, (g + top) / 2, a.p.z), fixed);
       }
     }
+    flushRail(-1), flushRail(1);
   });
   // Nodes up on a deck (and down in a cut): a slab over the area where their roads meet, so
   // two pieces of deck meeting at an angle leave no gap.
@@ -680,7 +698,8 @@ export function buildGrades(
         // Roofed if any of it is under the roof: a parapet must never stand up into the street above.
         const deep = Math.min(ga - a.y, gb - b.y) > HEADROOM;
         const roof = deep && (covered(mid, a.d, l.index) || covered(pa, a.d, l.index) || covered(pb, a.d, l.index));
-        let top = roof || step !== null ? -0.05 : PARAPET;
+        // (Over a shallow cut the parapet shrinks with it: the blunt end of a full one stood in a bus's way where the ramp tops out.)
+        let top = roof || step !== null ? -0.05 : Math.min(PARAPET, Math.max(0, Math.min(ga - a.y, gb - b.y) - SHALLOW));
         // Another road running where the wall would stand (OSM draws some carriageways
         // overlapping): one coming in partway down (a link branching off) leaves an opening;
         // a street at ground level just gets the wall stopping flush under it, as under a roof
@@ -725,8 +744,8 @@ export function buildGrades(
         // hulls split along the drawn top's diagonal: where the wall's two ends stand at different
         // offsets its top isn't flat, and one hull would bulge over the drawn triangles.
         const [ia, ib, oa, ob] = [inner.a, inner.b, outer.a, outer.b];
-        solidHull([v3(ia, a.y - 0.3), v3(ib, b.y - 0.3), v3(ob, b.y - 0.3), v3(ia, ga + top), v3(ib, gb + top), v3(ob, gb + top)]);
-        solidHull([v3(ia, a.y - 0.3), v3(ob, b.y - 0.3), v3(oa, a.y - 0.3), v3(ia, ga + top), v3(ob, gb + top), v3(oa, ga + top)]);
+        solidHull([v3(ia, a.y - 0.3), v3(ib, b.y - 0.3), v3(ob, b.y - 0.3), v3(ia, ga + top), v3(ib, gb + top), v3(ob, gb + top)], true);
+        solidHull([v3(ia, a.y - 0.3), v3(ob, b.y - 0.3), v3(oa, a.y - 0.3), v3(ia, ga + top), v3(ob, gb + top), v3(oa, ga + top)], true);
       }
     }
   }

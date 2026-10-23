@@ -3,13 +3,14 @@ import { readFileSync } from 'node:fs';
 import type { CityData, Road } from '../src/world/cityData';
 import { inPlayArea, stopZone } from '../src/world/cityData';
 import { distToPolyline } from '../src/world/geom';
-import { buildRoadGraph, edgeAllows, makePath, pointAt } from '../src/world/roadGraph';
+import { buildRoadGraph, edgeAllows, makePath, pointAt, projectOnPath } from '../src/world/roadGraph';
 import { Navigator } from '../src/gameplay/navigation';
 import { TrafficSim } from '../src/gameplay/traffic';
 import { TrafficLights } from '../src/gameplay/trafficLights';
 import { sidewalkSections } from '../src/world/sidewalks';
 import { isBusway, buswayWidth, clearBusways, BUSWAY_NAME } from '../src/world/osm/busways';
 import { snapToRoad } from '../src/world/roadSnap';
+import { clearCarriageways } from '../src/world/osm/stations';
 
 const mariscal: CityData = JSON.parse(readFileSync('data/cities/mariscal.json', 'utf8'));
 const graph = buildRoadGraph(mariscal);
@@ -75,10 +76,11 @@ describe('busway import (La Mariscal)', () => {
     }
     expect(total).toBeGreaterThan(100);
     // OSM draws the busways right against the avenues and the avenues are drawn with generic lane
-    // widths (3.3 m + 1 m): where the median is too narrow even after the push the busway still
-    // overlaps the carriageway by a meter or two. Known limitation (a third of the samples today);
-    // this keeps it from getting worse.
-    expect(overlap / total).toBeLessThan(0.4);
+    // widths (3.3 m + 1 m): `clearBusways` slides each pair across its median, and where that is
+    // still too narrow `clearCarriageways` moves the carriageway outward. What is left (6% today)
+    // is a block too short between junctions to move a carriageway (cross streets meeting the
+    // busway overlap it by design); this keeps it from getting worse.
+    expect(overlap / total).toBeLessThan(0.1);
   });
 });
 
@@ -113,6 +115,32 @@ describe('clearBusways', () => {
   });
 });
 
+describe('clearCarriageways', () => {
+  // A median too narrow for the pair of busways even after they slide: the carriageways give way.
+  const lane = (z: number, extra: Partial<Road>, reverse = false): Road => {
+    const pts = [0, 50, 100, 150, 200].map((x) => ({ x, z }));
+    return { name: 'Avenida', kind: 'street', points: reverse ? pts.reverse() : pts, width: 7.6, lanes: 2, oneway: true, ...extra };
+  };
+  const bus = { name: BUSWAY_NAME, access: 'brt' as const, width: 3.4, lanes: 1 };
+  const cross: Road = { name: 'Calle', kind: 'street', points: [{ x: 100, z: -5.5 }, { x: 100, z: -60 }], width: 6, lanes: 2 };
+  const roads = [lane(-5.5, {}), lane(-1.7, bus), lane(1.7, bus, true), lane(5.5, {}, true), cross];
+
+  it('moves a carriageway off a busway the median has no room for, joins with cross streets untouched', () => {
+    const out = clearCarriageways(clearBusways(roads));
+    const buses = out.filter((r) => r.access);
+    const streets = out.filter((r) => !r.access && r.name === 'Avenida');
+    // Every busway sample is within the overlap a carriageway's drawn width is allowed.
+    for (const b of buses)
+      for (const p of b.points.filter((q) => q.x >= 30 && q.x <= 70)) for (const o of streets) expect(o.width / 2 + b.width / 2 - distToPolyline(p, o.points)).toBeLessThan(1);
+    // The junction vertex of the cross street stays where it was, still on the carriageway.
+    expect(out.find((r) => r.name === 'Calle')!.points[0]).toEqual({ x: 100, z: -5.5 });
+    expect(streets.some((r) => r.points.some((p) => p.x === 100 && p.z === -5.5))).toBe(true);
+    // The pair still keeps its lane apart.
+    const [a, b] = buses;
+    for (const p of a.points.filter((q) => q.x >= 30 && q.x <= 70)) expect(distToPolyline(p, b.points)).toBeGreaterThanOrEqual(3.3);
+  });
+});
+
 describe('road graph per access class', () => {
   it('marks busway edges and nodes, and they are never in the general drivable set', () => {
     const bus = graph.edges.filter((e) => e.access === 'brt');
@@ -124,10 +152,22 @@ describe('road graph per access class', () => {
 
   it('computes the general drivable set as if the busways did not exist', () => {
     const bare = buildRoadGraph({ ...mariscal, roads: mariscal.roads.filter((r) => !r.access) });
-    const count = (g: typeof graph) => g.edges.filter((e) => e.drivable).length;
-    // Junctions a busway meets are trimmed a bit differently, but nothing drivable is lost or swallowed.
-    expect(count(graph)).toBeGreaterThanOrEqual(count(bare) - 4);
-    expect(count(graph)).toBeLessThanOrEqual(count(bare) + 4);
+    // Junctions a busway meets are trimmed a bit differently (a few meters of a street end gone),
+    // but nothing drivable is lost or swallowed: every point of the bare network's drivable
+    // streets is still on a drivable edge, bar those junction trims (about half a percent).
+    const drivable = graph.edges.filter((e) => e.drivable);
+    let lost = 0;
+    let total = 0;
+    for (const e of bare.edges) {
+      if (!e.drivable) continue;
+      for (let s = 0; s <= e.len; s += 2) {
+        const p = pointAt(e.center, s);
+        total++;
+        if (!drivable.some((o) => projectOnPath(o.center, p).d < 3)) lost++;
+      }
+    }
+    expect(total).toBeGreaterThan(10000);
+    expect(lost / total).toBeLessThan(0.01);
   });
 
   it('lets BRT vehicles drive busways, and everything ordinary traffic drives', () => {

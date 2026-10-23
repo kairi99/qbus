@@ -3,6 +3,7 @@ import { forward, right } from '../cityData';
 import { distToPolyline, pointInPolygon } from '../geom';
 import { type OsmJson, nearestOnRoads, tidyStopName } from './import';
 import { METRO_ENTRANCE as ENTRANCE } from '../metro';
+import { makePath, pointAt } from '../roadGraph';
 import { BUSWAY_GAP, generalRoads, nearestBusway, shiftBusway } from './busways';
 
 /** Stop positions of one system closer than this are the same station. */
@@ -158,6 +159,47 @@ export function widenMedians(roads: Road[], stationsOsm: OsmJson, routesOsm: Osm
       const shift = drop ? laneW / 2 : Math.min(2.5, need / 2);
       out = reshapeCarriageway(out, cw, mid, away, shift, drop);
     }
+  }
+  return out;
+}
+
+/** A busway may lie this far (m) over its carriageway's asphalt: the avenues are drawn with generic lane widths, a bit fat. */
+const OVERLAP_OK = 0.9;
+/** Bridges and underpasses (with their ramps) keep clear of this shifting by this far (m). */
+const STRUCTURE_REACH = 110;
+/** No carriageway moves further than this to clear a busway. */
+const CLEAR_SHIFT_MAX = 2.5;
+
+/**
+ * After `clearBusways` pushed the busways as far as they go: where a median is still narrower than
+ * the carriageways' drawn widths plus the busways, the carriageway moves outward instead (between
+ * its nearest junctions, tapering back, the way `reshapeCarriageway` does for a station), most
+ * overlapped spot first. Cross streets keep their joins: the shift is zero at every junction.
+ */
+export function clearCarriageways(roads: Road[]): Road[] {
+  // Not near a bridge or underpass: its ramps (not solved yet) and the busway pieces dropped there stay as they are.
+  const structures = roads.filter((r) => r.layer);
+  const nearStructure = (p: Vec2) => structures.some((r) => distToPolyline(p, r.points) < STRUCTURE_REACH);
+  const spots: { p: Vec2; gap: number }[] = [];
+  for (const bw of roads) {
+    if (bw.access !== 'brt' || bw.points.length < 2) continue;
+    const path = makePath(bw.points);
+    for (let d = 0; d <= path.len; d += 4) {
+      const p = pointAt(path, d);
+      const cw = nearestOnRoads(generalRoads(roads), p);
+      if (!cw || cw.dist < 0.3) continue;
+      const gap = cw.road.width / 2 + bw.width / 2 - cw.dist - OVERLAP_OK;
+      if (gap > 0.05 && !nearStructure(p)) spots.push({ p, gap });
+    }
+  }
+  let out = roads;
+  for (const { p } of spots.sort((a, b) => b.gap - a.gap)) {
+    const cw = nearestOnRoads(generalRoads(out), p);
+    const bw = nearestBusway(out, p, 1);
+    if (!cw || !bw || cw.dist < 0.3) continue;
+    const gap = cw.road.width / 2 + bw.road.width / 2 - cw.dist - OVERLAP_OK;
+    if (gap <= 0.05) continue;
+    out = reshapeCarriageway(out, cw, p, { x: (cw.point.x - p.x) / cw.dist, z: (cw.point.z - p.z) / cw.dist }, Math.min(CLEAR_SHIFT_MAX, gap + 0.05), false);
   }
   return out;
 }

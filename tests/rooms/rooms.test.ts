@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROTO, type C2S, type CarState, type S2C } from '../../src/net/protocol';
+import { GO_DELAY } from '../../server/src/room';
 
 const HTTP = 'http://127.0.0.1:8787';
 const WS = 'ws://127.0.0.1:8787';
@@ -189,6 +190,8 @@ describe('online rooms (wrangler dev)', () => {
     const { code, a, b, wa, wb } = await startRace();
     await b.send({ t: 'st', at: 1, cars: [car({ seat: wb.you }, 321)] });
     await a.waitFor(isSt);
+    // Past the green light (GO_DELAY): before it a rejoiner gets a normal start, not a resume.
+    await new Promise((r) => setTimeout(r, GO_DELAY + 300));
     b.close();
     // Offline, not gone: the seat stays, nobody else became host.
     const off = await a.waitFor((m): m is Extract<S2C, { t: 'room' }> => isRoom(m) && m.seats.some((x) => x.id === wb.you && !x.online));

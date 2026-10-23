@@ -17,22 +17,23 @@ describe('starsFor', () => {
 });
 
 // What the autopilot (tools/sim-shift.ts, real physics bus, no traffic, running every red light
-// it meets) earned on La Mariscal (Trolebús/Ecovía with the BRT navigator along the busways; the autopilot
-// often overshoots their curved platforms, so those shifts end after 1-4 stops),
+// it meets) earned on La Mariscal (Trolebús/Ecovía with the BRT navigator along the busways, driving
+// the articulated bus they recommend (BUS=articulado): their 500-1000 m busway legs run out the 90 s clock,
+// so those shifts end after 1-4 stops),
 // averaged over 3 passenger draws, rolling through each stop just under 25 km/h: careful (40 km/h), decent (60 km/h, nitro), expert (flat
 // out, handbrake drifts). The targets must sort them: the careful driver a star, the decent one
 // two at most, and three out of the autopilot's reach (a human expert also skims traffic).
 const PLAYED: Record<string, [number, number, number]> = {
   circuito: [257, 432, 637],
   'linea-katar-061': [1197, 1462, 1765],
-  'linea-c4': [85, 160, 560],
+  'linea-c4': [85, 125, 1132],
   'linea-belavista-002': [0, 267, 1325],
   'linea-translatinoz-135': [60, 133, 877],
   'linea-transplanetta-040': [173, 323, 935],
   'linea-semgilfor-069': [210, 343, 1085],
   'linea-transporcel-099': [512, 762, 1468],
-  'linea-e3': [170, 433, 997],
-  'linea-e1': [40, 40, 315],
+  'linea-e3': [170, 433, 538],
+  'linea-e1': [40, 40, 90],
 };
 
 describe('star targets against played shifts (La Mariscal)', () => {
@@ -49,6 +50,17 @@ describe('star targets against played shifts (La Mariscal)', () => {
     if (id !== 'linea-belavista-002') expect(starsFor(expert, t), 'expert autopilot').toBeLessThanOrEqual(2);
     // A careful shift that delivers is close to a star: under twice the money.
     if (casual > 100) expect(t[0], 'careful').toBeLessThan(casual * 2);
+  });
+});
+
+describe('rapid-transit star targets', () => {
+  const graph = buildRoadGraph(mariscal);
+  it.each(['linea-c4', 'linea-e3', 'linea-e1'])('%s: 1 star asks for fares from served stops, not tricks', (id) => {
+    const r = routesFor(mariscal, graph).find((x) => x.id === id)!;
+    const args = [routeStops(mariscal, r), routeLegs(mariscal, r, graph), startPose(mariscal, graph, r).pos] as const;
+    const t = starThresholds(...args);
+    expect(t[0]).toBeGreaterThanOrEqual(200);
+    expect(modelShift(...args, 18, 1).served).toBeGreaterThanOrEqual(3);
   });
 });
 

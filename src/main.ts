@@ -260,6 +260,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   let fallSound = 0;
   /** 0..1: how far into a tunnel the camera is (eased). */
   let tunnelK = 0;
+  let tunnelOpen = 0;
 
   performance.mark('qbus:session');
   // Weak GPUs: render fewer pixels (and smaller shadows) while the frame rate stays low. Automation
@@ -497,9 +498,14 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       const c = locateOnTrack(race, { x: camera.position.x, z: camera.position.z, y: camera.position.y }, trackS, 80);
       const inside = inTunnel(race, c.s) && Math.abs(c.off) < BORE_HALF && camera.position.y - c.y < BORE_TOP + 0.5;
       tunnelK += ((inside ? 1 : 0) - tunnelK) * Math.min(1, dt * 6);
-    } else tunnelK = 0;
+      // Daylight shows ahead when a portal is near: fog turns sky-colored instead of black.
+      const tu = race.tunnels.find((t) => c.s >= t.s0 && c.s <= t.s1);
+      const near = tu ? Math.min(c.s - tu.s0, tu.s1 - c.s) : 1e9;
+      tunnelOpen += ((inside ? Math.max(0, 1 - near / 60) : 0) - tunnelOpen) * Math.min(1, dt * 4);
+    } else tunnelK = tunnelOpen = 0;
     rain.tunnel = tunnelK;
-    rain.update(w, camera, paused ? 0 : dt, covered);
+    rain.tunnelOpen = tunnelOpen;
+    rain.update(w, camera, paused ? 0 : dt, covered || tunnelK > 0.5);
     audio.weather(paused ? 0 : w.rain * (covered ? 0.4 : 1), paused ? 0 : spray);
     audio.river(paused ? 0 : river);
     audio.waterfall(paused ? 0 : fallSound);

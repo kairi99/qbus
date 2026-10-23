@@ -14,9 +14,9 @@ const COLUMN = 2;
 /** The mound stands at least this far over the deck (the bore's top plus rock), then climbs this steeply (rise per meter) from a portal up to the mountain. */
 const MOUND_MIN = BORE_TOP + 2.4;
 const MOUND_CLIMB = 0.75;
-/** Across, the mound's top falls off this steeply past MOUND_FLAT m from the centerline. */
-const MOUND_FLAT = 9;
-const MOUND_FALL = 0.9;
+/** Across, the mound's top is a dome: it falls MOUND_DOME x across² m from the centerline, and is rough by up to MOUND_ROUGH m. */
+const MOUND_DOME = 0.05;
+const MOUND_ROUGH = 1.6;
 /** Width of the concrete frame round each portal's arch (m). */
 const FRAME = 0.7;
 /** Lamps along the ceiling: first one this far in, then every LAMP_EVERY m, on each side. */
@@ -80,7 +80,9 @@ export function moundRise(t: Tunnel, s: number): number {
  */
 export function moundHeight(t: Tunnel, s: number, across: number, deck: number, ground: number): number {
   const a = Math.abs(across);
-  const top = deck + moundRise(t, s) - MOUND_FALL * Math.max(0, a - MOUND_FLAT);
+  // Rocky knobs (never negative: the rock over the bore stays as thick), fading toward the sides.
+  const rough = MOUND_ROUGH * hash2(Math.round(s / STEP), Math.round(a / COLUMN), 41) * (1 - smoothstep(MOUND_HALF - 8, MOUND_HALF, a));
+  const top = deck + moundRise(t, s) - MOUND_DOME * a * a + rough;
   return ground + Math.max(0, top - ground) * (1 - smoothstep(MOUND_HALF - 8, MOUND_HALF, a));
 }
 
@@ -111,6 +113,7 @@ export function buildTunnels(race: TrackData, ground: (p: Vec2) => number, world
   const faces = new ChunkedMeshBuilder(300);
   const lamps: THREE.Matrix4[] = [];
   const tmp = new THREE.Color();
+  const veg = new THREE.Color();
   tunnels.forEach((tu, ti) => {
     const rows = tunnelRows(tu);
     const frames = rows.map((s) => frameAt(race, s));
@@ -220,10 +223,11 @@ export function buildTunnels(race: TrackData, ground: (p: Vec2) => number, world
         const slope = Math.sqrt(Math.max(0, 1 - ny * ny)) / Math.max(0.05, ny);
         const x = mp[(i * C + c) * 3];
         const z = mp[(i * C + c) * 3 + 2];
-        const noise = hash2(Math.floor(x / 40), Math.floor(z / 40), 3) * 0.5 + hash2(x, z, 9) * 0.15;
-        tmp.copy(pal.low).lerp(pal.high, Math.max(0, Math.min(1, noise * 0.9 + 0.2)));
-        const cl = biomeCliff(biome);
-        if (slope > cl.earth) tmp.lerp(slope > cl.rock ? pal.rock : pal.earth, Math.min(1, (slope - cl.earth) * 2));
+        // Bare rock mottled with earth; plant green only creeps in where the mound melts into the hillside.
+        const grain = hash2(Math.floor(x / 5), Math.floor(z / 5), 3) * 0.5 + hash2(x, z, 9) * 0.5;
+        tmp.copy(pal.rock).lerp(pal.earth, 0.45 * grain).multiplyScalar(0.7 + 0.5 * hash2(Math.floor(x / 2), Math.floor(z / 2), 17));
+        const green = smoothstep(MOUND_HALF - 9, MOUND_HALF, Math.abs(cols[c])) * Math.max(0, 1 - slope * 1.5);
+        if (green > 0) tmp.lerp(veg.copy(pal.low).lerp(pal.high, Math.min(1, grain + 0.2)), green);
         mc.set([tmp.r, tmp.g, tmp.b], (i * C + c) * 3);
       }
     for (let c0 = 0; c0 < R - 1; c0 += CHUNK) {
@@ -254,6 +258,7 @@ export function buildTunnels(race: TrackData, ground: (p: Vec2) => number, world
       const f = frameAt(race, s);
       const out = end ? 1 : -1;
       portal(faces, tu, s, f, out, ground, pal.rock, pal.earth);
+      glowCard(scene, ring, f, out);
     }
   });
 
@@ -280,10 +285,6 @@ let shared: THREE.Material | null = null;
 /** The bore's colors carry their own light (baked): nothing in a tunnel is lit by the sun. */
 function boreMaterial(): THREE.Material {
   return (shared ??= new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-}
-
-function biomeCliff(b: Biome): { earth: number; rock: number } {
-  return b.cliff ?? { earth: 0.9, rock: 1.3 };
 }
 
 /**
@@ -317,7 +318,43 @@ function portal(mb: ChunkedMeshBuilder, tu: Tunnel, s: number, f: Frame, out: nu
   for (let u = -MOUND_HALF; u < MOUND_HALF; u += 1) {
     const [b0, b1, t0, t1] = [bottom(u), bottom(u + 1), top(u), top(u + 1)];
     if (t0 - b0 < 0.03 && t1 - b1 < 0.03) continue;
-    base.copy(rock).lerp(earth, 0.35 * hash2(u, s, 21)).multiplyScalar(0.8 + 0.3 * hash2(Math.round(u), s, 4));
+    base.copy(rock).lerp(earth, 0.4 * hash2(u, s, 21)).multiplyScalar(0.95 + 0.4 * hash2(Math.round(u), s, 4) + 0.12 * Math.sin((b0 + t0) * 1.7));
     at.quad(P(u, b0), P(u + 1, b1), P(u + 1, Math.max(b1, t1)), P(u, Math.max(b0, t0)), `#${base.getHexString()}`);
   }
+}
+
+/**
+ * The daylight seen through a far mouth from inside the bore: an unfogged bright card filling the arch,
+ * just inside the portal and facing into the bore (culled from outside). `RainView` shows it and
+ * colors it like the sky while the camera is in a tunnel (`userData.tunnelGlow`).
+ */
+function glowCard(scene: THREE.Scene, ring: RingPoint[], f: Frame, out: number): void {
+  const n = ring.length;
+  const pos: number[] = [];
+  const at = (u: number, v: number) => [f.q.x + f.nx * u - f.q.dx * out * 0.25, f.q.y + v, f.q.z + f.nz * u - f.q.dz * out * 0.25];
+  // A fan from the middle of the opening round the ring (the floor strip's ends close it).
+  for (let j = 1; j < n - 2; j++) pos.push(...at(0, 2), ...at(ring[j].u, ring[j].v), ...at(ring[j + 1].u, ring[j + 1].v));
+  pos.push(...at(0, 2), ...at(ring[n - 2].u, ring[n - 2].v), ...at(ring[1].u, ring[1].v));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  // Wound to face into the bore (toward -out); fix by the first triangle's normal.
+  const a = new THREE.Vector3().fromArray(pos, 0);
+  const b = new THREE.Vector3().fromArray(pos, 3);
+  const c = new THREE.Vector3().fromArray(pos, 6);
+  const nrm = b.sub(a).cross(c.sub(a));
+  if (nrm.x * f.q.dx * out + nrm.z * f.q.dz * out > 0) {
+    const arr = g.getAttribute('position') as THREE.BufferAttribute;
+    for (let k = 0; k < arr.count; k += 3) {
+      const [x, y, z] = [arr.getX(k + 1), arr.getY(k + 1), arr.getZ(k + 1)];
+      arr.setXYZ(k + 1, arr.getX(k + 2), arr.getY(k + 2), arr.getZ(k + 2));
+      arr.setXYZ(k + 2, x, y, z);
+    }
+  }
+  g.computeBoundingSphere();
+  const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: '#dfeaf0', fog: false }));
+  mesh.name = 'tunnel-glow';
+  mesh.userData.tunnelGlow = true;
+  mesh.visible = false;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
 }

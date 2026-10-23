@@ -246,6 +246,27 @@ describe('lanes in traffic', () => {
     expect(chooseLane({ ...me, off: -1.5 }, [], [car(50, -1)], KEEP_RIGHT).lane).toBeGreaterThan(KEEP_RIGHT);
   });
 
+  it('starts no pass in a tunnel or just before its portal, finishes one already alongside', () => {
+    const bore = [{ s0: 1100, s1: 1300 }];
+    const slow = car(30, 1);
+    expect(chooseLane(me, [], [slow], KEEP_RIGHT, 140, null, bore).lane).toBeLessThan(0); // portal 100 m on: clear of the 70 m line
+    expect(chooseLane(me, [], [car(30, 1)], KEEP_RIGHT, 140, null, [{ s0: 1060, s1: 1300 }]).lane).toBeGreaterThan(0);
+    const inside = chooseLane({ ...me, s: 1150 }, [], [{ ...car(30, 1), s: 1180 }], KEEP_RIGHT, 140, null, bore);
+    expect(inside.lane).toBeGreaterThan(0);
+    expect(inside.limit).toBeLessThan(me.v);
+    // Already out in the other half and alongside: the pass goes on.
+    expect(chooseLane({ ...me, s: 1150, off: -1.9 }, [], [{ ...car(-3, 1), s: 1147 }], KEEP_RIGHT, 140, null, bore).lane).toBeLessThan(0);
+    // Out of the bore again: passes as usual.
+    expect(chooseLane({ ...me, s: 1310 }, [], [{ ...car(30, 1), s: 1340 }], KEEP_RIGHT, 140, null, bore).lane).toBeLessThan(0);
+  });
+
+  it('meets an oncoming car in a tunnel on the right, and gets back to it from further off', () => {
+    const bore = [{ s0: 900, s1: 1300 }];
+    expect(chooseLane({ ...me, off: -1.9 }, [], [car(150, -1)], KEEP_RIGHT, 140, null, bore).lane).toBeGreaterThan(KEEP_RIGHT);
+    expect(chooseLane({ ...me, off: -1.9 }, [], [car(150, -1)], KEEP_RIGHT).lane).toBe(KEEP_RIGHT);
+    expect(chooseLane(me, [], [car(120, -1)], KEEP_RIGHT).lane).toBe(KEEP_RIGHT);
+  });
+
   it('passes another racer close ahead in its lane', () => {
     expect(chooseLane({ ...me, off: 0 }, [{ s: 1010, off: 0.3, v: 15, len: 12 }], [], 0).lane).toBeLessThan(0);
   });

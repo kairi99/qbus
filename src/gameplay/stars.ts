@@ -31,6 +31,25 @@ const MISSION_CENTS = MISSIONS.reduce((s, m) => s + m.reward, 0) / MISSIONS.leng
 const FLOOR = [50, 150, 300] as const;
 const GAP = 50;
 
+/**
+ * Rapid-transit routes (Trolebús, Ecovía) run long busway loops between stations (500 to 1000 m
+ * a leg against a 90 s clock), so a model driver at the ordinary 10 m/s times out before it
+ * serves a stop and earns nothing but tricks. Their model drivers instead drive at least the
+ * pace that serves this many stops per tier (they recommend the articulated bus, which tops out
+ * 15 km/h under the popular one, so the pace is capped), and a star asks for more than the
+ * red lights an autopilot runs on the way (1 star never comes from tricks alone).
+ */
+const BRT_SERVED = [2, 3, 4] as const;
+const BRT_FLOOR = [200, 400, 700] as const;
+const BRT_MAX_PACE = 18;
+
+function brtPace(route: RouteStop[], legs: number[], start: Vec2, base: number, served: number): number {
+  for (let p = base; p < BRT_MAX_PACE; p += 0.5) {
+    if (modelShift(route, legs, start, p, 1).served >= served) return p;
+  }
+  return BRT_MAX_PACE;
+}
+
 export type StarThresholds = [number, number, number];
 
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -40,10 +59,11 @@ const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
  * fares and tips it earns (cents) and how long the shift lasts (time bonuses included).
  * `legs[i]` is the driving distance into stop i from the stop before it.
  */
-export function modelShift(route: RouteStop[], legs: number[], start: Vec2, pace: number, seed: number): { cents: number; seconds: number } {
+export function modelShift(route: RouteStop[], legs: number[], start: Vec2, pace: number, seed: number): { cents: number; seconds: number; served: number } {
   const game = new RouteGame(route, { seed, capacity: CAPACITY, start });
   game.start();
   let seconds = 0;
+  let served = 0;
   for (let n = 0; !game.over && n < 500; n++) {
     const i = game.activeIndex;
     const to = game.activeStop.zone;
@@ -58,10 +78,10 @@ export function modelShift(route: RouteStop[], legs: number[], start: Vec2, pace
     }
     seconds += t;
     if (game.over) break;
-    game.update(wait - t, { pos: to, speed: 0 });
+    if (game.update(wait - t, { pos: to, speed: 0 }).some((e) => e.type === 'arrive')) served++;
     seconds += wait - t;
   }
-  return { cents: game.cents, seconds };
+  return { cents: game.cents, seconds, served };
 }
 
 /**
@@ -71,16 +91,19 @@ export function modelShift(route: RouteStop[], legs: number[], start: Vec2, pace
  * asks for less fare money than a tight one; tricks and missions ask the same everywhere.
  */
 export function starThresholds(route: RouteStop[], legs: number[], start: Vec2): StarThresholds {
+  const brt = route.some((r) => r.stop.system);
   let prev = 0;
   return STAR_TIERS.map((tier, k) => {
+    const pace = brt ? brtPace(route, legs, start, tier.pace, BRT_SERVED[k]) : tier.pace;
+    const floor = brt ? BRT_FLOOR[k] : FLOOR[k];
     let sum = 0;
     for (const seed of SEEDS) {
-      const { cents, seconds } = modelShift(route, legs, start, tier.pace, seed);
+      const { cents, seconds } = modelShift(route, legs, start, pace, seed);
       sum += cents + tier.tricks * seconds;
     }
     const avg = sum / SEEDS.length + tier.missions * MISSION_CENTS;
     // Rounded to 5 cents, and each tier clearly above the one before.
-    prev = Math.max(prev + GAP, FLOOR[k], Math.round(avg / 5) * 5);
+    prev = Math.max(prev + GAP, floor, Math.round(avg / 5) * 5);
     return prev;
   }) as StarThresholds;
 }

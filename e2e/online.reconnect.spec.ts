@@ -3,7 +3,12 @@ import { expect, test, type Page } from '@playwright/test';
 // Two software-WebGL pages at once: a few frames a second each.
 test.describe.configure({ timeout: 600_000 });
 
-const q = (page: Page, fn: string) => page.evaluate(`(() => { const q = window.__qbus; return ${fn}; })()`);
+// A page mid-navigation (menu -> game, a dev-server reload) has no context: polls read that as "not yet".
+const q = (page: Page, fn: string) =>
+  page.evaluate(`(() => { const q = window.__qbus; return ${fn}; })()`).catch((e: Error) => {
+    if (/context was destroyed|navigation/i.test(e.message)) return undefined;
+    throw e;
+  });
 
 test('a player\'s link drops, then his page reloads, mid-race: he gets his seat and his bus back, the host stays host', async ({ browser }) => {
   const errors: string[] = [];
@@ -31,7 +36,7 @@ test('a player\'s link drops, then his page reloads, mid-race: he gets his seat 
     await p.waitForURL(/mode=online/, { timeout: 30_000 });
     await expect.poll(() => q(p, '!!q?.online'), { timeout: 150_000 }).toBe(true);
   }
-  for (const p of [a.page, b.page]) await expect.poll(() => q(p, 'q.racing.game.green'), { timeout: 60_000 }).toBe(true);
+  for (const p of [a.page, b.page]) await expect.poll(() => q(p, 'q?.racing?.game?.green === true'), { timeout: 60_000 }).toBe(true);
   expect(await q(a.page, 'q.online.host')).toBe(true);
   expect(await q(b.page, 'q.online.host')).toBe(false);
 
@@ -45,8 +50,10 @@ test('a player\'s link drops, then his page reloads, mid-race: he gets his seat 
   await expect.poll(seenSolid, { timeout: 30_000 }).toBe(true);
 
   // 1. His link drops (a wifi blip): "Reconectando…", Ana sees a ghost, the page retries on its own and is solid again.
-  await b.page.evaluate(`window.__qbus.online.conn.ws.close()`);
+  // Retries fail (socket constructor throws) until Ana has seen the ghost: otherwise the quick reconnect can beat her poll.
+  await b.page.evaluate(`(() => { const c = window.__qbus.online.conn; c.RealImpl = c.Impl; c.Impl = function () { throw new Error('link down'); }; c.ws.close(); })()`);
   await expect.poll(() => q(a.page, 'q.online.remotes.find((r) => r.name === "Beto").remote.bus.ghost'), { timeout: 30_000 }).toBe(true);
+  await b.page.evaluate(`(() => { const c = window.__qbus.online.conn; c.Impl = c.RealImpl; })()`);
   await expect.poll(() => q(b.page, 'q.online.conn.state'), { timeout: 60_000 }).toBe('open');
   await expect.poll(seenSolid, { timeout: 60_000 }).toBe(true);
   await expect(b.page.locator('.rh-net')).toBeHidden();

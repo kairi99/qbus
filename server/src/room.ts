@@ -151,7 +151,9 @@ export class RoomLogic {
     // so far; the client skips what it already has. Back after the end: the final results.
     if (back && s.phase === 'racing') {
       if (Object.keys(s.times).length) out.push({ to: seat.id, msg: { t: 'result', rows: this.rows(), final: false } });
-      out.push({ to: seat.id, msg: { t: 'go', grid: s.grid, seed: s.seed, goAt: s.goAt, resume: { ...s.last } } });
+      // Before the green light there is no race to resume: a normal start (countdown + launch).
+      const resume = now >= s.goAt ? { resume: { ...s.last } } : {};
+      out.push({ to: seat.id, msg: { t: 'go', grid: s.grid, seed: s.seed, goAt: s.goAt, ...resume } });
     }
     if (back && s.phase === 'results') out.push({ to: seat.id, msg: { t: 'result', rows: this.rows(), final: true } });
     return { seat: seat.id, out };
