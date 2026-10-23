@@ -48,7 +48,7 @@ export const BORE_RISE = 4;
 /** Height of the bore's apex over the deck. */
 export const BORE_TOP = BORE_WALL + BORE_RISE;
 /** The rock mound over a tunnel reaches this far either side of the centerline (m). */
-export const MOUND_HALF = 18;
+export const MOUND_HALF = 40;
 
 /** The real things along a track (osm/track.ts), drawn by trackBuilder. */
 export interface TrackScenery {

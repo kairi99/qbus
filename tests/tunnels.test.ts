@@ -1,16 +1,17 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { createWorld, initRapier, PHYSICS_STEP } from '../src/physics/world';
+import { RAPIER, createWorld, initRapier, PHYSICS_STEP } from '../src/physics/world';
 import { BusPhysics } from '../src/vehicle/bus';
 import { busById } from '../src/vehicle/buses';
 import { buildCity } from '../src/world/cityBuilder';
 import type { CityData } from '../src/world/cityData';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { terrainHeight } from '../src/world/terrain';
+import { biomeOf } from '../src/world/biomes';
 import { BORE_HALF, BORE_TOP, BORE_WALL, MOUND_HALF, inTunnel, locateOnTrack, trackPoint, trackPose } from '../src/world/track';
-import { boreRing, moundHeight, moundRise, tunnelRows } from '../src/world/tunnels';
-import { plantSpots } from '../src/world/trackBuilder';
+import { HOOD, MOUND_BLEND, boreRing, boreWander, hoodVines, moundCrest, plateText, moundHeight, moundRise, tunnelRows } from '../src/world/tunnels';
+import { HOOD_CLEAR, MOUND_PLANT_CLEAR, plantSpots } from '../src/world/trackBuilder';
 import { mudPatches, slideSites } from '../src/gameplay/landslides';
 
 const city: CityData = JSON.parse(readFileSync('data/cities/rioverde.json', 'utf8'));
@@ -92,10 +93,76 @@ describe('Río Verde: the real tunnels and bridges (OSM tunnel / bridge ways)', 
     expect(plants.length).toBeGreaterThan(500);
     for (const pl of plants) {
       const at = locateOnTrack(race, pl.p);
-      expect(inTunnel(race, at.s, 24) && Math.abs(at.off) < MOUND_HALF + 6).toBe(false);
+      // Plants may stand on the mound (see below), never over the bore or at a portal's hood.
+      expect(inTunnel(race, at.s, HOOD + 4) && Math.abs(at.off) < MOUND_PLANT_CLEAR).toBe(false);
+      // And none in the portal zone (hood + headwall + hanging vines).
+      for (const t of tunnels) if ((at.s > t.s0 - HOOD - 4 && at.s < t.s0 + 4) || (at.s > t.s1 - 4 && at.s < t.s1 + HOOD + 4)) expect(Math.abs(at.off)).toBeGreaterThanOrEqual(HOOD_CLEAR);
     }
     for (let seed = 1; seed <= 6; seed++) for (const site of slideSites(race, seed, ground)) expect(inTunnel(race, site.s, 90)).toBe(false);
     for (const m of mudPatches(race)) expect(inTunnel(race, m.s, 20)).toBe(false);
+  });
+
+  it('the mound blends into the slope: no step at its edge, no steeper than the hillside there, plants grow on it clear of the bore', () => {
+    const cliff = biomeOf(race).cliff ?? { earth: 0.9, rock: 1.3 };
+    let steepest = 0;
+    let n = 0;
+    for (const t of tunnels)
+      for (let s = t.s0 + 3; s < t.s1; s += 6) {
+        const q = trackPoint(race, s);
+        const nn = { x: -q.dz, z: q.dx };
+        for (const side of [-1, 1]) {
+          const g = (a: number) => ground({ x: q.x + nn.x * a * side, z: q.z + nn.z * a * side });
+          const crest = moundCrest(race, s, ground);
+          const h = (a: number) => moundHeight(t, s, a, q.y, g(a), crest);
+          // The edge: the mound is the ground (no step), and its slope there is the hillside's own (never steeper than it, or than the canyon's cliff).
+          expect(Math.abs(h(MOUND_HALF) - g(MOUND_HALF))).toBeLessThan(0.5);
+          const slope = Math.abs(h(MOUND_HALF - 2) - h(MOUND_HALF)) / 2;
+          const hill = Math.abs(g(MOUND_HALF - 2) - g(MOUND_HALF)) / 2;
+          expect(slope).toBeLessThan(Math.max(cliff.rock, hill + 0.15));
+          // Starting to melt MOUND_BLEND m in, the mound has no step from one column to the next either.
+          for (let a = MOUND_HALF - MOUND_BLEND; a < MOUND_HALF; a += 2) expect(Math.abs(h(a + 2) - h(a))).toBeLessThan(Math.abs(g(a + 2) - g(a)) + 1.2);
+          // Not by construction: 2 m inside the edge the mound is still within its thin skin of the ground.
+          expect(Math.abs(h(MOUND_HALF - 2) - g(MOUND_HALF - 2))).toBeLessThan(0.5);
+          steepest = Math.max(steepest, slope);
+          n++;
+        }
+      }
+    expect(n).toBeGreaterThan(100);
+    expect(steepest).toBeGreaterThan(0);
+    // Plants do stand on the mound (not only beside it), at the mound's height, and none within MOUND_PLANT_CLEAR of a bore's centerline.
+    let on = 0;
+    for (const pl of plantSpots(race, city.terrain!, ground)) {
+      const at = locateOnTrack(race, pl.p);
+      for (const t of tunnels)
+        if (at.s > t.s0 && at.s < t.s1) {
+          if (Math.abs(at.off) < MOUND_HALF) {
+            on++;
+            expect(Math.abs(pl.y - moundHeight(t, at.s, at.off, at.y, ground(pl.p), moundCrest(race, at.s, ground)))).toBeLessThan(0.01);
+          }
+          expect(Math.abs(at.off)).toBeGreaterThanOrEqual(MOUND_PLANT_CLEAR);
+        }
+    }
+    expect(on).toBeGreaterThan(20);
+  });
+
+  it('only a name that itself starts with Tunel/Túnel gets a plate', () => {
+    expect(plateText('Tunel Cadanillas')).toBe('TÚNEL CADANILLAS');
+    expect(plateText('túnel Chirosinguna')).toBe('TÚNEL CHIROSINGUNA');
+    expect(plateText('Ruta de las Cascadas')).toBeNull();
+    expect(plateText('Carretera Transversal Central')).toBeNull();
+    expect(plateText(undefined)).toBeNull();
+    expect(tunnels.map((t) => plateText(t.name) !== null)).toEqual([false, false, true, true]);
+  });
+
+  it('hanging plants never reach into the opening', () => {
+    const vines = hoodVines(race);
+    // Both portals of every tunnel carry some, hung from the hood's lip or the headwall's top.
+    expect(vines.length).toBeGreaterThan(tunnels.length * 2 * 6);
+    for (const v of vines) {
+      expect(v.len).toBeGreaterThan(0.2);
+      const lowest = v.top - v.len;
+      expect(lowest >= v.deck + BORE_TOP + 0.3 || Math.abs(v.across) > BORE_HALF + 1).toBe(true);
+    }
   });
 
   it('has the real waterfalls near the road: a course down the slope each, falling well over 20 m', () => {
@@ -140,6 +207,58 @@ describe('Río Verde: driving through a tunnel (physics)', () => {
     for (const b of bus.bodies) world.removeRigidBody(b);
     expect(widest).toBeLessThan(BORE_HALF + 0.1);
     expect(top).toBeLessThan(2.6);
+  });
+
+  it('the built bore wanders but never enters the swept space; its curbs are solid from above and behind', () => {
+    const ring = boreRing(race.width / 2);
+    const cast = (o: { x: number; y: number; z: number }, d: { x: number; y: number; z: number }, max: number) => world.castRay(new RAPIER.Ray(o, d), max, true)?.timeOfImpact ?? Infinity;
+    // Distance from (0, 1.5) along (cos a, sin a) to the plain ring's walls and arch (the invariant: the solid is never nearer).
+    const ringDist = (a: number): number => {
+      const dx = Math.cos(a);
+      const dy = Math.sin(a);
+      let best = Infinity;
+      for (let j = 1; j < ring.length - 2; j++) {
+        const [p, q] = [ring[j], ring[j + 1]];
+        const ex = q.u - p.u;
+        const ey = q.v - p.v;
+        const den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-9) continue;
+        const tt = ((p.u - 0) * ey - (p.v - 1.5) * ex) / den;
+        const ss = ((p.u - 0) * dy - (p.v - 1.5) * dx) / den;
+        if (tt > 0 && ss >= 0 && ss <= 1) best = Math.min(best, tt);
+      }
+      return best;
+    };
+    const half = race.width / 2;
+    const spread: number[] = [];
+    for (const t of tunnels)
+      // Offset 0.7 m so no ray runs exactly along a row's triangle edge (a ray through an edge can slip between two triangles).
+      for (let s = t.s0 - HOOD + 0.7; s <= t.s1 + HOOD - 0.7; s += 2) {
+        const q = trackPoint(race, s);
+        const n = { x: -q.dz, z: q.dx };
+        const at = (u: number, v: number, du: number, dv: number, max: number) => cast({ x: q.x + n.x * u, y: q.y + v, z: q.z + n.z * u }, { x: n.x * du, y: dv, z: n.z * du }, max);
+        for (let deg = 0; deg <= 180; deg += 15) {
+          const a = (deg * Math.PI) / 180;
+          const want = ringDist(a);
+          const got = at(0, 1.5, Math.cos(a), Math.sin(a), 20);
+          expect(got).toBeLessThan(Infinity);
+          // A chord effect, not a lip: the hood's lining has no wander to spare: on a bend its chord between rows cuts a few cm inside the plain ring.
+          expect(got).toBeGreaterThanOrEqual(want - (s < t.s0 || s > t.s1 ? 0.06 : 0.02));
+          if (deg === 0) spread.push(got);
+        }
+        for (const side of [-1, 1]) {
+          // Down onto the curb's top (0.2 m up): hit there, not on the floor under it.
+          const top = at(side * (half + 0.35 + 0.4), 1, 0, -1, 3);
+          expect(Math.abs(top - 0.8)).toBeLessThan(0.03);
+          // From the pocket between curb and wall, toward the bore: the curb's back face stops it.
+          const back = at(side * (half + 0.35 + 0.5 + 0.15), 0.1, -side, 0, 3);
+          expect(back).toBeLessThan(0.3);
+          // And along the road side, the chamfer face meets a ray from the asphalt.
+          const front = at(side * (half + 0.1), 0.1, side, 0, 3);
+          expect(front).toBeLessThan(0.6);
+        }
+      }
+    expect(Math.max(...spread) - Math.min(...spread)).toBeGreaterThan(0.15);
   });
 
   it('a bus at the middle of a tunnel sits on the road, wheels down, level with it', () => {

@@ -7,7 +7,8 @@ import { ChunkedMeshBuilder, InstancedTiles, MeshBuilder, hash2, vertexColorMate
 import type { RoadGraph } from './roadGraph';
 import type { Terrain } from './terrain';
 import { type TrackData, inTunnel, locateOnTrack, trackPoint } from './track';
-import { buildTunnels } from './tunnels';
+import { HOOD, buildTunnels, moundCrest, moundHeight } from './tunnels';
+import { applyRock } from './rockTexture';
 import { waterfallMesh, waterfallSpray } from './waterfalls';
 import { MOUND_HALF } from './track';
 import { PropSystem } from './props';
@@ -67,7 +68,10 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
 
   addTerrainCollider(world, t);
   const biome = biomeOf(race);
-  for (const m of trackTerrain(t, race, layer(6))) scene.add(m);
+  const terrainMat = layer(6);
+  // The canyon's cliff faces (the biome's cliff slopes) get banded rock over their colors.
+  if (race.biome === 'canyon') applyRock(terrainMat, { slopeOnly: true });
+  for (const m of trackTerrain(t, race, terrainMat)) scene.add(m);
 
   const deck = new ChunkedMeshBuilder(300);
   const paint = new ChunkedMeshBuilder(300);
@@ -496,9 +500,32 @@ export interface Plant {
   solid: boolean;
 }
 
-/** On the rock mound over a tunnel (nothing grows there: it is drawn above the ground the plants stand on). */
+/** Plants keep this far (m) off a tunnel's centerline, over the bore's walls, and clear of its portal hoods. */
+export const MOUND_PLANT_CLEAR = 6;
+
+/**
+ * Over a tunnel, a plant may grow on the mound (drawn above the ground) but never over the bore
+ * (within MOUND_PLANT_CLEAR of the centerline) nor on or beside a portal's hood and headwall.
+ */
 function underMound(race: TrackData, where: { s: number; off: number }): boolean {
-  return inTunnel(race, where.s, 24) && Math.abs(where.off) < MOUND_HALF + 6;
+  if (!race.tunnels) return false;
+  const off = Math.abs(where.off);
+  for (const t of race.tunnels) {
+    if (where.s < t.s0 - HOOD - 4 || where.s > t.s1 + HOOD + 4) continue;
+    if (off < MOUND_PLANT_CLEAR) return true;
+    if ((where.s < t.s0 + 4 || where.s > t.s1 - 4) && off < HOOD_CLEAR) return true;
+  }
+  return false;
+}
+
+/** Plants beside a portal keep clear of its headwall (half width 8.5 m) and the vines hanging from it. */
+export const HOOD_CLEAR = 13;
+
+/** Height a plant at `where` stands at: the mound's surface if it is over a tunnel, else the ground `g`. */
+function standHeight(race: TrackData, where: { s: number; off: number; y: number }, ground: (p: Vec2) => number, p: Vec2): number {
+  const g = ground(p);
+  if (race.tunnels) for (const t of race.tunnels) if (where.s >= t.s0 && where.s <= t.s1 && Math.abs(where.off) < MOUND_HALF) return moundHeight(t, where.s, where.off, where.y, g, moundCrest(race, where.s, ground));
+  return g;
 }
 
 /** Keeps every plant's middle this far past the asphalt's edge: a tree's crown or a boulder never overhangs a lane. */
@@ -537,7 +564,7 @@ export function plantSpots(race: TrackData, t: Terrain, ground: (p: Vec2) => num
         if (p.x < t.minX + 10 || p.z < t.minZ + 10 || p.x > t.minX + (t.cols - 2) * t.cell || p.z > t.minZ + (t.rows - 2) * t.cell) continue;
         const where = locateOnTrack(race, p);
         if (Math.abs(where.off) < hw + PLANT_CLEAR || blockedAt(p) || underMound(race, where)) continue;
-        const g = ground(p);
+        const g = standHeight(race, where, ground, p);
         const slope = Math.hypot(ground({ x: p.x + 2, z: p.z }) - ground({ x: p.x - 2, z: p.z }), ground({ x: p.x, z: p.z + 2 }) - ground({ x: p.x, z: p.z - 2 })) / 4;
         const forest = 1 - alt * pc.altFade;
         let kind: Plant['kind'];
