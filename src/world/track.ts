@@ -28,8 +28,27 @@ export interface TrackData {
   /** What's beside the road, from OSM: rivers, the oil pipelines, the town's buildings. */
   scenery?: TrackScenery;
   /** What grows and how the valley looks (trackBuilder's BIOMES); absent = páramo. */
-  biome?: 'paramo' | 'cloudforest';
+  biome?: 'paramo' | 'cloudforest' | 'canyon';
+  /**
+   * Real tunnels (OSM tunnel=yes) along the track, in meters along: the road runs through a closed bore
+   * (world/tunnels.ts) under a mound of rock. `top`: height of the mountain over the deck every
+   * `TUNNEL_TOP_STEP` m from `s0`, from the DEM (clamped), so the mound reads as the mountain.
+   */
+  tunnels?: { s0: number; s1: number; name?: string; top: number[] }[];
+  /** Real bridges (OSM bridge=yes) along the track: the ground falls away under the deck, parapets both sides. */
+  bridges?: { s0: number; s1: number; name?: string }[];
 }
+
+/** Spacing (m) of `Tunnel.top`. */
+export const TUNNEL_TOP_STEP = 12;
+/** A bore's cross-section: half width of the walls, where the arch springs (m over the deck) and how high it rises from there. */
+export const BORE_HALF = 5.4;
+export const BORE_WALL = 2.6;
+export const BORE_RISE = 4;
+/** Height of the bore's apex over the deck. */
+export const BORE_TOP = BORE_WALL + BORE_RISE;
+/** The rock mound over a tunnel reaches this far either side of the centerline (m). */
+export const MOUND_HALF = 18;
 
 /** The real things along a track (osm/track.ts), drawn by trackBuilder. */
 export interface TrackScenery {
@@ -41,6 +60,13 @@ export interface TrackScenery {
   buildings: { footprint: Vec2[]; floors: number; wall: string; roof: string; sign?: string; kind?: 'chapel' }[];
   /** High-voltage lines: the towers mapped inside the terrain, in order, and the circuits they carry. */
   powerLines?: { towers: Vec2[]; circuits: number }[];
+  /** Real waterfalls (OSM waterway=waterfall): the course the water takes down the slope (points every ~5 m, height of the ground under each), and its width (m). */
+  waterfalls?: { name?: string; points: Vec2[]; y: number[]; width: number }[];
+}
+
+/** Is `s` inside a tunnel (or within `pad` m of one)? */
+export function inTunnel(t: Pick<TrackData, 'tunnels'>, s: number, pad = 0): boolean {
+  return !!t.tunnels && t.tunnels.some((u) => s >= u.s0 - pad && s <= u.s1 + pad);
 }
 
 /** A point `s` meters along the track and its direction (unit, toward the finish). */

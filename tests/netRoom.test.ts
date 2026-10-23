@@ -186,6 +186,22 @@ describe('lobby', () => {
     const room1 = last(r.handle(1, { t: 'me', vehicle: 'car', ready: true }, 0), 'room');
     expect(room1.seats[1]).toMatchObject({ vehicle: 'car', ready: true });
   });
+  it('start grid uses each seat\'s own vehicle, not the host\'s stale copy', () => {
+    const r = room(2);
+    r.handle(1, { t: 'me', ready: true }, 0);
+    r.handle(1, { t: 'me', vehicle: 'car' }, 0); // changed while ready; the host's grid was built before it
+    const out = r.handle(0, { t: 'start', grid: humans(0, 1), seed: 1 }, 1);
+    const go = last(out, 'room');
+    expect(go.phase).toBe('loading');
+    expect(r.state.grid.find((g) => g.kind === 'human' && g.seat === 1)?.vehicle).toBe('car');
+  });
+  it('a vehicle pick mid-race is answered with the room, between races it counts', () => {
+    const r = room(2);
+    r.handle(1, { t: 'me', ready: true }, 0);
+    r.handle(0, { t: 'start', grid: humans(0, 1), seed: 1 }, 1);
+    const out = r.handle(1, { t: 'me', vehicle: 'car' }, 2);
+    expect(last(out, 'room').seats[1].vehicle).toBe('bus');
+  });
   it('start gating', () => {
     const r = room(3);
     const start = (grid: GridEntry[]): Out[] => r.handle(0, { t: 'start', grid, seed: 1 }, 0);

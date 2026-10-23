@@ -15,6 +15,10 @@ const DIM_HEMI = 0.35;
 const DIM_SUN = 0.7;
 /** Fog closes in this much (share of its distances) at the heaviest. */
 const FOG_IN = 0.5;
+/** Inside a tunnel: the fog's color, how far one sees (m) and how much of the sky light stays. */
+const TUNNEL_FOG = '#0a0a0c';
+const TUNNEL_SEE = 90;
+const TUNNEL_DIM = 0.45;
 /** Lightning only in rain this heavy, every LIGHTNING_EVERY seconds or so. */
 const LIGHTNING_RAIN = 0.75;
 const LIGHTNING_EVERY: [number, number] = [9, 26];
@@ -146,6 +150,9 @@ export class RainView {
     this.overcast = new THREE.Color(OVERCAST[tod]);
   }
 
+  /** How deep in a tunnel the camera is (0 out, 1 in): set each frame before `update`. */
+  tunnel = 0;
+
   /** `covered`: the camera is under a roof (a tunnel, a deck). */
   update(w: WeatherState, camera: THREE.Camera, dt: number, covered: boolean): void {
     this.time += dt;
@@ -171,8 +178,15 @@ export class RainView {
       s.uHorizon.copy(s.horizon).lerp(this.overcast, k * 0.85);
     }
     const flash = this.flash;
-    for (const h of this.base.hemi) h.light.intensity = h.intensity * (1 - DIM_HEMI * k) + flash * 2.2;
-    for (const l of this.base.sun) l.light.intensity = l.intensity * (1 - DIM_SUN * k);
+    // In a tunnel (0..1) it is dark: the fog goes black and close, the sun and sky light mostly off.
+    const dark = this.tunnel;
+    if (dark > 0.001) {
+      fog.color.lerp(this.tmp.set(TUNNEL_FOG), dark * 0.96);
+      fog.near = fog.near + (4 - fog.near) * dark;
+      fog.far = fog.far + (TUNNEL_SEE - fog.far) * dark;
+    }
+    for (const h of this.base.hemi) h.light.intensity = (h.intensity * (1 - DIM_HEMI * k) + flash * 2.2) * (1 - TUNNEL_DIM * dark);
+    for (const l of this.base.sun) l.light.intensity = l.intensity * (1 - DIM_SUN * k) * (1 - 0.95 * dark);
     if (s && flash > 0) {
       s.uTop.lerp(this.tmp.set('#e8ecff'), flash * 0.6);
       s.uHorizon.lerp(this.tmp, flash * 0.6);

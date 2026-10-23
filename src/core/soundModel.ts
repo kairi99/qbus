@@ -131,6 +131,10 @@ export const LEVELS = {
   splash: 0.45,
   /** A mountain river right below the road, at its loudest (filtered noise, fades with distance). */
   river: 0.3,
+  /** A big waterfall's roar close to it, at its loudest (filtered noise, fades with distance): a bit over the river, under the rain. */
+  waterfall: 0.38,
+  /** The wet end of the tunnel echo (a feedback delay on the whole mix) at its deepest: well under the dry mix. */
+  tunnelEcho: 0.32,
   /** The ground shaking before and during a landslide, at its loudest (low filtered noise, louder close). */
   rumble: 0.5,
   /** Rocks crashing down a slope, at its loudest (noise bursts; a bit under the thunder). */

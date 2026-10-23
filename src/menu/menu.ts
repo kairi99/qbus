@@ -173,7 +173,8 @@ export class Menu {
             bajo la licencia ${link('https://opendatacommons.org/licenses/odbl/1-0/', 'ODbL 1.0')}. Los datos de la ciudad del juego
             (<code>data/cities/*.json</code>) son una base de datos derivada y se comparten bajo la misma licencia. La pista
             Paso de la Muerte es un tramo real de la Vía Interoceánica (E20) entre Papallacta y Cuyuja, y la pista Bajada del
-            Silante, un tramo real de la Vía Alóag–Santo Domingo (E20) entre Arrayán y el Río Silante: las vías, sus ríos, los
+            Silante, un tramo real de la Vía Alóag–Santo Domingo (E20) entre Arrayán y el Río Silante; la pista Bajada de Río Verde,
+            un tramo real de la Ruta de las Cascadas (E30, Baños–Puyo) sobre el Pastaza, con sus cuatro túneles, sus puentes y sus cascadas: las vías, sus ríos, los
             oleoductos, la línea de alta tensión, la capilla y las casas también salen de OpenStreetMap; los letreros de los negocios solo dicen lo que venden.</p>
           </section>
           <section>
@@ -198,7 +199,7 @@ export class Menu {
             <p>QBus no está afiliado, patrocinado ni aprobado por el Municipio del Distrito Metropolitano de Quito, la Empresa
             Pública Metropolitana Metro de Quito, la EPMTPQ (Trolebús, Ecovía, Metrobus-Q), ninguna operadora de buses, ni
             ningún fabricante de vehículos. Los nombres de calles, lugares y sistemas de transporte se usan solo para ubicar el
-            juego. Las operadoras de buses, comercios, vehículos y canciones son inventados o parodias; cualquier parecido es
+            juego. Las operadoras de buses, comercios, vehículos (Toyoya, Taitar) y canciones son inventados o parodias; cualquier parecido es
             un guiño. Las marcas mencionadas pertenecen a sus dueños.</p>
           </section>
         </div>
@@ -503,10 +504,11 @@ export class Menu {
     };
     this.on('[data-go="back"]', leave);
     this.root.querySelector<HTMLSelectElement>('select[name="vehicle"]')!.addEventListener('change', (e) => {
-      this.onlineVehicle = (e.target as HTMLSelectElement).value;
-      conn.send({ t: 'me', vehicle: this.onlineVehicle });
+      this.onlineVehicle = wanted = (e.target as HTMLSelectElement).value;
+      conn.send({ t: 'me', vehicle: wanted });
     });
 
+    let wanted: string | null = null;
     const status = () => {
       let text = '';
       if (failure) text = failure;
@@ -539,9 +541,17 @@ export class Menu {
       conn.on('room', (m) => {
         room = m;
         // A seat taken back keeps its vehicle: the picker shows it.
+        // The picker shows what the room has. A pick not in yet (an older message crossing it, or sent while
+        // the link was down) is sent again, not overwritten; one the room refuses is replaced by the room's.
         const mineSeat = m.seats.find((x) => x.id === conn.seat);
         const pick = this.root.querySelector<HTMLSelectElement>('select[name="vehicle"]');
-        if (mineSeat && pick && mineSeat.vehicle !== this.onlineVehicle && VEHICLES.some((v) => v.preset.id === mineSeat.vehicle)) pick.value = this.onlineVehicle = mineSeat.vehicle;
+        if (mineSeat && wanted !== null && mineSeat.vehicle === wanted) wanted = null;
+        if (mineSeat && wanted !== null && m.phase === 'lobby') conn.send({ t: 'me', vehicle: wanted });
+        else if (mineSeat && wanted !== null) {
+          wanted = null;
+          note = 'No se pudo cambiar el vehículo ahora';
+        }
+        if (mineSeat && wanted === null && pick && VEHICLES.some((v) => v.preset.id === mineSeat.vehicle)) pick.value = this.onlineVehicle = mineSeat.vehicle;
         // The host started: everyone's page goes to the game, which reconnects to this seat.
         if (m.phase === 'loading') {
           offs.forEach((f) => f());
@@ -877,6 +887,33 @@ const AE86_ART = `
     <circle cx="114" cy="41" r="8" fill="#1b1b1b"/><circle cx="114" cy="41" r="4" fill="#d9d9d4"/>
   </g>`;
 
+/**
+ * Side view of the container truck, drawn from the preset's real layout (17.7 m over 208 px, nose right): the
+ * tractor's steer axle + rear tandem, the 40 ft box on its trailer overlapping the tractor's tail at the fifth
+ * wheel, and the trailer's three axles at its back.
+ */
+const TRUCK_ART = (() => {
+  const px = (m: number): number => (m + 13.95) * 11.75; // metres from the tractor's center -> card x
+  const wheel = (m: number): string =>
+    `<circle cx="${px(m).toFixed(1)}" cy="50" r="6" fill="#1b1b1b"/><circle cx="${px(m).toFixed(1)}" cy="50" r="2.6" fill="#9a9da3"/>`;
+  return `
+  <g transform="translate(4,12)">
+    <rect x="0" y="43" width="${px(-1.75).toFixed(1)}" height="4" fill="#2a2c30"/>
+    <rect x="${px(-3.75).toFixed(1)}" y="44" width="${(208 - px(-3.75)).toFixed(1)}" height="5" fill="#2a2c30"/>
+    <rect x="${px(1.2).toFixed(1)}" y="28" width="${(px(3.75) - px(1.2)).toFixed(1)}" height="16" rx="2" fill="#c8321e"/>
+    <rect x="${px(-1).toFixed(1)}" y="14" width="${(px(1.2) - px(-1)).toFixed(1)}" height="30" rx="3" fill="#c8321e"/>
+    <rect x="${px(-1).toFixed(1)}" y="11" width="${(px(1.2) - px(-1) - 2).toFixed(1)}" height="5" rx="2" fill="#e9e4d8"/>
+    <rect x="${px(0).toFixed(1)}" y="19" width="${(px(1.2) - px(0) - 2).toFixed(1)}" height="11" fill="#1c2a38"/>
+    <rect x="${px(3.6).toFixed(1)}" y="38" width="4" height="7" fill="#c9ccd1"/>
+    <rect x="${px(-1.4).toFixed(1)}" y="0" width="3" height="28" fill="#c9ccd1"/>
+    <rect x="${px(-2.75) - 8}" y="41" width="16" height="3" fill="#5b5e64"/>
+    <rect x="0" y="6" width="${px(-1.75).toFixed(1)}" height="37" fill="#1f7a8c"/>
+    ${Array.from({ length: 28 }, (_, i) => `<rect x="${3 + i * 5}" y="6" width="1.6" height="37" fill="#000" opacity=".18"/>`).join('')}
+    <rect x="0" y="6" width="${px(-1.75).toFixed(1)}" height="3" fill="#15525f"/><rect x="0" y="40" width="${px(-1.75).toFixed(1)}" height="3" fill="#15525f"/>
+    ${[2.1, -2.2, -3.5, -10.35, -11.65, -12.95].map(wheel).join('')}
+  </g>`;
+})();
+
 /** The gusanito on its card: the worm's head (eye, lips, antenna) and four wagons with striped canopies. */
 const GUSANITO_ART = (() => {
   const canopies = ['#ffd21f', '#3fc4ff', '#8fdc2c', '#ff8a2a'];
@@ -939,7 +976,9 @@ function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset
       <svg class="mn-bus-art" viewBox="0 0 220 80" aria-hidden="true">${
         p.kind === 'car'
           ? AE86_ART
-          : isTrain(p)
+          : p.kind === 'truck'
+            ? TRUCK_ART
+            : isTrain(p)
             ? GUSANITO_ART
             : `
         <g transform="translate(${(220 - w) / 2},8)">${body}
@@ -951,7 +990,7 @@ function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset
       <dl class="mn-stats">${busStats(p, pool)
         .map((st) => `<dt>${st.label}</dt><dd><span style="--v:${st.value.toFixed(2)}"></span></dd>`)
         .join('')}</dl>
-      <span class="mn-card-cap">${p.kind === 'car' ? `${p.capacity + 1} puestos` : `${p.capacity} pasajeros`} · ${p.topSpeedKmh} km/h</span>
+      <span class="mn-card-cap">${p.kind === 'car' ? `${p.capacity + 1} puestos` : p.kind === 'truck' ? 'Contenedor de 40 pies' : `${p.capacity} pasajeros`} · ${p.topSpeedKmh} km/h</span>
     </button>`;
 }
 

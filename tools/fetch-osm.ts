@@ -81,6 +81,7 @@ out geom;`,
 (
   way["building"](${b});
   way["waterway"~"^(river|stream)$"](${b});
+  node["waterway"="waterfall"](${b});
   way["man_made"="pipeline"](${b});
   node["amenity"~"^(restaurant|cafe|pharmacy)$"](${b});
   node["tourism"~"^(hostel|hotel|guest_house)$"](${b});

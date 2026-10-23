@@ -130,9 +130,11 @@ export class CameraRig {
     // Scaled to the vehicle: high and far behind a bus, lower and closer behind a car.
     const { length, height } = bus.preset.body;
     // A long (articulated) bus doesn't need to be framed as far back as its length would suggest.
-    const back = Math.max(7, length > 14 ? length * 0.5 + 9 : length * 1.3) + speedFrac * 4;
+    // A semi-trailer's box hides the tractor from low behind it: the camera sits further back and higher.
+    const tall = bus.preset.articulated?.rearHeight ? 1 : 0;
+    const back = Math.max(7, length > 14 ? length * 0.5 + 9 : length * 1.3) + speedFrac * 4 + tall * 3;
     const desired = this.tmp.copy(this.busPos).addScaledVector(this.flatFwd, -back);
-    desired.y += Math.min(7, 2 + height * 1.8);
+    desired.y += Math.min(7, 2 + height * 1.8) + tall * 4;
     const k = this.first ? 1 : 1 - Math.exp(-dt * 5);
     if (this.first) this.ideal.copy(desired);
     else this.ideal.lerp(desired, k);

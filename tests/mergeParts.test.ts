@@ -63,7 +63,8 @@ describe('merging a model’s fixed parts', () => {
 
   it('every vehicle draws in a handful of meshes', () => {
     const g = globalThis as any;
-    g.document ??= { createElement: () => ({ getContext: () => ({ fillRect() {}, fillText() {} }), width: 0, height: 0 }) };
+    const ctx = new Proxy({}, { get: () => () => undefined, set: () => true });
+    g.document ??= { createElement: () => ({ getContext: () => ctx, width: 0, height: 0 }) };
     for (const v of VEHICLES) {
       const m = new BusModel(v.preset);
       let n = 0;

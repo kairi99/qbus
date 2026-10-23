@@ -152,7 +152,7 @@ describe('online clock', () => {
 });
 
 describe('the field', () => {
-  const pool = ['popular', 'interparroquial', 'buseta', 'articulado', 'gusanito', 'ae86'];
+  const pool = ['popular', 'interparroquial', 'buseta', 'articulado', 'gusanito', 'ae86', 'trailer'];
 
   it('mixed: every rival a different vehicle, none the player’s while there are others', () => {
     for (const player of pool)

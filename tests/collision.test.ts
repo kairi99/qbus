@@ -10,9 +10,10 @@ import popular from '../data/buses/popular.json';
 import interparroquial from '../data/buses/interparroquial.json';
 import ae86 from '../data/buses/ae86.json';
 import articulado from '../data/buses/articulado.json';
+import trailer from '../data/buses/trailer.json';
 
 const KMH = 1 / 3.6;
-const PRESETS = { popular, interparroquial, ae86, articulado } as unknown as Record<string, BusPreset>;
+const PRESETS = { popular, interparroquial, ae86, articulado, trailer } as unknown as Record<string, BusPreset>;
 /** One-way network delay in the two-client runs (s). */
 const LATENCY = 0.06;
 
@@ -267,6 +268,23 @@ describe('vehicle collisions: arcade bumps instead of a dead stop', () => {
         expect(o.maxUp).toBeLessThan(1);
         expect(o.maxYaw).toBeLessThan(3);
       });
+
+  // The container truck: shoves a car hard (it is nine tonnes), and is hardly moved by one.
+  it('the truck rear-ends a car: the car is flung ahead, the truck keeps rolling', () => {
+    const o = scenario('trailer', 'ae86', 'rear', 'local');
+    expect(o.touched).toBe(true);
+    expect(o.hitter25).toBeGreaterThan(o.hitterBefore * 0.8);
+    expect(o.target25 - o.targetBefore).toBeGreaterThan(12);
+    expect(o.maxUp).toBeLessThan(1);
+    expect(o.maxYaw).toBeLessThan(3);
+  });
+  it('a car rear-ends the truck: the car bounces off, the truck barely notices', () => {
+    const o = scenario('ae86', 'trailer', 'rear', 'local');
+    expect(o.touched).toBe(true);
+    expect(Math.abs(o.target25 - o.targetBefore)).toBeLessThan(4);
+    expect(o.hitter25).toBeLessThan(o.hitterBefore * 0.9);
+    expect(o.maxUp).toBeLessThan(1);
+  });
 
   it('a ghost bumps nothing and nothing bumps it', () => {
     const world = createWorld();

@@ -29,6 +29,8 @@ export interface Biome {
   };
   /** Big crowns leaning over the road (visual only), one every `every` m per side up to `reach` m past the trunk clearance, `lean` m of lean; null = none. */
   canopy: { every: number; reach: number; lean: number } | null;
+  /** Slope (rise per run) where the ground turns bare earth, then rock (absent: 0.9, 1.3). */
+  cliff?: { earth: number; rock: number };
   mist: {
     /** Where the misty stretches on the road start (share of the raced length) and how long they are (m). */
     zones: number[];
@@ -98,6 +100,36 @@ export const BIOMES: Record<BiomeId, Biome> = {
     },
     canopy: { every: 5, reach: 7, lean: 5 },
     mist: { zones: [0.1, 0.27, 0.44, 0.61, 0.78, 0.9], length: 420, bankStep: 30, bankRise: [-30, 130], bankAlpha: [0.4, 0.75], perStep: 3, roadAlpha: 0.4 },
+  },
+  // The Pastaza gorge on the Ruta de las Cascadas: grey-brown rock cliffs with subtropical green on the
+  // gentler slopes and the tops, tree ferns and guadua, a little mist hanging in the gorge. No canopy
+  // over the road: it is cut into the rock.
+  canyon: {
+    terrain: { low: '#3b6a33', high: '#587b3a', earth: '#7d6a56', rock: '#827b72', gravel: '#9a9082' },
+    far: [
+      [0, '#36602f'],
+      [600, '#41703a'],
+      [1100, '#55803f'],
+      [1700, '#6f8758'],
+      [2300, '#8d9378'],
+      [2500, '#a7ab98'],
+    ],
+    plants: {
+      tries: 3,
+      reach: 200,
+      treeProb: 0.65,
+      altFade: 0.1,
+      fernProb: 0.35,
+      bambooProb: 0.25,
+      shrubProb: 0.8,
+      size: { tree: [0.9, 1.7], shrub: [0.7, 1.4], rock: [0.5, 1.7], fern: [0.9, 1.4], bamboo: [0.8, 1.3] },
+      stretch: [0.9, 1.5],
+      leaf: { h: 0.28, s: 0.5, l: [0.22, 0.38] },
+      stone: { h: 0.09, s: 0.08, l: [0.36, 0.5] },
+    },
+    canopy: null,
+    cliff: { earth: 0.55, rock: 0.85 },
+    mist: { zones: [0.22, 0.6, 0.88], length: 300, bankStep: 55, bankRise: [-20, 120], bankAlpha: [0.25, 0.5], perStep: 1, roadAlpha: 0.2 },
   },
 };
 

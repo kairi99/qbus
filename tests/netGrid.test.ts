@@ -3,7 +3,7 @@ import { buildGrid, gridKeys, mySlot, racerOf } from '../src/net/onlineGrid';
 import type { RoomSettings, Seat } from '../src/net/protocol';
 
 const seat = (id: number, vehicle = 'popular', host = false): Seat => ({ id, name: `P${id}`, vehicle, ready: true, host, online: true });
-const IDS = ['popular', 'interparroquial', 'buseta', 'articulado', 'gusanito', 'ae86'];
+const IDS = ['popular', 'interparroquial', 'buseta', 'articulado', 'gusanito', 'ae86', 'trailer'];
 const settings = (ai: number, rivalBus = 'mixed'): RoomSettings => ({ track: 'papallacta', ai, skill: 'normal', rivalBus, rain: 'random', tod: 'day', slides: true });
 
 describe('online grid', () => {

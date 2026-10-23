@@ -5,6 +5,7 @@ import buseta from '../../data/buses/buseta.json';
 import ae86 from '../../data/buses/ae86.json';
 import articulado from '../../data/buses/articulado.json';
 import gusanito from '../../data/buses/gusanito.json';
+import trailer from '../../data/buses/trailer.json';
 
 /** Selectable buses, in menu order, with a one-line pitch each. */
 export const BUSES: { preset: BusPreset; blurb: string }[] = [
@@ -23,8 +24,13 @@ export const CARS: { preset: BusPreset; blurb: string }[] = [
   { preset: ae86 as BusPreset, blurb: 'El 86 del tofu: liviano, rapidísimo y nacido para derrapar' },
 ];
 
+/** Trucks: free roam and races only (no passengers, nothing to pick up). */
+export const TRUCKS: { preset: BusPreset; blurb: string }[] = [
+  { preset: trailer as BusPreset, blurb: 'Cabezal y contenedor de 40 pies: pesadísimo, tarda en arrancar, tarda más en parar y la cola se cierra en las curvas' },
+];
+
 /** Everything drivable in free roam. */
-export const VEHICLES = [...BUSES, ...CARS];
+export const VEHICLES = [...BUSES, ...CARS, ...TRUCKS];
 
 export function busById(id: string): BusPreset {
   return (VEHICLES.find((b) => b.preset.id === id) ?? BUSES[0]).preset;

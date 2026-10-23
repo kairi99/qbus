@@ -101,6 +101,20 @@ test('a race on the Silante track: the grid, the countdown and the cloud-forest 
   expect(errors).toEqual([]);
 });
 
+test('a race on the Río Verde track: the grid, the countdown, tunnels on the way', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?play=1&mode=race&city=rioverde&tutorial=0&rain=0&rivals=2');
+  await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 120_000 });
+  await expect(page.locator('.rh-count')).toHaveText(/[321]/, { timeout: 60_000 });
+  const race = await page.evaluate(() => (window as any).__qbus.city.race);
+  expect(race.to).toBe('Río Verde');
+  expect(race.tunnels).toHaveLength(4);
+  await expect(page.locator('.rh-place')).toContainText('/ 3');
+  await page.screenshot({ path: `${shots}/b9-rioverde-grid.png` });
+  expect(errors).toEqual([]);
+});
+
 test('a race with five rivals: six on the grid, the countdown runs, nobody starts early', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));

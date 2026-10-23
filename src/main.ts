@@ -30,7 +30,7 @@ import { Tutorial } from './ui/tutorial';
 import { Weather, gripFor, parseRainSetting } from './gameplay/weather';
 import { FloodWater, floodBasins, floodedEdges, waterDepth } from './world/floods';
 import { RainView } from './world/rain';
-import { type TrackData, locateOnTrack, trackPose } from './world/track';
+import { BORE_HALF, BORE_TOP, type TrackData, inTunnel, locateOnTrack, trackPose } from './world/track';
 import { FALL_BACK, FallWatch } from './gameplay/fallWatch';
 import { OffRoad } from './gameplay/offRoad';
 import { RaceSession } from './gameplay/raceSession';
@@ -48,6 +48,9 @@ const TRACK_FOG = { near: 150, far: 16000 };
 /** A river is heard from this far off (m), loudest within RIVER_NEAR. */
 const RIVER_FAR = 160;
 const RIVER_NEAR = 25;
+/** A waterfall is heard from this far off (m), loudest within FALL_NEAR. */
+const FALL_FAR = 420;
+const FALL_NEAR = 60;
 
 /**
  * Runs a shift (started by `boot.ts`, which shows the menu otherwise). `cityReady` is the city
@@ -129,7 +132,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   // A link without ?bus= to a Trolebús/Ecovía route takes the articulated bus, like the menu.
   const mine = joined ? joined.go.grid.find((g) => g.kind === 'human' && g.seat === joined.conn.seat) : undefined;
   const picked = busById(mine?.vehicle ?? params.get('bus') ?? (route?.system ? BRT_BUS : settings.bus));
-  const preset = free || picked.kind !== 'car' ? picked : busById('popular');
+  const preset = free || !picked.kind || picked.kind === 'bus' ? picked : busById('popular');
   const { pos, heading } = city.spawn;
   const bus = new BusPhysics(world, preset, { x: pos.x, y: groundHeightAt(city, pos), z: pos.z, heading });
   const fits = vehicleClearance(world, preset.body);
@@ -254,6 +257,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   /** How far past the asphalt's edge the bus is (m, negative on it), on a track. */
   let offEdge = -1;
   let river = 0;
+  let fallSound = 0;
+  /** 0..1: how far into a tunnel the camera is (eased). */
+  let tunnelK = 0;
 
   performance.mark('qbus:session');
   // Weak GPUs: render fewer pixels (and smaller shadows) while the frame rate stays low. Automation
@@ -365,6 +371,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       let d = Infinity;
       for (const rv of race?.scenery?.rivers ?? []) d = Math.min(d, distToPolyline({ x: camera.position.x, z: camera.position.z }, rv.points));
       river = Math.max(0, Math.min(1, (RIVER_FAR - d) / (RIVER_FAR - RIVER_NEAR))) ** 2;
+      // Waterfalls: heard from far (they roar), loudest right at the water.
+      let df = Infinity;
+      for (const wf of race?.scenery?.waterfalls ?? []) df = Math.min(df, distToPolyline({ x: camera.position.x, z: camera.position.z }, wf.points));
+      fallSound = tunnelK > 0.5 ? 0 : Math.max(0, Math.min(1, (FALL_FAR - df) / (FALL_FAR - FALL_NEAR))) ** 1.5;
     }
 
     // The tutorial holds the bus still: the clock only starts on the first throttle after it.
@@ -482,9 +492,18 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       paused ? 0 : dt,
     );
     radio.update(audio.context, paused);
+    // Inside a tunnel's bore (the camera's, which follows the bus): dark fog and light, the engine echoing.
+    if (race?.tunnels && trackS >= 0) {
+      const c = locateOnTrack(race, { x: camera.position.x, z: camera.position.z, y: camera.position.y }, trackS, 80);
+      const inside = inTunnel(race, c.s) && Math.abs(c.off) < BORE_HALF && camera.position.y - c.y < BORE_TOP + 0.5;
+      tunnelK += ((inside ? 1 : 0) - tunnelK) * Math.min(1, dt * 6);
+    } else tunnelK = 0;
+    rain.tunnel = tunnelK;
     rain.update(w, camera, paused ? 0 : dt, covered);
     audio.weather(paused ? 0 : w.rain * (covered ? 0.4 : 1), paused ? 0 : spray);
     audio.river(paused ? 0 : river);
+    audio.waterfall(paused ? 0 : fallSound);
+    audio.tunnel(paused ? 0 : tunnelK);
     if (racing?.slides) audio.slides(paused ? 0 : racing.slideSound.rumble, paused ? 0 : racing.slideSound.fall);
     const t = bus.position(scratchPos);
     // The street name changes slowly: look it up a few times a second, not every frame.

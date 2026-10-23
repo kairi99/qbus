@@ -3,8 +3,8 @@
 export interface BusPreset {
   id: string;
   name: string;
-  /** A car (free roam only) rather than a bus. Default: bus. */
-  kind?: 'bus' | 'car';
+  /** A car or a truck (free roam and races only) rather than a bus. Default: bus. */
+  kind?: 'bus' | 'car' | 'truck';
   body: { length: number; width: number; height: number; color: string; stripe: string; roof: string };
   /**
    * An articulated bus: sections joined at turntables. `body.length` is the whole vehicle;
@@ -17,10 +17,16 @@ export interface BusPreset {
     sections?: number;
     /** Length of the rear section (m). */
     rearLength: number;
-    /** Distance between the sections where the bellows and turntable are (m); the hitch is its middle. */
+    /** Distance between the sections where the bellows and turntable are (m); the hitch is its middle. Negative: the sections overlap (a trailer's nose reaches over the tractor's tail). */
     gap: number;
     /** Rear axle position in rear-section coordinates (x, forward; negative = behind its center). */
     rearAxle: number;
+    /** More trailing axles of each rear section (same coordinates): a semi-trailer's axle group. */
+    rearAxles?: number[];
+    /** Height of the rear sections' boxes (m; default `body.height`): a container trailer stands taller than its tractor. Their floors stay level. */
+    rearHeight?: number;
+    /** Where the hinge sits above the front section's center (m, default 0; the fifth wheel is low). */
+    hingeY?: number;
     /** Mass of each rear section. */
     rearMass: number;
     /** Largest bend between the sections (degrees): past it the turntable pushes back. */
@@ -37,6 +43,8 @@ export interface BusPreset {
     driftYawRate?: number;
     /** Turntable stiffness pulling the sections straight while backing up (absent: free). A train of trailers folds in reverse. */
     reverseLock?: number;
+    /** Seconds the drift push looks ahead along the slip angle's growth (absent: 0). A heavy vehicle's slip lags the push and would overshoot the drift limit. */
+    driftLead?: number;
     /** While the handbrake is held the front tires grip this many times the rear ones (absent: unchanged). */
     driftFrontGrip?: number;
   };
@@ -65,6 +73,8 @@ export interface BusPreset {
     track: number;
     mountHeight: number;
     frictionSlip: number;
+    /** More driven axles behind `rearOffset` (x, same coordinates): a truck's tandem. */
+    extraRear?: number[];
     sideFrictionStiffness: number;
     /** Rear tire grip while the handbrake is held. Low enough to exceed the grip limit and slide. */
     handbrakeFrictionSlip: number;
@@ -103,4 +113,26 @@ export interface BusPreset {
 /** A train of wagons (more than one rear section): the gusanito. */
 export function isTrain(p: BusPreset): boolean {
   return (p.articulated?.sections ?? 1) > 1;
+}
+
+/** The wheel axles' x positions of section `section` (0 = front): the steered one first (front section). */
+export function axleXs(p: BusPreset, section: number): number[] {
+  if (section === 0) return [p.wheels.frontOffset, p.wheels.rearOffset, ...(p.wheels.extraRear ?? [])];
+  const a = p.articulated!;
+  return [a.rearAxle, ...(a.rearAxles ?? [])];
+}
+
+/** Height of section `section`'s box. */
+export function sectionHeight(p: BusPreset, section: number): number {
+  return section === 0 ? p.body.height : (p.articulated?.rearHeight ?? p.body.height);
+}
+
+/** How far a rear section's center stands above the front one's (m): their floors are level. */
+export function rearLift(p: BusPreset): number {
+  return (sectionHeight(p, 1) - p.body.height) / 2;
+}
+
+/** A tractor with a semi-trailer (the container truck): not a bus, with the dual tires and truck engine. */
+export function isTruck(p: BusPreset): boolean {
+  return p.kind === 'truck';
 }

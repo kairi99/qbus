@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const shots = 'e2e/screenshots';
 test.describe.configure({ timeout: 240_000 });
 
-for (const track of ['papallacta', 'silante']) test(`the ${track} track: free roam on the mountain road, rails and drops, start gantry`, async ({ page }) => {
+for (const track of ['papallacta', 'silante', 'rioverde']) test(`the ${track} track: free roam on the mountain road, rails and drops, start gantry`, async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`/?play=1&mode=free&city=${track}&tutorial=0&rain=0`);

@@ -98,6 +98,7 @@ export class BusAudio {
     limiter.release.value = 0.2;
     master.connect(limiter).connect(ctx.destination);
     this.master = master;
+    this.limiter = limiter;
 
     // Synth stand-ins, silent once the recordings are in.
     this.synthHornGain = ctx.createGain();
@@ -348,6 +349,64 @@ export class BusAudio {
       src.start(now + at);
       src.stop(now + at + 0.06);
     }
+  }
+
+  private limiter: DynamicsCompressorNode | null = null;
+  private echoWet: GainNode | null = null;
+
+  /**
+   * The echo of a tunnel (`level` 0..1 by how deep inside the camera is): the whole mix fed through a
+   * short feedback delay, darkened each pass, back in under the dry sound.
+   */
+  tunnel(level: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.limiter) return;
+    if (!this.echoWet && level <= 0) return;
+    if (!this.echoWet) {
+      const delay = ctx.createDelay(0.5);
+      delay.delayTime.value = 0.13;
+      const feedback = ctx.createGain();
+      feedback.gain.value = 0.52;
+      const dark = ctx.createBiquadFilter();
+      dark.type = 'lowpass';
+      dark.frequency.value = 1700;
+      const wet = ctx.createGain();
+      wet.gain.value = 0;
+      this.master.connect(delay);
+      delay.connect(dark).connect(feedback).connect(delay);
+      dark.connect(wet).connect(this.limiter);
+      this.echoWet = wet;
+    }
+    this.echoWet.gain.setTargetAtTime(LEVELS.tunnelEcho * level, ctx.currentTime, 0.25);
+  }
+
+  private fallGain: GainNode | null = null;
+
+  /** A waterfall's roar (`level` 0..1 by how near it is): broad filtered noise, more hiss than the river's rumble. */
+  waterfall(level: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (!this.fallGain && level <= 0) return;
+    if (!this.fallGain) {
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      const low = ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 700;
+      const hiss = ctx.createBiquadFilter();
+      hiss.type = 'bandpass';
+      hiss.frequency.value = 2600;
+      hiss.Q.value = 0.5;
+      const hissGain = ctx.createGain();
+      hissGain.gain.value = 0.5;
+      const src = this.noise(ctx, 3.1);
+      src.connect(low).connect(gain);
+      src.connect(hiss).connect(hissGain).connect(gain);
+      src.start();
+      gain.connect(this.master);
+      this.fallGain = gain;
+    }
+    this.fallGain.gain.setTargetAtTime(LEVELS.waterfall * level, ctx.currentTime, 0.6);
   }
 
   private riverGain: GainNode | null = null;

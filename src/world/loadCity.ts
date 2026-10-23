@@ -6,6 +6,7 @@ const ZONES: Record<string, () => Promise<{ default: unknown }>> = {
   mariscal: () => import('../../data/cities/mariscal.json'),
   papallacta: () => import('../../data/cities/papallacta.json'),
   silante: () => import('../../data/cities/silante.json'),
+  rioverde: () => import('../../data/cities/rioverde.json'),
 };
 
 /** Zones shown in the menu. */
@@ -18,6 +19,7 @@ export const ZONE_LIST = [
 export const TRACK_LIST = [
   { id: 'papallacta', name: 'Paso de la Muerte', blurb: 'Vía Interoceánica, de Papallacta a Cuyuja: barrancos, neblina y curvas cerradas' },
   { id: 'silante', name: 'Bajada del Silante', blurb: 'Vía Alóag–Santo Domingo: bosque nublado, quebradas profundas, derrumbes y curvas sin fin hasta el río' },
+  { id: 'rioverde', name: 'Bajada de Río Verde', blurb: 'Ruta de las Cascadas (Baños–Puyo): cañón del Pastaza, cuatro túneles de roca, cascadas y precipicios' },
 ];
 
 export const DEFAULT_ZONE = 'mariscal';

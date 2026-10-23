@@ -1,0 +1,41 @@
+{
+  "id": "trailer",
+  "name": "Tráiler Taitar",
+  "kind": "truck",
+  "body": { "length": 17.7, "width": 2.55, "height": 3.4, "color": "#c8321e", "stripe": "#1f7a8c", "roof": "#e9e4d8" },
+  "articulated": { "rearLength": 12.2, "gap": -2, "rearAxle": -2.5, "rearAxles": [-3.8, -5.1], "rearHeight": 3.9, "hingeY": -0.7, "rearMass": 5400, "yawLimitDeg": 75, "pitchLimitDeg": 9, "bevel": 1.2, "driftLock": 900, "driftYawRate": 1.2, "driftFrontGrip": 1, "reverseLock": 1200 },
+  "capacity": 1,
+  "race": { "corner": 12, "brake": 5, "wetCorner": 4.2, "wetBrake": 3.6 },
+  "mass": 3600,
+  "centerOfMassHeight": 0.7,
+  "engineForce": 7000,
+  "reverseForce": 7000,
+  "reverseTopSpeedKmh": 28,
+  "brakeForce": 50,
+  "handbrakeForce": 20,
+  "topSpeedKmh": 72,
+  "steer": { "maxAngle": 0.5, "highSpeedAngle": 0.2, "speed": 2.2 },
+  "wheels": {
+    "radius": 0.52,
+    "frontOffset": 2.1,
+    "rearOffset": -2.2,
+    "extraRear": [-3.5],
+    "track": 1.0,
+    "mountHeight": -1.2,
+    "frictionSlip": 2.2,
+    "sideFrictionStiffness": 1.0,
+    "handbrakeFrictionSlip": 0.15
+  },
+  "wet": { "front": 1.0, "rear": 0.4 },
+  "drift": { "maxAngleDeg": 40, "gripRecovery": 2.5 },
+  "cockpit": { "seat": [0.45, 0.95, -0.62] },
+  "nitro": { "accel": 5, "topSpeedBonusKmh": 20 },
+  "suspension": {
+    "restLength": 0.45,
+    "maxTravel": 0.4,
+    "stiffness": 30,
+    "compression": 2.2,
+    "relaxation": 2.6,
+    "maxForce": 250000
+  }
+}

@@ -1,6 +1,6 @@
 import { Rng } from '../core/rng';
 import type { Vec2 } from '../world/cityData';
-import { type TrackData, trackPoint } from '../world/track';
+import { type TrackData, inTunnel, trackPoint } from '../world/track';
 
 /**
  * Landslides on a race track (pure: no three.js, no Rapier). Everything is a function of the
@@ -76,7 +76,7 @@ export interface SlideField {
 }
 
 /** Which tracks have landslides (RaceSession's default for its `slides` option). */
-export const SLIDE_TRACKS: ReadonlySet<string> = new Set(['silante']);
+export const SLIDE_TRACKS: ReadonlySet<string> = new Set(['silante', 'rioverde']);
 
 /** A quick leader's pace (m/s) the schedule aims the falls ahead of, jittered per site. */
 const LEAD_PACE = 25;
@@ -200,6 +200,8 @@ export function slideSites(track: TrackData, seed: number, ground: (p: Vec2) => 
     const found: { s: number; side: 1 | -1 }[] = [];
     for (let s = lo; s <= hi; s += 10) {
       if (track.pickups.some((p) => Math.abs(p.s - s) < FROM_PICKUP + 30)) continue;
+      // Never in or at a tunnel (the mountain is over the road there) or on a bridge.
+      if (inTunnel(track, s, 90) || (track.bridges ?? []).some((b) => s > b.s0 - 60 && s < b.s1 + 60)) continue;
       let ok = true;
       for (let d = -30; d <= 30 && ok; d += 15) ok = bendRadius(track, s + d, 15) >= MIN_RADIUS;
       if (!ok) continue;
@@ -242,6 +244,8 @@ export function mudPatches(track: TrackData): MudPatch[] {
         const v = ((c.x - a.x) * (b.z - a.z) - (c.z - a.z) * (b.x - a.x)) / den;
         if (u < 0 || u > 1 || v < 0 || v > 1) continue;
         const s = track.cum[i] + (track.cum[i + 1] - track.cum[i]) * v;
+        // A stream under a bridge or through a tunnel's mountain never reaches the road.
+        if (inTunnel(track, s, 20) || (track.bridges ?? []).some((b) => s > b.s0 - 20 && s < b.s1 + 20)) continue;
         if (!out.some((m) => Math.abs(m.s - s) < PATCH_LEN * 2)) out.push({ s, len: PATCH_LEN, level: PATCH_LEVEL });
       }
     }

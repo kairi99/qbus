@@ -103,6 +103,12 @@ describe('mix levels', () => {
     expect(db(LEVELS.river)).toBeLessThan(-8);
   });
 
+  it('a waterfall roars over the river but under the rain; the tunnel echo stays well under the dry mix', () => {
+    expect(LEVELS.waterfall).toBeGreaterThan(LEVELS.river);
+    expect(LEVELS.waterfall).toBeLessThan(LEVELS.rain);
+    expect(db(LEVELS.tunnelEcho)).toBeLessThan(-6);
+  });
+
   it('a landslide is heard over the rain and river but under the thunder and the horn', () => {
     expect(LEVELS.rockfall).toBeGreaterThan(LEVELS.river);
     expect(LEVELS.rumble).toBeGreaterThan(LEVELS.river);

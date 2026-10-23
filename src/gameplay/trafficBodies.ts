@@ -49,6 +49,11 @@ export function laneSurface(city: CityData, graph: RoadGraph, sim: TrafficSim, w
     }
     const e = graph.edges[car.edge];
     let y: number;
+    if (e.y && city.roads[e.roadIndex]?.surface) {
+      // A track's graded deck is flat across at its own height, whatever the (carved, sloping)
+      // ground beside it does: `surfaceY` would blend toward that ground and sink cars into it.
+      return edgeY(e, projectOnPath(e.center, p).s)!;
+    }
     if (e.y) {
       const s = projectOnPath(e.center, p).s;
       y = surfaceY(city, { y: edgeY(e, s)!, lift: edgeLift(e, s) }, p);

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { RAPIER, addGround, createWorld, initRapier, PHYSICS_STEP } from '../src/physics/world';
 import { BusPhysics } from '../src/vehicle/bus';
+import { bumpImpulse } from '../src/physics/bump';
 import type { DriveInput } from '../src/core/input';
 import type { BusPreset } from '../src/vehicle/busPreset';
 import popular from '../data/buses/popular.json';
@@ -9,10 +10,11 @@ import buseta from '../data/buses/buseta.json';
 import ae86 from '../data/buses/ae86.json';
 import articulado from '../data/buses/articulado.json';
 import gusanito from '../data/buses/gusanito.json';
+import trailer from '../data/buses/trailer.json';
 
 const idle: DriveInput = { throttle: 0, steer: 0, handbrake: false };
 
-describe.each([popular, interparroquial, buseta, ae86, articulado, gusanito] as BusPreset[])('BusPhysics ($name)', (preset) => {
+describe.each([popular, interparroquial, buseta, ae86, articulado, gusanito, trailer] as BusPreset[])('BusPhysics ($name)', (preset) => {
 function setup() {
   const world = createWorld();
   // Big enough that the fastest vehicle can't drive off it during a test.
@@ -359,6 +361,218 @@ describe('articulated bus', () => {
   });
 });
 
+describe('container truck (a tractor and a semi-trailer)', () => {
+  const preset = trailer as BusPreset;
+  const art = preset.articulated!;
+  const deg = (r: number) => (r * 180) / Math.PI;
+  beforeAll(() => initRapier());
+
+  function setup(walls?: (w: ReturnType<typeof createWorld>) => void) {
+    const world = createWorld();
+    addGround(world, 3000);
+    walls?.(world);
+    const bus = new BusPhysics(world, preset, { x: 0, y: 3, z: 0, heading: 0 });
+    /** Distance between the two hinge anchors in the world (the tractor's tail end overlaps the trailer's nose). */
+    const separation = () => {
+      const anchor = (b: typeof bus.body, x: number, y: number) => {
+        const t = b.translation();
+        const q = b.rotation();
+        return {
+          x: t.x + x * (1 - 2 * (q.y * q.y + q.z * q.z)) + y * 2 * (q.x * q.y - q.w * q.z),
+          y: t.y + x * 2 * (q.x * q.y + q.w * q.z) + y * (1 - 2 * (q.x * q.x + q.z * q.z)),
+          z: t.z + x * 2 * (q.x * q.z - q.w * q.y) + y * 2 * (q.y * q.z + q.w * q.x),
+        };
+      };
+      const lift = (art.rearHeight! - preset.body.height) / 2;
+      const a = anchor(bus.body, -(bus.frontLength / 2 + art.gap / 2), art.hingeY ?? 0);
+      const b = anchor(bus.rear!.body, art.rearLength / 2 + art.gap / 2, (art.hingeY ?? 0) - lift);
+      return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    };
+    const run = (input: DriveInput, seconds: number, each?: () => void) => {
+      for (let t = 0; t < seconds; t += PHYSICS_STEP) {
+        bus.update(input, PHYSICS_STEP);
+        world.step();
+        each?.();
+      }
+    };
+    return { world, bus, run, separation };
+  }
+
+  it('is a tractor and a trailer overlapping at the fifth wheel, 12 wheels, the heaviest vehicle, 17-18 m', () => {
+    const { bus } = setup();
+    expect(bus.bodies).toHaveLength(2);
+    expect(bus.frontLength + art.gap + art.rearLength).toBeCloseTo(preset.body.length);
+    expect(preset.body.length).toBeGreaterThan(16.5);
+    expect(preset.body.length).toBeLessThan(18.1);
+    expect(bus.wheelCount).toBe(12);
+    for (const other of [articulado, gusanito, popular, interparroquial] as BusPreset[]) expect(bus.totalMass).toBeGreaterThan((other.articulated ? other.mass + other.articulated.rearMass * (other.articulated.sections ?? 1) : other.mass) * 1.8);
+  });
+
+  it('settles on all twelve wheels, tractor and trailer floors level, and drives straight', () => {
+    const { bus, run } = setup();
+    run(idle, 3);
+    expect(bus.wheelsOnGround).toBe(12);
+    // Floors level: the (taller) trailer's center stands by the difference of the half heights above the tractor's.
+    const dy = bus.rear!.body.translation().y - bus.body.translation().y;
+    expect(dy).toBeGreaterThan((art.rearHeight! - preset.body.height) / 2 - 0.15);
+    expect(dy).toBeLessThan((art.rearHeight! - preset.body.height) / 2 + 0.15);
+    run({ ...idle, throttle: 1 }, 6);
+    expect(Math.abs(deg(bus.bend))).toBeLessThan(1);
+    expect(Math.abs(bus.body.translation().z)).toBeLessThan(0.5);
+  });
+
+  it('is slow off the line and slow to stop next to the articulated bus', () => {
+    const measure = (p: BusPreset) => {
+      const world = createWorld();
+      addGround(world, 3000);
+      const bus = new BusPhysics(world, p, { x: 0, y: 3, z: 0, heading: 0 });
+      const step = (input: DriveInput) => (bus.update(input, PHYSICS_STEP), world.step());
+      for (let t = 0; t < 1; t += PHYSICS_STEP) step(idle);
+      let t60 = 0;
+      for (; bus.speed * 3.6 < 60 && t60 < 30; t60 += PHYSICS_STEP) step({ ...idle, throttle: 1 });
+      for (let t = 0; t < 10; t += PHYSICS_STEP) step({ ...idle, throttle: 1 });
+      const x0 = bus.body.translation().x;
+      for (let t = 0; bus.speed > 1 && t < 20; t += PHYSICS_STEP) step({ ...idle, throttle: -1 });
+      return { t60, stop: bus.body.translation().x - x0, top: bus.speed };
+    };
+    const [truck, bus] = [measure(preset), measure(articulado as BusPreset)];
+    expect(truck.t60).toBeGreaterThan(bus.t60 * 1.2);
+    expect(truck.stop).toBeGreaterThan(bus.stop * 1.5);
+  });
+
+  it('bends in a turn, the trailer cutting inside, and straightens out again', () => {
+    const { bus, run } = setup();
+    run(idle, 1);
+    run({ ...idle, throttle: 1 }, 4);
+    let max = 0;
+    run({ throttle: 0.5, steer: -1, handbrake: false }, 4, () => (max = Math.max(max, Math.abs(bus.bend))));
+    expect(deg(max)).toBeGreaterThan(10);
+    expect(deg(max)).toBeLessThan(art.yawLimitDeg);
+    run({ throttle: 0.5, steer: 0, handbrake: false }, 8);
+    expect(Math.abs(deg(bus.bend))).toBeLessThan(3);
+  });
+
+  it('backs up sanely: straight in line, and on full lock it neither jack-knifes past the limit nor leaves the hitch', () => {
+    const straight = setup();
+    straight.run(idle, 1);
+    straight.run({ ...idle, throttle: -1 }, 5);
+    expect(straight.bus.speed * 3.6).toBeLessThan(-15);
+    expect(Math.abs(deg(straight.bus.bend))).toBeLessThan(2);
+    const { bus, run, separation } = setup();
+    run(idle, 1);
+    let maxBend = 0;
+    let maxSep = 0;
+    let minUp = 1;
+    run({ ...idle, throttle: -1, steer: 1 }, 10, () => {
+      maxBend = Math.max(maxBend, Math.abs(bus.bend));
+      maxSep = Math.max(maxSep, separation());
+      for (const b of bus.bodies) {
+        const q = b.rotation();
+        minUp = Math.min(minUp, 1 - 2 * (q.x * q.x + q.z * q.z));
+      }
+    });
+    expect(deg(maxBend)).toBeLessThan(art.yawLimitDeg + 6);
+    expect(maxSep).toBeLessThan(0.15);
+    expect(minUp).toBeGreaterThan(0.9);
+  });
+
+  it('holds together through hard swerves at full speed', () => {
+    const { bus, run, separation } = setup();
+    run(idle, 1);
+    run({ ...idle, throttle: 1 }, 12);
+    let maxBend = 0;
+    let maxSep = 0;
+    let minUp = 1;
+    let t = 0;
+    for (let k = 0; k < 5 * 60; k++) {
+      t += PHYSICS_STEP;
+      run({ throttle: 1, steer: Math.sin(t * 5) > 0 ? 1 : -1, handbrake: false }, PHYSICS_STEP);
+      maxBend = Math.max(maxBend, Math.abs(bus.bend));
+      maxSep = Math.max(maxSep, separation());
+      for (const b of bus.bodies) {
+        const q = b.rotation();
+        minUp = Math.min(minUp, 1 - 2 * (q.x * q.x + q.z * q.z));
+      }
+    }
+    expect(deg(maxBend)).toBeLessThan(art.yawLimitDeg + 6);
+    expect(maxSep).toBeLessThan(0.15);
+    expect(minUp).toBeGreaterThan(0.8);
+  });
+
+  it('joint holds through a 20 m/s crash into a wall', () => {
+    const crash = setup((w) => {
+      const b = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(80, 2, 0));
+      w.createCollider(RAPIER.ColliderDesc.cuboid(0.5, 2, 20), b);
+    });
+    crash.run(idle, 1);
+    for (const b of crash.bus.bodies) b.setLinvel({ x: 20, y: 0, z: 0 }, true);
+    let maxSep = 0;
+    crash.run({ ...idle, throttle: 1 }, 6, () => (maxSep = Math.max(maxSep, crash.separation())));
+    expect(maxSep).toBeLessThan(0.3);
+    expect(crash.bus.body.translation().x + crash.bus.frontLength / 2).toBeLessThan(79.6);
+    for (const b of crash.bus.bodies) expect(Number.isFinite(b.translation().x + b.translation().y)).toBe(true);
+  });
+
+  it('crosses speed humps without leaving the road or flipping', () => {
+    const { bus, run } = setup((w) => {
+      for (const x of [50, 70]) {
+        const b = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, 0.04, 0));
+        w.createCollider(RAPIER.ColliderDesc.cuboid(1.5, 0.12, 6), b);
+      }
+    });
+    run(idle, 1);
+    let minUp = 1;
+    run({ ...idle, throttle: 0.4 }, 14, () => {
+      for (const b of bus.bodies) {
+        const q = b.rotation();
+        minUp = Math.min(minUp, 1 - 2 * (q.x * q.x + q.z * q.z));
+      }
+    });
+    expect(bus.body.translation().x).toBeGreaterThan(90);
+    expect(minUp).toBeGreaterThan(0.95);
+  });
+
+  it('a handbrake drift scores: front-section slip over 20 degrees for a second, then it recovers', () => {
+    const { bus, run } = setup();
+    run(idle, 1);
+    run({ ...idle, throttle: 1 }, 5);
+    expect(bus.speed * 3.6).toBeGreaterThan(40);
+    let above = 0;
+    let maxBend = 0;
+    run({ throttle: 1, steer: 1, handbrake: true }, 2, () => {
+      if (Math.abs(bus.slipAngle) > (20 * Math.PI) / 180) above += PHYSICS_STEP;
+      maxBend = Math.max(maxBend, Math.abs(bus.bend));
+    });
+    expect(above).toBeGreaterThanOrEqual(1);
+    expect(deg(maxBend)).toBeLessThan(art.yawLimitDeg);
+    run({ throttle: 1, steer: 0, handbrake: false }, 3);
+    expect(Math.abs(bus.slipAngle)).toBeLessThan(0.15);
+    expect(Math.abs(deg(bus.bend))).toBeLessThan(5);
+    expect(bus.speed).toBeGreaterThan(5);
+  });
+
+  it('shoves a light car hard and is barely moved by it (momentum, not a stop)', () => {
+    const truckMass = setup().bus.totalMass;
+    const carMass = (ae86 as BusPreset).mass;
+    const closing = 8;
+    const j = bumpImpulse(truckMass, carMass, closing);
+    expect(j / truckMass).toBeLessThan(closing * 0.2);
+    expect(j / carMass).toBeGreaterThan(closing * 0.9);
+  });
+
+  it('reset puts both sections upright and in line, centered on the spawn', () => {
+    const { bus, run } = setup();
+    run({ ...idle, throttle: 1, steer: 1 }, 4);
+    bus.reset({ x: 10, y: 0, z: 5, heading: Math.PI / 2 });
+    const c = bus.position();
+    expect(c.x).toBeCloseTo(10, 1);
+    expect(c.z).toBeCloseTo(5, 1);
+    expect(bus.heading).toBeCloseTo(Math.PI / 2);
+    expect(Math.abs(bus.bend)).toBeLessThan(0.01);
+    expect(bus.rear!.body.translation().z).toBeGreaterThan(bus.body.translation().z + 7);
+  });
+});
+
 describe('gusanito (a train of trailers)', () => {
   const preset = gusanito as BusPreset;
   const art = preset.articulated!;
@@ -549,7 +763,7 @@ describe('weather', () => {
     return { bus, run };
   };
 
-  const all = [popular, interparroquial, buseta, ae86, articulado, gusanito] as BusPreset[];
+  const all = [popular, interparroquial, buseta, ae86, articulado, gusanito, trailer] as BusPreset[];
   it.each(all)('mud (grip under a soaked road) still steers like a soaked road, not plowing straight on ($name)', (preset) => {
     const turned = (grip: number) => {
       const { bus, run } = setup(preset);
@@ -563,7 +777,7 @@ describe('weather', () => {
     expect(turned(0.45)).toBeGreaterThan(turned(0.7) * 0.85);
   });
 
-  it.each(all)('a soaked road brakes longer and (but for the articulado) slides in a hard turn, without spinning ($name)', (preset) => {
+  it.each(all)('a soaked road brakes longer and (but for the articulado and the truck, which never reach the limit) slides in a hard turn, without spinning ($name)', (preset) => {
     const turn = (grip: number) => {
       const { bus, run } = setup(preset);
       bus.grip = grip;
@@ -586,12 +800,12 @@ describe('weather', () => {
       return bus.body.translation().x - x0;
     };
     const [dry, wet] = [turn(1), turn(0.7)];
-    if (preset.id !== 'articulado') expect(wet).toBeGreaterThan(dry + 3.5);
+    if (preset.id !== 'articulado' && preset.id !== 'trailer') expect(wet).toBeGreaterThan(dry + 3.5);
     expect(wet).toBeLessThan(30);
     expect(braking(0.7)).toBeGreaterThan(braking(1) * 1.25);
   });
 
-  it.each([popular, gusanito] as BusPreset[])('floodwater slows the bus to a crawl, nitro still pushes through ($name)', (preset) => {
+  it.each([popular, gusanito, trailer] as BusPreset[])('floodwater slows the bus to a crawl, nitro still pushes through ($name)', (preset) => {
     const dry = setup(preset);
     const wet = setup(preset);
     const boosted = setup(preset);
@@ -609,7 +823,7 @@ describe('weather', () => {
     expect(boosted.bus.speed).toBeGreaterThan(wet.bus.speed * 1.3);
   });
 
-  it.each([popular, gusanito] as BusPreset[])('deep mud holds the bus to about 50 km/h, nitro pushes on, reset clears it ($name)', (preset) => {
+  it.each([popular, gusanito, trailer] as BusPreset[])('deep mud holds the bus to about 50 km/h, nitro pushes on, reset clears it ($name)', (preset) => {
     const dry = setup(preset);
     const mud = setup(preset);
     for (const s of [dry, mud]) {

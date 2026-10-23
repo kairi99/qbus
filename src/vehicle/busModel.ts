@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { type BusPreset, isTrain } from './busPreset';
+import { type BusPreset, axleXs, isTrain, isTruck, rearLift } from './busPreset';
 import type { BusPhysics } from './bus';
 import { carCockpit, carExterior } from './carBody';
 import { gusanitoCockpit, gusanitoHead, gusanitoWagon } from './gusanitoBody';
 import { mergeParts } from './mergeParts';
+import { truckCockpit, truckStacks, truckTractor, truckTrailer } from './truckBody';
 
 const flat = (color: THREE.ColorRepresentation) => new THREE.MeshLambertMaterial({ color, flatShading: true });
 
@@ -68,7 +69,7 @@ export class BusModel {
   private exterior = new THREE.Group();
   private cockpit = new THREE.Group();
   /** `section`: 0 = the front one, i + 1 = rear section i. */
-  private wheels: { pivot: THREE.Object3D; spin: THREE.Object3D; section: number; index: number }[] = [];
+  private wheels: { pivot: THREE.Object3D; spin: THREE.Object3D; section: number; index: number; pair: boolean }[] = [];
   /** Rear sections of an articulated bus, each posed relative to the front one. */
   private rearGroups: THREE.Group[] = [];
   /** Length of the front section (the whole bus when rigid). */
@@ -88,7 +89,15 @@ export class BusModel {
     this.frontLength = L;
     const car = preset.kind === 'car';
     const worm = isTrain(preset);
+    const truck = isTruck(preset);
     if (car) this.exterior.add(...carExterior(preset));
+    else if (truck) {
+      this.exterior.add(...truckTractor(preset));
+      const trailer = new THREE.Group();
+      trailer.add(...truckTrailer(preset));
+      this.rearGroups = [trailer];
+      this.exterior.add(trailer);
+    }
     else if (worm) this.gusanitoExterior(preset, art!, rears);
     else if (art) this.articulatedExterior(preset, art);
     else this.busExterior(preset);
@@ -99,28 +108,31 @@ export class BusModel {
     for (const g of this.rearGroups) mergeParts(g, new Set());
 
     // Nitro flames out of two exhausts under the rear bumper, pointing backwards.
-    const small = car || worm;
+    const small = car || worm || truck;
     const flameGeo = new THREE.ConeGeometry(small ? 0.12 : 0.22, small ? 1.0 : 1.6, 8);
     flameGeo.rotateZ(Math.PI / 2);
     flameGeo.translate(small ? -0.5 : -0.8, 0, 0);
     const outer = new THREE.MeshBasicMaterial({ color: '#3fa9ff', transparent: true, opacity: 0.75, depthWrite: false });
     const inner = new THREE.MeshBasicMaterial({ color: '#fff4c2' });
-    for (const z of [-W * 0.25, W * 0.25]) {
+    const stacks = truck ? truckStacks(preset) : null;
+    for (const [i, z] of [-W * 0.25, W * 0.25].entries()) {
       const flame = new THREE.Mesh(flameGeo, outer);
       const core = new THREE.Mesh(flameGeo, inner);
       core.scale.set(0.6, 0.5, 0.5);
       flame.add(core);
       flame.position.set(-(art ? art.rearLength : L) / 2, car ? -H * 0.3 : -H * 0.42, z);
       if (worm) flame.position.y = -H / 2 + 0.25;
+      // A truck breathes fire out of its exhaust stacks, behind the cab.
+      if (stacks) flame.position.set(stacks[i][0], stacks[i][1], stacks[i][2] + (i ? 0.05 : -0.05));
       this.flames.add(flame);
     }
     this.flames.visible = false;
-    (this.rearGroups[this.rearGroups.length - 1] ?? this.exterior).add(this.flames);
+    (stacks ? this.exterior : (this.rearGroups[this.rearGroups.length - 1] ?? this.exterior)).add(this.flames);
 
     // Cockpit: dashboard, pillars, roof edge and steering wheel seen from the driver seat.
-    this.steeringWheel = steeringWheel(car || worm ? 0.18 : 0.22);
-    if (car || worm) {
-      const { parts, wheelMount } = worm ? gusanitoCockpit(preset, L) : carCockpit(preset);
+    this.steeringWheel = steeringWheel(car || worm ? 0.18 : truck ? 0.26 : 0.22);
+    if (car || worm || truck) {
+      const { parts, wheelMount } = truck ? truckCockpit(preset) : worm ? gusanitoCockpit(preset, L) : carCockpit(preset);
       wheelMount.add(this.steeringWheel);
       this.cockpit.add(...parts, wheelMount);
     } else this.busCockpit(preset);
@@ -129,34 +141,39 @@ export class BusModel {
 
     // Wheels
     const w = preset.wheels;
-    const tireWidth = car || worm ? 0.2 : 0.4;
+    const tireWidth = car || worm ? 0.2 : truck ? 0.5 : 0.4;
     const tire = new THREE.CylinderGeometry(w.radius, w.radius, tireWidth, 12);
     tire.rotateX(Math.PI / 2);
     const tireMat = flat('#1b1b1b');
-    const hubMat = flat(car || worm ? '#d9d9d4' : '#bbbbbb');
-    const axles: [number, number, number][] = [
-      [w.frontOffset, -w.track, 0],
-      [w.frontOffset, w.track, 0],
-      [w.rearOffset, -w.track, 0],
-      [w.rearOffset, w.track, 0],
-    ];
-    for (let i = 1; i <= rears; i++) axles.push([art!.rearAxle, -w.track, i], [art!.rearAxle, w.track, i]);
+    const hubMat = flat(car || worm ? '#d9d9d4' : truck ? '#9a9da3' : '#bbbbbb');
+    // [x, z, section]; a truck's wheels are drawn a pair to an axle (one mesh each: the two sides turn alike).
+    const axles: [number, number, number][] = [];
+    for (let section = 0; section <= rears; section++)
+      for (const x of axleXs(preset, section)) {
+        if (truck) axles.push([x, 0, section]);
+        else axles.push([x, -w.track, section], [x, w.track, section]);
+      }
     const count: number[] = [];
     for (const [x, z, section] of axles) {
       const pivot = new THREE.Group();
-      pivot.position.set(x, w.mountHeight, z);
+      pivot.position.set(x, w.mountHeight - (section ? rearLift(preset) : 0), z);
       const spin = new THREE.Group();
-      const mesh = new THREE.Mesh(tire, tireMat);
-      mesh.castShadow = true;
-      const hub = new THREE.Mesh(new THREE.BoxGeometry(w.radius * 0.9, w.radius * 0.3, tireWidth + 0.02), hubMat);
-      // Inside the tire's outline: its shadow changes nothing, and with it the wheel is one mesh.
-      hub.castShadow = true;
-      spin.add(mesh, hub);
+      for (const side of truck ? [-1, 1] : [0]) {
+        const mesh = new THREE.Mesh(tire, tireMat);
+        mesh.castShadow = true;
+        const hub = new THREE.Mesh(new THREE.BoxGeometry(w.radius * 0.9, w.radius * 0.3, tireWidth + 0.02), hubMat);
+        // Inside the tire's outline: its shadow changes nothing, and with it the wheel is one mesh.
+        hub.castShadow = true;
+        mesh.position.z = hub.position.z = side * w.track;
+        spin.add(mesh, hub);
+      }
       mergeParts(spin, new Set());
       pivot.add(spin);
       (section ? this.rearGroups[section - 1] : this.exterior).add(pivot);
+      // A pair reads its first wheel's index (left); wheels of a section are numbered axle by axle, left then right.
+      const index = truck ? (count[section] ?? 0) * 2 : (count[section] ?? 0);
       count[section] = (count[section] ?? 0) + 1;
-      this.wheels.push({ pivot, spin, section, index: count[section] - 1 });
+      this.wheels.push({ pivot, spin, section, index, pair: truck });
     }
 
     // Spray: a fan of water out to each side of the front wheels, and a wake behind them.
@@ -399,8 +416,11 @@ export class BusModel {
       group.quaternion.copy(this.inv).multiply(this.qTmp.set(qr.x, qr.y, qr.z, qr.w));
     });
     const mount = bus.preset.wheels.mountHeight;
-    for (const { pivot, spin, section, index } of this.wheels) {
-      pivot.position.y = mount - wheels.susp(section, index);
+    const lift = rearLift(bus.preset);
+    for (const { pivot, spin, section, index, pair } of this.wheels) {
+      // A pair rides at the mean of its two suspensions (the body rolls a little, the axle stays one mesh).
+      const susp = pair ? (wheels.susp(section, index) + wheels.susp(section, index + 1)) / 2 : wheels.susp(section, index);
+      pivot.position.y = mount - (section ? lift : 0) - susp;
       pivot.rotation.y = wheels.steer(section, index);
       spin.rotation.z = -wheels.spin(section, index);
     }

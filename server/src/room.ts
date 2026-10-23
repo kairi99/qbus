@@ -175,7 +175,8 @@ export class RoomLogic {
       }
       case 'me': {
         if (s.phase === 'results' && msg.ready !== undefined) this.toLobby();
-        if (s.phase !== 'lobby') return [];
+        // A pick between races counts for the next one; mid-race it is refused (the room message tells the picker).
+        if (s.phase !== 'lobby' && !(s.phase === 'results' && msg.ready === undefined)) return [this.roomMsg()];
         if (msg.vehicle !== undefined) me.vehicle = msg.vehicle.slice(0, 24);
         if (msg.ready !== undefined) me.ready = msg.ready;
         return [this.roomMsg()];
@@ -316,7 +317,8 @@ export class RoomLogic {
       if (g.kind === 'human') {
         if (!humans.includes(g.seat) || seen.has(g.seat)) return err('bad');
         seen.add(g.seat);
-        grid.push({ kind: 'human', seat: g.seat, vehicle: g.vehicle });
+        // The seat's own pick, not the host's possibly stale copy of it.
+        grid.push({ kind: 'human', seat: g.seat, vehicle: s.seats.find((x) => x.id === g.seat)?.vehicle ?? g.vehicle });
       } else {
         if (ai.has(g.idx)) return err('bad');
         ai.add(g.idx);

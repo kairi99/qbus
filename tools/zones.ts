@@ -22,7 +22,7 @@ export const ZONES: Record<
      * A race track instead of a city: the stretch of highway `ref` from `from` to `to` (see
      * src/world/osm/track.ts). Only its ways are fetched (`track` query).
      */
-    track?: { ref: string; from: TrackEnd; to: TrackEnd; biome?: 'paramo' | 'cloudforest'; road?: string; minRadius?: number };
+    track?: { ref: string; from: TrackEnd; to: TrackEnd; biome?: 'paramo' | 'cloudforest' | 'canyon'; road?: string; minRadius?: number; structures?: boolean };
   }
 > = {
   mariscal: {
@@ -65,5 +65,15 @@ export const ZONES: Record<
     osm: 'data/raw/silante.osm.json',
     dem: 'data/raw/copernicus-S01-W079.tif',
     track: { ref: 'E20', from: { lat: -0.4463, lon: -78.6882, name: 'Arrayán' }, to: { lat: -0.4418, lon: -78.7127, name: 'Río Silante' }, biome: 'cloudforest', road: 'Vía Alóag–Santo Domingo (E20)', minRadius: 24 },
+  },
+  // E30 "Ruta de las Cascadas" (Baños to Puyo) down the Pastaza gorge to Río Verde: a cliff road
+  // through four real tunnels and past the waterfalls of the Ruta de las Cascadas, single carriageway.
+  rioverde: {
+    id: 'rioverde',
+    name: 'Bajada de Río Verde',
+    bbox: [-1.4125, -78.3375, -1.394, -78.27],
+    osm: 'data/raw/rioverde.osm.json',
+    dem: 'data/raw/copernicus-S02-W079.tif',
+    track: { ref: 'E30', from: { lat: -1.40278, lon: -78.3272, name: 'Río Pastaza' }, to: { lat: -1.40516, lon: -78.27286, name: 'Río Verde' }, biome: 'canyon', road: 'Vía Baños–Puyo (E30)', minRadius: 24, structures: true },
   },
 };

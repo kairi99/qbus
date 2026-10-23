@@ -19,8 +19,10 @@ import { distToPolyline } from '../src/world/geom';
 
 /** The race tracks every invariant below must hold on (`from` = the race's first place name). */
 const ZONES = [
-  { id: 'papallacta', name: 'Paso de la Muerte', from: 'Papallacta' },
-  { id: 'silante', name: 'Bajada del Silante', from: 'Arrayán' },
+  { id: 'papallacta', name: 'Paso de la Muerte', from: 'Papallacta', openShare: [0, 0.4] },
+  { id: 'silante', name: 'Bajada del Silante', from: 'Arrayán', openShare: [0, 0.4] },
+  // The canyon road is railed far less (about a quarter of its drops).
+  { id: 'rioverde', name: 'Bajada de Río Verde', from: 'Río Pastaza', openShare: [0.5, 0.85] },
 ];
 
 describe.each(ZONES)('$name', (zone) => {
@@ -44,6 +46,7 @@ describe.each(ZONES)('$name', (zone) => {
   describe('the grid and the traffic', () => {
     it.each([
       ['four of the longest', [19.6, 18.4, 19.6, 19.6]],
+      ['six container trucks', [17.7, 17.7, 17.7, 17.7, 17.7, 17.7]],
       ['six gusanitos', [19.6, 19.6, 19.6, 19.6, 19.6, 19.6]],
     ])('fits %s one behind the other, behind the start line, on the road, none overlapping', (_, lengths) => {
       const slots = gridSlots(race, lengths);
@@ -118,7 +121,8 @@ describe.each(ZONES)('$name', (zone) => {
       const open = race.drops.reduce((n, r) => n + r.s1 - r.s0, 0);
       expect(railed).toBeGreaterThan(800);
       expect(open).toBeGreaterThan(150);
-      expect(open / (open + railed)).toBeLessThan(0.4);
+      expect(open / (open + railed)).toBeGreaterThan(zone.openShare[0]);
+      expect(open / (open + railed)).toBeLessThan(zone.openShare[1]);
       for (const d of race.drops) {
         expect(d.s0).toBeGreaterThan(race.start + 200);
         expect(d.s1).toBeLessThan(race.finish - 100);
@@ -193,7 +197,7 @@ describe.each(ZONES)('$name', (zone) => {
       buildCity(city, world, new THREE.Scene(), graph);
     });
 
-    it.each(['popular', 'articulado', 'gusanito', 'ae86'])('the AI drives a %s from start to finish on the asphalt', (id) => {
+    it.each(['popular', 'articulado', 'gusanito', 'ae86', 'trailer'])('the AI drives a %s from start to finish on the asphalt', (id) => {
       const start = trackStartPose(race, 12);
       const bus = new BusPhysics(world, busById(id), { x: start.pos.x, y: start.y, z: start.pos.z, heading: start.heading, pitch: start.pitch });
       const driver = new RaceDriver(race, SKILLS.hard, vehicleLimits(busById(id)));
@@ -217,6 +221,8 @@ describe.each(ZONES)('$name', (zone) => {
     it.each([
       ['two', ['interparroquial', 'popular'], 4],
       ['six (all the vehicles)', ['interparroquial', 'buseta', 'popular', 'articulado', 'gusanito', 'ae86'], 8],
+      // The long truck leads the pack into Silante's r=24 m hairpin and the others jam behind it: a few more rescues.
+      ['six with the container truck', ['trailer', 'buseta', 'popular', 'articulado', 'gusanito', 'ae86'], 12],
     ])('%s AI vehicles race from the grid to the finish together without getting stuck on each other', (_, ids, maxRescues) => {
       const slots = gridSlots(race, ids.map((id) => busById(id).body.length));
       const buses = slots.map((sl, k) => new BusPhysics(world, busById(ids[k]), { x: sl.pos.x, y: sl.y, z: sl.pos.z, heading: sl.heading, pitch: sl.pitch }));

@@ -1,7 +1,8 @@
 import type { CityData, Road, Vec2 } from '../cityData';
 import { type Terrain, smoothHeights } from '../terrain';
-import type { TrackData, TrackScenery } from '../track';
+import { BORE_HALF, MOUND_HALF, type TrackData, type TrackScenery, TUNNEL_TOP_STEP } from '../track';
 import { Rng } from '../../core/rng';
+import { distToPolyline } from '../geom';
 import { type Dem, type OsmJson, type OsmElement, LANDMARKS, buildHorizon, makeProjection, sampleDem } from './import';
 
 /** A point on the map: where a track starts or ends, and its name. */
@@ -24,6 +25,8 @@ export interface TrackOptions {
   road?: string;
   /** Hairpins tighter than this radius (m) are eased out to it (absent: OSM's line as drawn). */
   minRadius?: number;
+  /** Build the OSM tunnels and bridges on the way as such (absent: the road is one plain deck, as on the first two tracks). */
+  structures?: boolean;
 }
 
 /** Asphalt width: one lane each way plus a strip of shoulder (m). */
@@ -49,7 +52,19 @@ const DEEPEN_REACH = 90;
 export const SHAPING = {
   paramo: { fill: FILL, deepen: DEEPEN, reach: DEEPEN_REACH },
   cloudforest: { fill: 2.3, deepen: 2.4, reach: 150 },
+  // The Pastaza's gorge: the road is benched into a cliff. The drop below follows the DEM's own
+  // slope (it is steep already): a bounded extra `bench` m lowered near the road and eased out
+  // over `reach`, never a multiple of the DEM's depth (that one peaked 40 m out, then the ground
+  // climbed back up: a knife-cut trench beside the guardrail).
+  canyon: { fill: 1.25, deepen: 0, reach: 200, bench: 16 },
 } as const;
+/** Share of a ravine side left without a guardrail, per biome (the canyon road is railed far less). */
+const OPEN = { paramo: 0.28, cloudforest: 0.28, canyon: 0.72 } as const;
+/** The clearance a bridge leaves under its deck (m). */
+const BRIDGE_CLEAR = 3.4;
+/** Waterfalls within this distance of the road are drawn, and how far down a course may run (m). */
+const FALL_NEAR = 640;
+const FALL_RUN = 300;
 /** Terrain under the asphalt sits this far under the deck (hidden, never poking through). */
 const UNDER = 0.08;
 /** A drop deeper than this, measured `DROP_AT` m past the asphalt's edge, is a ravine side. */
@@ -78,7 +93,8 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
   const ne = proj.toXZ(opts.bbox[2], opts.bbox[3]);
   const bounds = { min: { x: sw.x, z: ne.z }, max: { x: ne.x, z: sw.z } };
 
-  const nodes = chainWays(osm, opts.from).map((g) => proj.toXZ(g.lat, g.lon));
+  const chain = chainWays(osm, opts.from);
+  const nodes = chain.map((g) => proj.toXZ(g.lat, g.lon));
   const from = proj.toXZ(opts.from.lat, opts.from.lon);
   const to = proj.toXZ(opts.to.lat, opts.to.lon);
   const drawn = resample(catmullRom(dedupe(nodes, 2), STEP), STEP);
@@ -89,6 +105,10 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
   const pts = slice(smooth, s0 - LEAD, s1 + RUNOFF);
   const cum = cumulative(pts);
   const len = cum[cum.length - 1];
+  // The real tunnels and bridges (OSM tunnel / bridge ways) as stretches of this centerline.
+  const spans = opts.structures ? spansOf(chain, nodes, smooth, s0 - LEAD, len) : [];
+  const tunnelSpans = spans.filter((u) => u.kind === 'tunnel');
+  const bridgeSpans = spans.filter((u) => u.kind === 'bridge');
 
   // Terrain grid over the bbox, from the DEM with a light blur (no buildings to take out here).
   const minX = Math.floor((bounds.min.x - MARGIN) / CELL) * CELL;
@@ -104,8 +124,15 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
   const ground = smoothHeights(raw, cols, rows, 1, 2);
   const groundAt = (p: Vec2) => bilinear(ground, cols, rows, (p.x - minX) / CELL, (p.z - minZ) / CELL);
 
-  const y = gradeProfile(pts.map(groundAt), cum);
-  const segs = new SegmentIndex(pts, y);
+  // (Over a tunnel the DEM is the mountain, over a bridge the gully: the road runs straight between the ends.)
+  const roadGround = pts.map(groundAt);
+  for (const u of spans) {
+    const a = Math.max(0, indexAt(cum, u.s0) - 1);
+    const b = Math.min(pts.length - 1, indexAt(cum, u.s1) + 1);
+    for (let i = a + 1; i < b; i++) roadGround[i] = roadGround[a] + ((roadGround[b] - roadGround[a]) * (cum[i] - cum[a])) / (cum[b] - cum[a] || 1);
+  }
+  const y = gradeProfile(roadGround, cum);
+  const segs = new SegmentIndex(pts, y, cum);
   const hw = TRACK_WIDTH / 2;
   const inGrid = (p: Vec2, pad: number) => p.x > minX + pad && p.z > minZ + pad && p.x < minX + (cols - 1) * CELL - pad && p.z < minZ + (rows - 1) * CELL - pad;
   // The rivers run in their beds: carved into the valley floor before the road's cuts and fills.
@@ -123,17 +150,33 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
       const p = { x: minX + c * CELL, z: minZ + r * CELL };
       const q = segs.nearest(p);
       const below = q.y - ground[k];
+      const bench = (shape as { bench?: number }).bench;
       const deepen = below > 0 ? 1 + shape.deepen * (1 - smoothstep(0, shape.reach, q.d - hw)) : 1;
+      // Canyon: depth below the road = the DEM's plus a bounded bench that never reverses the fall.
+      const depth = bench ? below + (below > 0 ? bench * smoothstep(0, 3, below) * smoothstep(0, 22, q.d - hw) * (1 - smoothstep(22, shape.reach, q.d - hw)) : 0) : below * deepen;
       // Off the downhill edge a fill bank comes down at FILL first (the road's own embankment), so
       // the slope begins at the road instead of a sheer wall under its edge.
       const fill = q.y - UNDER - shape.fill * Math.max(0, q.d - hw - SHOULDER);
-      carved[k] = Math.min(Math.max(q.y - below * deepen, fill), segs.cap(p, hw + 0.5, CUT, UNDER));
+      const cap = segs.cap(p, hw + 0.5, CUT, UNDER);
+      carved[k] = Math.min(Math.max(q.y - depth, fill), cap);
+      // Under a bridge the ground falls away from the deck: the gully (no fill bank), at least BRIDGE_CLEAR down.
+      if (bridgeSpans.some((u) => q.s > u.s0 - 4 && q.s < u.s1 + 4) && q.d < hw + 10) {
+        const w = 1 - smoothstep(hw + 1, hw + 10, q.d);
+        const open = Math.min(Math.min(q.y - depth, cap), q.y - BRIDGE_CLEAR);
+        carved[k] = carved[k] + (Math.min(carved[k], open) - carved[k]) * w;
+      }
     }
   // Then under the asphalt it must lie below the deck: wherever a terrain triangle still pokes
   // up through the road (sampled on a 2 m grid inside each triangle), its corners come down by
   // just that much, a few passes until none does. Only what's needed: lowering whole triangles
   // to the deck left flat 8 m shelves stair-stepping along the road's edge.
   fitUnderDeck(carved, cols, rows, minX, minZ, pts, y, hw + 0.3, UNDER);
+  // Inside a tunnel the bore is wider than the asphalt: the ground stays under the deck across it too.
+  for (const u of tunnelSpans) {
+    const a = Math.max(0, indexAt(cum, u.s0) - 1);
+    const b = Math.min(pts.length - 1, indexAt(cum, u.s1) + 2);
+    fitUnderDeck(carved, cols, rows, minX, minZ, pts.slice(a, b + 1), y.slice(a, b + 1), BORE_HALF + 0.6, UNDER);
+  }
 
   // Heights relative to the lowest point inside the bbox, like a city.
   let base = Infinity;
@@ -156,19 +199,22 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
     return surface[i] - tAt({ x: pts[i].x - dz * off, z: pts[i].z + dx * off });
   };
   const rng = new Rng(opts.seed ?? 3);
+  const openShare = OPEN[opts.biome ?? 'paramo'];
+  // Neither rails nor shrines inside a tunnel, on a bridge (its own parapets) or right at either end.
+  const covered = (sAt: number) => spans.some((u) => sAt > u.s0 - 12 && sAt < u.s1 + 12);
   const start = LEAD;
   const finish = len - RUNOFF;
   const rails: TrackData['rails'] = [];
   const drops: TrackData['drops'] = [];
   for (const side of [1, -1] as const) {
-    for (const run of runs(cum, (i) => drop(i, side) > DROP, 12)) {
+    for (const run of runs(cum, (i) => drop(i, side) > DROP && !covered(cum[i]), 12)) {
       // Leave gaps along the run (never near the start or finish): those are the risky bits.
       // Rail and gap stretches alternate, the rails about (1 - OPEN_SHARE) of the way.
       const open: { s0: number; s1: number }[] = [];
-      for (let at = run.s0 + rng.range(20, 120); at < run.s1; ) {
+      for (let at = run.s0 + (openShare > 0.5 ? rng.range(4, 50) : rng.range(20, 120)); at < run.s1; ) {
         const g = rng.range(...GAP);
         if (at > start + SAFE_START && at + g < Math.min(run.s1, finish - SAFE_END)) open.push({ s0: at, s1: at + g });
-        at += g + (g * (1 - OPEN_SHARE)) / OPEN_SHARE * rng.range(0.6, 1.4);
+        at += g + (g * (1 - openShare)) / openShare * rng.range(0.6, 1.4);
       }
       let a = run.s0;
       for (const o of open) {
@@ -179,23 +225,65 @@ export function importTrack(osm: OsmJson, dem: Dem, opts: TrackOptions, horizonD
       if (run.s1 - a > 4) rails.push({ s0: round(a, 1), s1: round(run.s1, 1), side });
     }
   }
+  // The canyon road is railed along about a quarter of its drops: rails come off pieces at random
+  // (their own dice), never within the safe zones at the start and the finish.
+  if (openShare > 0.5) {
+    const dice = new Rng((opts.seed ?? 3) + 101);
+    const total = [...rails, ...drops].reduce((a, r) => a + r.s1 - r.s0, 0);
+    let railed = rails.reduce((a, r) => a + r.s1 - r.s0, 0);
+    for (const r of [...rails].sort(() => dice.next() - 0.5)) {
+      if (railed <= total * 0.26) break;
+      if (r.s0 < start + SAFE_START || r.s1 > finish - SAFE_END) continue;
+      rails.splice(rails.indexOf(r), 1);
+      drops.push(r);
+      railed -= r.s1 - r.s0;
+    }
+    // (Neighboring open pieces on a side join into one.)
+    drops.sort((p, q) => p.s0 - q.s0);
+    for (let i = drops.length - 1; i > 0; i--) {
+      const [a, b] = [drops[i - 1], drops[i]];
+      if (a.side === b.side && Math.abs(a.s1 - b.s0) < 0.01) (a.s1 = b.s1), drops.splice(i, 1);
+    }
+  }
+  // A bridge has parapets both sides along its whole length.
+  for (const u of bridgeSpans) for (const side of [1, -1] as const) rails.push({ s0: round(u.s0, 1), s1: round(u.s1, 1), side });
   rails.sort((p, q) => p.s0 - q.s0);
   drops.sort((p, q) => p.s0 - q.s0);
   const pickups: TrackData['pickups'] = [];
-  for (let s = start + 300; s < finish - 150; s += PICKUP_EVERY) for (const off of [-1.9, 1.9]) pickups.push({ s: round(s, 1), off });
+  for (let s = start + 300; s < finish - 150; s += PICKUP_EVERY) if (!spans.some((u) => u.kind === 'tunnel' && s > u.s0 - 40 && s < u.s1 + 40)) for (const off of [-1.9, 1.9]) pickups.push({ s: round(s, 1), off });
 
   const road: Road = { name: opts.road ?? 'Vía Interoceánica (E20)', kind: 'street', points: pts, width: TRACK_WIDTH, lanes: 2, surface };
   const offRoad = (p: Vec2, pad: number) => segs.nearest(p).d > hw + pad;
+  // The rock mound over a tunnel carries no buildings.
+  const onMound = (p: Vec2) => {
+    const q = segs.nearest(p);
+    return q.d < MOUND_HALF + 12 && tunnelSpans.some((u) => q.s > u.s0 - 25 && q.s < u.s1 + 25);
+  };
   const scenery: TrackScenery | undefined = sceneryOsm
     ? {
         rivers: rivers.map((rv) => ({ points: rv.points, y: rv.y.map((h) => round(h - base, 2)), width: rv.width })),
         pipes: importPipes(sceneryOsm, proj.toXZ, (p) => inGrid(p, 16) && segs.nearest(p).d < PIPE_REACH, (p) => offRoad(p, 3)),
-        buildings: importHouses(sceneryOsm, proj.toXZ, (p) => inGrid(p, 16) && offRoad(p, 2.5), (p) => segs.nearest(p)),
+        buildings: importHouses(sceneryOsm, proj.toXZ, (p) => inGrid(p, 16) && offRoad(p, 2.5) && !onMound(p), (p) => segs.nearest(p)),
         ...powerOf(sceneryOsm, proj.toXZ, (p) => inGrid(p, 16)),
+        ...fallsOf(sceneryOsm, proj.toXZ, tAt, (p) => inGrid(p, 16) && distToPolyline(p, pts) < FALL_NEAR, rivers),
       }
     : undefined;
   const race: TrackData = { from: opts.from.name, to: opts.to.name, points: pts, y: surface, cum: cum.map((v) => round(v, 2)), width: TRACK_WIDTH, start, finish: round(finish, 1), rails, drops, pickups, scenery };
   if (opts.biome && opts.biome !== 'paramo') race.biome = opts.biome;
+  // (Only tracks that have them get the keys: the other tracks' files stay byte-identical.)
+  if (tunnelSpans.length)
+    race.tunnels = tunnelSpans.map((u) => {
+      const top: number[] = [];
+      for (let s = u.s0; s < u.s1 + TUNNEL_TOP_STEP; s += TUNNEL_TOP_STEP) {
+        const i = Math.min(pts.length - 2, indexAt(cum, Math.min(s, u.s1)));
+        const f = (Math.min(s, u.s1) - cum[i]) / (cum[i + 1] - cum[i] || 1);
+        const at = { x: pts[i].x + (pts[i + 1].x - pts[i].x) * f, z: pts[i].z + (pts[i + 1].z - pts[i].z) * f };
+        // The mountain over the tunnel: the DEM over the centerline less the deck, kept in a believable range.
+        top.push(round(Math.max(9, Math.min(70, groundAt(at) - base - (surface[i] + (surface[i + 1] - surface[i]) * f))), 1));
+      }
+      return { s0: round(u.s0, 1), s1: round(u.s1, 1), ...(u.name ? { name: u.name } : {}), top };
+    });
+  if (bridgeSpans.length) race.bridges = bridgeSpans.map((u) => ({ s0: round(u.s0, 1), s1: round(u.s1, 1), ...(u.name ? { name: u.name } : {}) }));
   const heading = Math.atan2(-(pts[1].z - pts[0].z), pts[1].x - pts[0].x);
   const horizon = horizonDem ? buildHorizon(horizonDem, proj.toLatLon, base) : undefined;
   const landmarks = horizonDem
@@ -415,11 +503,141 @@ function insideRuns(pts: (Vec2 | null)[], test: (p: Vec2) => boolean): Vec2[][] 
   return out;
 }
 
+/** A node of the chained road; `kind` describes the segment that ends at it. */
+interface ChainNode {
+  lat: number;
+  lon: number;
+  kind?: 'tunnel' | 'bridge';
+  name?: string;
+}
+
+function wayKind(tags: Record<string, string> | undefined): ChainNode['kind'] {
+  if (tags?.tunnel && tags.tunnel !== 'no') return 'tunnel';
+  if (tags?.bridge && tags.bridge !== 'no') return 'bridge';
+  return undefined;
+}
+
+/**
+ * The tunnels and bridges of the chained road as stretches (meters along the sliced centerline, `first`
+ * being where the slice starts along `smooth`). The chain's own length and the spline's differ a little,
+ * so each end is looked for near where it should be.
+ */
+function spansOf(chain: ChainNode[], nodes: Vec2[], smooth: Vec2[], first: number, len: number): { kind: 'tunnel' | 'bridge'; s0: number; s1: number; name?: string }[] {
+  const raw = cumulative(nodes);
+  const cs = cumulative(smooth);
+  const ratio = cs[cs.length - 1] / (raw[raw.length - 1] || 1);
+  const at = (i: number) => {
+    const target = raw[i] * ratio;
+    let best = Infinity;
+    let s = target;
+    smooth.forEach((p, k) => {
+      if (Math.abs(cs[k] - target) > 160) return;
+      const d = Math.hypot(p.x - nodes[i].x, p.z - nodes[i].z);
+      if (d < best) [best, s] = [d, cs[k]];
+    });
+    return s;
+  };
+  const offset = (() => {
+    const k = cs.findIndex((c) => c >= first);
+    return k < 0 ? 0 : cs[k];
+  })();
+  const out: { kind: 'tunnel' | 'bridge'; s0: number; s1: number; name?: string }[] = [];
+  for (let i = 1; i < chain.length; i++) {
+    const kind = chain[i].kind;
+    if (!kind) continue;
+    let j = i;
+    while (j + 1 < chain.length && chain[j + 1].kind === kind) j++;
+    const s0 = at(i - 1) - offset;
+    const s1 = at(j) - offset;
+    if (s1 > 0 && s0 < len && s1 - s0 > 4) out.push({ kind, s0: Math.max(0, s0), s1: Math.min(len, s1), name: chain[i].name });
+    i = j;
+  }
+  return out;
+}
+
+/**
+ * The real waterfalls near the road: each one's course down the slope (from the OSM node, along the
+ * stream mapped there when there is one, else the steepest way down, until the ground levels out or
+ * meets the river), as points every ~5 m with the ground height under each.
+ */
+function fallsOf(
+  osm: OsmJson,
+  toXZ: (lat: number, lon: number) => Vec2,
+  ground: (p: Vec2) => number,
+  near: (p: Vec2) => boolean,
+  streams: { points: Vec2[] }[],
+): { waterfalls?: NonNullable<TrackScenery['waterfalls']> } {
+  const out: NonNullable<TrackScenery['waterfalls']> = [];
+  for (const e of osm.elements) {
+    if (e.type !== 'node' || e.lat === undefined || e.tags?.waterway !== 'waterfall') continue;
+    const p0 = toXZ(e.lat, e.lon!);
+    if (!near(p0)) continue;
+    // The course through the node: along the stream mapped there (a bit of it upstream too) when there
+    // is one, else up the steepest way to where the slope eases (the lip) and down it again.
+    let course: Vec2[] | null = null;
+    let bestD = 40;
+    for (const st of streams)
+      st.points.forEach((q, i) => {
+        const d = Math.hypot(q.x - p0.x, q.z - p0.z);
+        if (d < bestD) (bestD = d), (course = st.points.slice(Math.max(0, i - 16)));
+      });
+    const slopeDir = (p: Vec2) => ({ x: (ground({ x: p.x + 4, z: p.z }) - ground({ x: p.x - 4, z: p.z })) / 8, z: (ground({ x: p.x, z: p.z + 4 }) - ground({ x: p.x, z: p.z - 4 })) / 8 });
+    let pts: Vec2[];
+    if (course) pts = resample(course as Vec2[], 5);
+    else {
+      const up: Vec2[] = [];
+      let p = p0;
+      for (let k = 0; k < 20; k++) {
+        const g = slopeDir(p);
+        const l = Math.hypot(g.x, g.z);
+        if (l < 0.3) break;
+        p = { x: p.x + (g.x / l) * 5, z: p.z + (g.z / l) * 5 };
+        up.unshift(p);
+      }
+      pts = [...up, p0];
+      p = p0;
+      for (let k = 0; k < FALL_RUN / 5; k++) {
+        const g = slopeDir(p);
+        const l = Math.hypot(g.x, g.z);
+        if (l < 0.15) break;
+        p = { x: p.x - (g.x / l) * 5, z: p.z - (g.z / l) * 5 };
+        pts.push(p);
+      }
+    }
+    // The water runs where the course is steep (0.3 or more over 20 m): the stretch of it nearest the node.
+    const ys = pts.map(ground);
+    const steep = pts.map((_, i) => i + 4 < pts.length && (ys[i] - ys[i + 4]) / 20 >= 0.3);
+    const nodeAt = pts.reduce((best, q, i) => (Math.hypot(q.x - p0.x, q.z - p0.z) < Math.hypot(pts[best].x - p0.x, pts[best].z - p0.z) ? i : best), 0);
+    let from = -1;
+    let bestGap = Infinity;
+    steep.forEach((on, i) => {
+      if (on && Math.abs(i - nodeAt) < bestGap) (bestGap = Math.abs(i - nodeAt)), (from = i);
+    });
+    if (from < 0) continue;
+    let lo = from;
+    while (lo > 0 && steep[lo - 1]) lo--;
+    let hi = from;
+    while (hi + 1 < steep.length && steep[hi + 1]) hi++;
+    hi = Math.min(pts.length - 1, hi + 4);
+    if (hi - lo < 4) continue;
+    pts = pts.slice(lo, hi + 1);
+    ys.splice(0, ys.length, ...ys.slice(lo, hi + 1));
+    const end = pts.length;
+    out.push({
+      ...(e.tags?.name ? { name: e.tags.name.replace(/^Cascada\s+(de la |del |de |el |la )?/i, '').trim() || e.tags.name } : {}),
+      points: pts.slice(0, end).map((p) => ({ x: round(p.x, 2), z: round(p.z, 2) })),
+      y: ys.slice(0, end).map((h) => round(h, 2)),
+      width: Math.max(4, Math.min(8, 3 + end * 0.12)),
+    });
+  }
+  return out.length ? { waterfalls: out } : {};
+}
+
 /**
  * The ways chained end to end into one road, starting from the end nearest `from` (a way's last
  * node shared with the next one's first or last). Overpass `out geom` gives each way's nodes.
  */
-function chainWays(osm: OsmJson, from: TrackEnd): { lat: number; lon: number }[] {
+function chainWays(osm: OsmJson, from: TrackEnd): ChainNode[] {
   const ways = osm.elements.filter((e) => e.type === 'way' && e.geometry && e.geometry.length >= 2);
   const key = (p: { lat: number; lon: number }) => `${p.lat.toFixed(7)},${p.lon.toFixed(7)}`;
   const ends = new Map<string, number>();
@@ -434,14 +652,16 @@ function chainWays(osm: OsmJson, from: TrackEnd): { lat: number; lon: number }[]
     }
   if (!first) throw new Error('no loose end to start the track from');
   const used = new Set<number>();
-  const out: { lat: number; lon: number }[] = [];
+  const out: ChainNode[] = [];
   let cur = key(first);
   for (;;) {
     const w = ways.find((w) => !used.has(w.id) && (key(w.geometry![0]) === cur || key(w.geometry![w.geometry!.length - 1]) === cur));
     if (!w) break;
     used.add(w.id);
     const g = key(w.geometry![0]) === cur ? w.geometry! : [...w.geometry!].reverse();
-    out.push(...(out.length ? g.slice(1) : g));
+    // Each node says what the way arriving at it is (a tunnel, a bridge, its name).
+    const kind = wayKind(w.tags);
+    out.push(...(out.length ? g.slice(1) : g).map((p, j) => ({ lat: p.lat, lon: p.lon, ...(out.length || j ? { kind, name: w.tags?.name } : {}) })));
     cur = key(g[g.length - 1]);
   }
   return out;
@@ -617,6 +837,7 @@ class SegmentIndex {
   constructor(
     private pts: Vec2[],
     private y: number[],
+    private cum?: number[],
   ) {
     for (let i = 0; i < pts.length - 1; i++) {
       const [a, b] = [pts[i], pts[i + 1]];
@@ -641,19 +862,19 @@ class SegmentIndex {
     for (let x = cx - 1; x <= cx + 1; x++) for (let z = cz - 1; z <= cz + 1; z++) for (const i of this.grid.get(`${x},${z}`) ?? []) f(i);
   }
 
-  private project(p: Vec2, i: number): { d: number; y: number; at: Vec2; dir: Vec2 } {
+  private project(p: Vec2, i: number): { d: number; y: number; at: Vec2; dir: Vec2; s: number } {
     const [a, b] = [this.pts[i], this.pts[i + 1]];
     const dx = b.x - a.x;
     const dz = b.z - a.z;
     const u = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
     const l = Math.hypot(dx, dz) || 1;
     const at = { x: a.x + dx * u, z: a.z + dz * u };
-    return { d: Math.hypot(p.x - at.x, p.z - at.z), y: this.y[i] + (this.y[i + 1] - this.y[i]) * u, at, dir: { x: dx / l, z: dz / l } };
+    return { d: Math.hypot(p.x - at.x, p.z - at.z), y: this.y[i] + (this.y[i + 1] - this.y[i]) * u, at, dir: { x: dx / l, z: dz / l }, s: this.cum ? this.cum[i] + (this.cum[i + 1] - this.cum[i]) * u : 0 };
   }
 
   /** The nearest point of the road within a grid cell or so: how far, its height, where, and the road's direction there. */
-  nearest(p: Vec2): { d: number; y: number; at: Vec2; dir: Vec2 } {
-    let best = { d: Infinity, y: 0, at: p, dir: { x: 1, z: 0 } };
+  nearest(p: Vec2): { d: number; y: number; at: Vec2; dir: Vec2; s: number } {
+    let best = { d: Infinity, y: 0, at: p, dir: { x: 1, z: 0 }, s: 0 };
     this.around(p, (i) => {
       const q = this.project(p, i);
       if (q.d < best.d) best = q;
@@ -731,6 +952,20 @@ function fitUnderDeck(h: number[], cols: number, rows: number, minX: number, min
     }
     if (worst <= 0.001) break;
   }
+}
+
+/** Index of the last point at or before `s`. */
+function indexAt(cum: number[], s: number): number {
+  let lo = 0;
+  let hi = cum.length - 1;
+  if (s <= 0) return 0;
+  if (s >= cum[hi]) return hi;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (cum[mid] <= s) lo = mid;
+    else hi = mid;
+  }
+  return lo;
 }
 
 function smoothstep(a: number, b: number, x: number): number {

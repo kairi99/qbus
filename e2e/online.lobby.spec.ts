@@ -58,6 +58,15 @@ test('two players meet in an online lobby', async ({ browser }) => {
   await a.page.screenshot({ path: `${shots}/online-lobby-host-phone.png`, fullPage: true });
   await a.page.setViewportSize({ width: 1280, height: 720 });
 
+  // B, already ready, picks another vehicle: the room (and the host's seat list) show it, and it stays picked.
+  const pickB = b.page.locator('select[name="vehicle"]');
+  const other = await pickB.evaluate((el: HTMLSelectElement) => [...el.options].find((o) => o.value !== el.value)!.value);
+  const otherName = await pickB.evaluate((el: HTMLSelectElement, v) => [...el.options].find((o) => o.value === v)!.text, other);
+  await pickB.selectOption(other);
+  await expect(a.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' }).locator('.mn-seat-bus')).toHaveText(otherName);
+  await expect(b.page.locator('.mn-seat[data-seat]').filter({ hasText: 'Beto' })).toContainText('Listo');
+  await expect(pickB).toHaveValue(other);
+
   // B reloads the page: back in the same room, same seat (still ready), the host unchanged.
   await b.page.reload();
   await expect(b.page.locator('[data-room-code]')).toHaveText(code, { timeout: 20_000 });

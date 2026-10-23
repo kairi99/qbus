@@ -48,7 +48,7 @@ const readExtra = (kind: string) => {
 // A race track: its highway, the valley around it and the far view, nothing of a city.
 if (zone.track) {
   const t0 = performance.now();
-  const city = importTrack(osm, dem, { name: zone.name, bbox: zone.bbox, from: zone.track.from, to: zone.track.to, biome: zone.track.biome, road: zone.track.road, minRadius: zone.track.minRadius }, horizonDem, readExtra('scenery'));
+  const city = importTrack(osm, dem, { name: zone.name, bbox: zone.bbox, from: zone.track.from, to: zone.track.to, biome: zone.track.biome, road: zone.track.road, minRadius: zone.track.minRadius, structures: zone.track.structures }, horizonDem, readExtra('scenery'));
   const out = `data/cities/${zone.id}.json`;
   writeFileSync(out, JSON.stringify(city));
   const r = city.race!;
@@ -62,6 +62,10 @@ if (zone.track) {
       `${r.scenery?.rivers.length ?? 0} rivers, ${r.scenery?.pipes.length ?? 0} pipe runs, ${r.scenery?.buildings.length ?? 0} buildings (${r.scenery?.buildings.filter((b) => b.sign).length ?? 0} signed), ` +
       `terrain ${t.cols}x${t.rows}@${t.cell}m, built in ${(performance.now() - t0).toFixed(0)} ms, ${(statSync(out).size / 1e6).toFixed(1)} MB`,
   );
+  for (const u of r.tunnels ?? []) console.log(`  tunnel ${u.name ?? '(unnamed)'}: ${u.s0.toFixed(0)}..${u.s1.toFixed(0)} m (${(u.s1 - u.s0).toFixed(0)} m), mountain over it ${Math.min(...u.top)}..${Math.max(...u.top)} m`);
+  for (const u of r.bridges ?? []) console.log(`  bridge ${u.name ?? '(unnamed)'}: ${u.s0.toFixed(0)}..${u.s1.toFixed(0)} m`);
+  for (const w of r.scenery?.waterfalls ?? []) console.log(`  waterfall ${w.name ?? '(unnamed)'}: ${(w.points.length * 5).toFixed(0)} m course, drop ${(w.y[0] - w.y[w.y.length - 1]).toFixed(0)} m`);
+  console.log(`  start/finish at ${r.start}/${r.finish}, total ${r.cum[r.cum.length - 1].toFixed(0)} m`);
   process.exit(0);
 }
 const t0 = performance.now();

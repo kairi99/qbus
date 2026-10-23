@@ -6,7 +6,10 @@ import { type Biome, biomeOf, terrainColors } from './biomes';
 import { ChunkedMeshBuilder, InstancedTiles, MeshBuilder, hash2, vertexColorMaterial, withinRange } from './meshBuilder';
 import type { RoadGraph } from './roadGraph';
 import type { Terrain } from './terrain';
-import { type TrackData, locateOnTrack, trackPoint } from './track';
+import { type TrackData, inTunnel, locateOnTrack, trackPoint } from './track';
+import { buildTunnels } from './tunnels';
+import { waterfallMesh, waterfallSpray } from './waterfalls';
+import { MOUND_HALF } from './track';
 import { PropSystem } from './props';
 import { RoadIndex } from './roadIndex';
 import { BuildingIndex } from './facades';
@@ -27,6 +30,7 @@ const MARK_WHITE = '#eceae0';
 const MARK_YELLOW = '#e8c230';
 /** The deck's sides: a stone retaining wall under the road's edge. */
 const STONE = '#7b746a';
+const CONCRETE = '#a29f98';
 const STEEL = '#b8bdc3';
 const POST = '#868b90';
 const CHEVRON = '#f3c418';
@@ -69,6 +73,7 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   const paint = new ChunkedMeshBuilder(300);
   const solid = new ChunkedMeshBuilder(300);
   roadDeck(race, deck, paint, ground, world, fixed);
+  buildTunnels(race, ground, world, fixed, scene, biome, timeOfDayOf(scene) === 'night');
   for (const r of race.rails) guardrail(race, r, solid, world, fixed);
   // At night the boards shine back in the headlights (retroreflective): their faces unlit.
   const lit = timeOfDayOf(scene) === 'night' ? new ChunkedMeshBuilder(300) : null;
@@ -107,6 +112,8 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
     scene.add(withinRange(m, PLANTS_RANGE * 1.6));
   }
   if (cables) scene.add(cables);
+  const falls = sc?.waterfalls ? waterfallMesh(race, sc.waterfalls, ground) : null;
+  if (falls) scene.add(falls);
   const signs = textSigns(texts);
   if (signs) scene.add(signs);
   const tod = timeOfDayOf(scene);
@@ -115,7 +122,7 @@ export function buildTrack(city: CityData, world: RAPIER.World, scene: THREE.Sce
   // A crowd at the start and at the finish.
   const clear = (p: Vec2) => !!sc && blocked(sc, p);
   scene.add(crowdMesh([...crowdSpots(race, race.start - 70, race.start + 25, ground, clear), ...crowdSpots(race, race.finish - 40, race.finish + 15, ground, clear)]));
-  scene.add(mistMesh(mistPuffs(race, t, zones, biome, sc?.powerLines), MIST_LOOK[tod], 2600));
+  scene.add(mistMesh([...mistPuffs(race, t, zones, biome, sc?.powerLines), ...(sc?.waterfalls ? waterfallSpray(sc.waterfalls, ground) : [])], MIST_LOOK[tod], 2600));
 
   // No traffic lights or props on a track, but the session expects both.
   const signals = new SignalLamps({
@@ -170,15 +177,22 @@ function roadDeck(race: TrackData, deck: ChunkedMeshBuilder, paint: ChunkedMeshB
     const [la, ra, lb, rb] = [at(i, -hw), at(i, hw), at(j, -hw), at(j, hw)];
     const mb = deck.at(pts[i].x, pts[i].z);
     mb.quad(v3(la, y[i]), v3(lb, y[j]), v3(rb, y[j]), v3(ra, y[i]), ASPHALT);
-    // Stone sides down to the ground (a little into it), both edges.
-    for (const [a, b, off] of [
-      [la, lb, -hw - 0.3],
-      [ra, rb, hw + 0.3],
-    ] as const) {
-      const ga = Math.min(y[i] - 0.4, ground(at(i, off)) - 0.4);
-      const gb = Math.min(y[j] - 0.4, ground(at(j, off)) - 0.4);
-      mb.quad(v3(a, y[i]), v3(b, y[j]), v3(b, gb), v3(a, ga), STONE);
-    }
+    // Stone sides down to the ground (a little into it), both edges. In a tunnel the bore is the
+    // wall; on a bridge a concrete fascia and the underside: the ground is far below.
+    const bridge = (race.bridges ?? []).some((u) => race.cum[i] >= u.s0 - 1 && race.cum[j] <= u.s1 + 1);
+    if (bridge) {
+      const girder = 0.9;
+      for (const [a, b] of [[la, lb], [ra, rb]] as const) mb.quad(v3(a, y[i]), v3(b, y[j]), v3(b, y[j] - girder), v3(a, y[i] - girder), CONCRETE);
+      mb.quad(v3(la, y[i] - girder), v3(lb, y[j] - girder), v3(rb, y[j] - girder), v3(ra, y[i] - girder), CONCRETE);
+    } else if (!inTunnel(race, (race.cum[i] + race.cum[j]) / 2, 2))
+      for (const [a, b, off] of [
+        [la, lb, -hw - 0.3],
+        [ra, rb, hw + 0.3],
+      ] as const) {
+        const ga = Math.min(y[i] - 0.4, ground(at(i, off)) - 0.4);
+        const gb = Math.min(y[j] - 0.4, ground(at(j, off)) - 0.4);
+        mb.quad(v3(a, y[i]), v3(b, y[j]), v3(b, gb), v3(a, ga), STONE);
+      }
     // Paint: white edge lines, a double yellow line down the middle.
     for (const [o0, o1, color] of [
       [-hw + 0.25, -hw + 0.4, MARK_WHITE],
@@ -240,7 +254,7 @@ function chevrons(race: TrackData, solid: ChunkedMeshBuilder, ground: (p: Vec2) 
   let last = -Infinity;
   for (let s = race.start; s < race.finish; s += 6) {
     const k = turnAt(s);
-    if (Math.abs(k) < 1 / CHEVRON_RADIUS || s - last < 18) continue;
+    if (Math.abs(k) < 1 / CHEVRON_RADIUS || s - last < 18 || inTunnel(race, s, 30)) continue;
     order = s - last > 40 ? 0 : order + 1;
     last = s;
     // Outside of the bend: left of travel for a right turn.
@@ -425,6 +439,7 @@ function trackTerrain(t: Terrain, race: TrackData, material: THREE.Material): TH
   const meshes: THREE.Mesh[] = [];
   const col = new THREE.Color();
   const pal = terrainColors(biomeOf(race));
+  const cliff = biomeOf(race).cliff ?? { earth: 0.9, rock: 1.3 };
   for (let r0 = 0; r0 < t.rows - 1; r0 += TILE)
     for (let c0 = 0; c0 < t.cols - 1; c0 += TILE) {
       const r1 = Math.min(t.rows - 1, r0 + TILE);
@@ -443,7 +458,7 @@ function trackTerrain(t: Terrain, race: TrackData, material: THREE.Material): TH
           const alt = (y - lo) / (hi - lo || 1);
           const noise = hash2(Math.floor(x / 40), Math.floor(z / 40), 3) * 0.5 + hash2(x, z, 9) * 0.15;
           col.copy(pal.low).lerp(pal.high, Math.max(0, Math.min(1, alt * 1.2 - 0.25 + noise * 0.6)));
-          if (slope > 0.9) col.lerp(slope > 1.3 ? pal.rock : pal.earth, Math.min(1, (slope - 0.9) * 2));
+          if (slope > cliff.earth) col.lerp(slope > cliff.rock ? pal.rock : pal.earth, Math.min(1, (slope - cliff.earth) * 2));
           if (nearRoad[r * t.cols + c] < race.width / 2 + 3) col.copy(pal.gravel);
           cols.push(col.r, col.g, col.b);
         }
@@ -481,6 +496,11 @@ export interface Plant {
   solid: boolean;
 }
 
+/** On the rock mound over a tunnel (nothing grows there: it is drawn above the ground the plants stand on). */
+function underMound(race: TrackData, where: { s: number; off: number }): boolean {
+  return inTunnel(race, where.s, 24) && Math.abs(where.off) < MOUND_HALF + 6;
+}
+
 /** Keeps every plant's middle this far past the asphalt's edge: a tree's crown or a boulder never overhangs a lane. */
 export const PLANT_CLEAR = 3.5;
 /** A canopy crown's underside is at least this far over the road (m): the tallest vehicle is ~3.5 m, plus the chase camera. */
@@ -516,7 +536,7 @@ export function plantSpots(race: TrackData, t: Terrain, ground: (p: Vec2) => num
         const p = { x: at.x - at.dz * off + rng.range(-3, 3), z: at.z + at.dx * off + rng.range(-3, 3) };
         if (p.x < t.minX + 10 || p.z < t.minZ + 10 || p.x > t.minX + (t.cols - 2) * t.cell || p.z > t.minZ + (t.rows - 2) * t.cell) continue;
         const where = locateOnTrack(race, p);
-        if (Math.abs(where.off) < hw + PLANT_CLEAR || blockedAt(p)) continue;
+        if (Math.abs(where.off) < hw + PLANT_CLEAR || blockedAt(p) || underMound(race, where)) continue;
         const g = ground(p);
         const slope = Math.hypot(ground({ x: p.x + 2, z: p.z }) - ground({ x: p.x - 2, z: p.z }), ground({ x: p.x, z: p.z + 2 }) - ground({ x: p.x, z: p.z - 2 })) / 4;
         const forest = 1 - alt * pc.altFade;
@@ -573,7 +593,7 @@ export function plantSpots(race: TrackData, t: Terrain, ground: (p: Vec2) => num
 /** The plants as instanced meshes in tiles, and colliders for the solid ones. */
 function scatter(race: TrackData, t: Terrain, ground: (p: Vec2) => number, world: RAPIER.World, fixed: RAPIER.RigidBody, blockedAt: (p: Vec2) => boolean): THREE.InstancedMesh[] {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const wild = !!biomeOf(race).canopy;
+  const wild = !!biomeOf(race).canopy || biomeOf(race).plants.fernProb > 0;
   // One instanced draw per kind per tile in range; the cloud forest's extra kinds are only added there.
   const tiles = new InstancedTiles(
     {
@@ -829,7 +849,7 @@ function fillBanks(race: TrackData, mb: ChunkedMeshBuilder, ground: (p: Vec2) =>
     for (let i = 1; i < pts.length; i++) {
       const cur = ring(i);
       // Only where the ground falls away: on a cut the slope rises from the ditch by itself.
-      const falls = ground({ x: pts[i].x + n[i].x * side * (hw + FILL_WIDTH), z: pts[i].z + n[i].z * side * (hw + FILL_WIDTH) }) < y[i] - 0.5;
+      const falls = ground({ x: pts[i].x + n[i].x * side * (hw + FILL_WIDTH), z: pts[i].z + n[i].z * side * (hw + FILL_WIDTH) }) < y[i] - 0.5 && !inTunnel(race, race.cum[i], 2) && !(race.bridges ?? []).some((u) => race.cum[i] >= u.s0 - 2 && race.cum[i] <= u.s1 + 2);
       if (falls)
         for (let k = 0; k < steps.length - 1; k++) {
           mb.at(pts[i].x, pts[i].z).quad(prev[k], cur[k], cur[k + 1], prev[k + 1], cols[k]);
@@ -1120,7 +1140,7 @@ function roadSigns(race: TrackData, zones: { s0: number; s1: number }[], solid: 
     mb.quad({ ...B, x: B.x + q.dx * 0.03, z: B.z + q.dz * 0.03 }, { ...A, x: A.x + q.dx * 0.03, z: A.z + q.dz * 0.03 }, { ...A, x: A.x + q.dx * 0.03, y: y + 0.85, z: A.z + q.dz * 0.03 }, { ...B, x: B.x + q.dx * 0.03, y: y + 0.85, z: B.z + q.dz * 0.03 }, SIGN_BACK);
   };
   put(race.start + 40, race.from.toUpperCase(), '#1f6b3a', '#ffffff', 3.2);
-  for (const z of zones) put(z.s0 - 90, 'ZONA DE NEBLINA', '#f3c418', '#1b1b1d', 3.4);
+  for (const z of zones) if (!inTunnel(race, z.s0 - 90, 30)) put(z.s0 - 90, 'ZONA DE NEBLINA', '#f3c418', '#1b1b1d', 3.4);
 }
 
 /** Every text sign in one mesh: the words drawn once into a canvas atlas, one row each. */
@@ -1197,6 +1217,7 @@ function mistPuffs(race: TrackData, t: Terrain, zones: { s0: number; s1: number 
   }
   for (const zn of zones)
     for (let s = zn.s0; s < zn.s1; s += 7) {
+      if (inTunnel(race, s, 10)) continue;
       trackPoint(race, s, q);
       // Thickest in the middle of the stretch.
       const k = Math.sin(((s - zn.s0) / (zn.s1 - zn.s0)) * Math.PI);
