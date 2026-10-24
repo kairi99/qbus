@@ -2093,6 +2093,25 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.rh-lap {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-lap small {
+  display: block;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.rh-lap-fast b {
+  color: #9dff7a;
+}
+
+.rh-lap[hidden] {
+  display: none;
+}
+
 .rh-count {
   position: absolute;
   top: 26%;
@@ -2432,6 +2451,16 @@ body {
 
 .rh-table li::before {
   content: counter(place) 'º';
+}
+
+.rh-table.rh-laps li {
+  grid-template-columns: 2em 1fr auto auto auto;
+}
+
+.rh-table em {
+  font-style: normal;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
 }
 
 .rh-table small {
@@ -2796,6 +2825,10 @@ body {
 .rh-live .rh-table li {
   grid-template-columns: 2em 1fr auto;
   gap: 0 8px;
+}
+
+.rh-live .rh-table.rh-laps li {
+  grid-template-columns: 2em 1fr auto auto;
 }
 
 .rh-live-btns {

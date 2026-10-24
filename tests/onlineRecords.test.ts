@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestOnline, recordOnline, settleOnlinePlace } from '../src/gameplay/onlineRecords';
+import { bestOnline, bestOnlineLap, recordOnline, recordOnlineLap, settleOnlinePlace } from '../src/gameplay/onlineRecords';
 
 function stub(initial?: string) {
   const m = new Map<string, string>();
@@ -52,5 +52,17 @@ describe('online records', () => {
     expect(bestOnline('p', s)?.place).toBe(3);
     settleOnlinePlace('p', 100, 9, s);
     expect(bestOnline('p', s)?.place).toBe(3);
+  });
+  it('keeps the best lap apart from the best time; old saves have none', () => {
+    const s = stub(JSON.stringify({ version: 1, tracks: { zonarosa: { time: 150, bus: 'Popular', date: '2026-01-01', place: 1, racers: 2 } } }));
+    expect(bestOnlineLap('zonarosa', s)).toBeNull();
+    expect(recordOnlineLap('zonarosa', 48, s)).toBe(true);
+    expect(recordOnlineLap('zonarosa', 49, s)).toBe(false);
+    expect(bestOnline('zonarosa', s)?.time).toBe(150);
+    expect(recordOnline('zonarosa', rec(140), s)).toBe(true);
+    expect(bestOnlineLap('zonarosa', s)).toBe(48);
+    settleOnlinePlace('zonarosa', 140, 1, s);
+    expect(bestOnlineLap('zonarosa', s)).toBe(48);
+    expect(recordOnlineLap('zonarosa', NaN, s)).toBe(false);
   });
 });

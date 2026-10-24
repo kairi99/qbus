@@ -1,13 +1,13 @@
 import { type BusPreset, isTrain } from '../vehicle/busPreset';
 import { BRT_BUS, BUSES, VEHICLES, busById, busStats } from '../vehicle/buses';
-import { TRACK_LIST, ZONE_LIST, loadZone } from '../world/loadCity';
+import { CIRCUIT_ZONES, TRACK_LIST, ZONE_LIST, loadZone } from '../world/loadCity';
 import type { CityData, Vec2 } from '../world/cityData';
 import { type RouteDef, routeLegs, routePaths, routeStops, routesFor, startPose } from '../gameplay/routes';
 import { type StarThresholds, starThresholds, starsFor } from '../gameplay/stars';
 import { buildRoadGraph } from '../world/roadGraph';
 import { HILLS_OPTIONS, RAIN_OPTIONS, type RaceSetup, TIME_OPTIONS, type Settings, loadSettings, saveSettings } from './settings';
-import { bestOnline } from '../gameplay/onlineRecords';
-import { bestRace } from '../gameplay/raceRecords';
+import { bestOnline, bestOnlineLap } from '../gameplay/onlineRecords';
+import { bestLapRecord, bestRace } from '../gameplay/raceRecords';
 import { SLIDE_TRACKS } from '../gameplay/landslides';
 import { raceClock } from '../gameplay/raceGame';
 import { RADIO_OFF, STATIONS } from '../core/radioStations';
@@ -34,7 +34,7 @@ export function playUrl(s: Selection): string {
   if (s.mode === 'free') return `?${new URLSearchParams({ play: '1', mode: 'free', city: s.zone, bus: s.bus })}`;
   if (s.mode === 'race' && s.race) {
     const r = s.race;
-    return `?${new URLSearchParams({ play: '1', mode: 'race', city: r.track, bus: s.bus, rivals: String(r.rivals), rivalBus: r.rivalBus, skill: r.skill, ...(r.traffic ? { traffic: '1' } : {}), ...(SLIDE_TRACKS.has(r.track) && !r.slides ? { slides: '0' } : {}) })}`;
+    return `?${new URLSearchParams({ play: '1', mode: 'race', city: r.track, bus: s.bus, rivals: String(r.rivals), rivalBus: r.rivalBus, skill: r.skill, ...(r.traffic && !CIRCUIT_ZONES[r.track] ? { traffic: '1' } : {}), ...(SLIDE_TRACKS.has(r.track) && !r.slides ? { slides: '0' } : {}) })}`;
   }
   return `?${new URLSearchParams({ play: '1', city: s.zone, bus: s.bus, route: s.route })}`;
 }
@@ -644,6 +644,7 @@ export class Menu {
         <div><dt>Qué manejan</dt><dd>${esc(who)}</dd></div></dl></div>`;
     }
     const best = bestOnline(st.track);
+    const bestLap = CIRCUIT_ZONES[st.track] ? bestOnlineLap(st.track) : null;
     const others = room.seats.filter((x) => !x.host && x.online);
     const mine = room.seats.find((x) => x.id === me);
     const action = room.phase === 'racing'
@@ -655,7 +656,7 @@ export class Menu {
     return `
       <h2>En la sala (${humans}/${MAX_SEATS})</h2>
       <ul class="mn-seats">${rows.join('')}</ul>
-      <div class="mn-opts">${options}${best ? `<p class="mn-best" data-k="best">Tu mejor en línea en ${esc(track)}: <b>${raceClock(best.time)}</b> · ${esc(best.bus)} · ${best.place}º de ${best.racers}</p>` : ''}</div>
+      <div class="mn-opts">${options}${best || bestLap !== null ? `<p class="mn-best" data-k="best">${best ? `Tu mejor en línea en ${esc(track)}: <b>${raceClock(best.time)}</b> · ${esc(best.bus)} · ${best.place}º de ${best.racers}` : `Tu mejor vuelta en línea en ${esc(track)}:`}${bestLap !== null ? `${best ? ' · mejor vuelta' : ''} <b>${raceClock(bestLap)}</b>` : ''}</p>` : ''}</div>
       <div class="mn-lobby-actions">${action}</div>
       <p class="mn-note" role="status" aria-live="polite">${esc(note)}</p>`;
   }
@@ -751,7 +752,7 @@ export class Menu {
     const r = this.settings.race;
     if (!TRACK_LIST.some((t) => t.id === r.track)) r.track = TRACK_LIST[0].id;
     const tracks = this.root.querySelector<HTMLElement>('.mn-tracks')!;
-    tracks.innerHTML = TRACK_LIST.map((t) => trackCard(t, t.id === r.track, bestRace(t.id)?.time ?? null)).join('');
+    tracks.innerHTML = TRACK_LIST.map((t) => trackCard(t, t.id === r.track, bestRace(t.id)?.time ?? null, CIRCUIT_ZONES[t.id] ? bestLapRecord(t.id) : undefined)).join('');
     tracks.querySelectorAll<HTMLElement>('[data-track]').forEach((el) =>
       el.addEventListener('click', () => {
         r.track = el.dataset.track!;
@@ -779,11 +780,11 @@ export class Menu {
         ${SKILL_OPTIONS.map((o) => choice('skill', o.value, o.label, r.skill === o.value)).join('')}
       </fieldset>
       </div>
-      <fieldset>
+      ${CIRCUIT_ZONES[r.track] ? '' : `<fieldset>
         <legend>Tráfico en la vía</legend>
         ${choice('traffic', 'off', 'Vía libre', !r.traffic)}
         ${choice('traffic', 'on', 'Con carros y camiones', r.traffic)}
-      </fieldset>
+      </fieldset>`}
       ${SLIDE_TRACKS.has(r.track) ? `<fieldset class="mn-slides">
         <legend>Derrumbes</legend>
         ${choice('slides', 'on', 'Sí', r.slides)}
@@ -844,7 +845,7 @@ export class Menu {
       const r = this.settings.race;
       const track = TRACK_LIST.find((t) => t.id === r.track)?.name ?? '';
       const who = r.rivalBus === 'mixed' ? 'de todo un poco' : r.rivalBus === 'same' ? 'lo mismo que usted' : (VEHICLES.find((v) => v.preset.id === r.rivalBus)?.preset.name ?? '');
-      el.textContent = `${bus}, ${track}, ${r.rivals} ${r.rivals === 1 ? 'rival' : 'rivales'} (${who})${r.traffic ? ', con tráfico' : ''}${SLIDE_TRACKS.has(r.track) && !r.slides ? ', sin derrumbes' : ''}`;
+      el.textContent = `${bus}, ${track}, ${r.rivals} ${r.rivals === 1 ? 'rival' : 'rivales'} (${who})${r.traffic && !CIRCUIT_ZONES[r.track] ? ', con tráfico' : ''}${SLIDE_TRACKS.has(r.track) && !r.slides ? ', sin derrumbes' : ''}`;
       return;
     }
     const route =
@@ -1001,12 +1002,13 @@ function busCard(p: BusPreset, blurb: string, checked: boolean, pool?: BusPreset
     </button>`;
 }
 
-function trackCard(t: { id: string; name: string; blurb: string }, checked: boolean, best: number | null): string {
+/** `bestLap`: circuits only (null: none yet; undefined: not a circuit, no line). */
+function trackCard(t: { id: string; name: string; blurb: string }, checked: boolean, best: number | null, bestLap?: number | null): string {
   return `
     <button class="mn-card mn-zone" role="radio" aria-checked="${checked}" data-track="${t.id}">
       <span class="mn-card-name">${t.name}</span>
       <span class="mn-card-blurb">${t.blurb}</span>
-      <span class="mn-card-cap">${best !== null ? `Su récord: ${raceClock(best)}` : 'Sin récord todavía'}</span>
+      <span class="mn-card-cap">${best !== null ? `Su récord: ${raceClock(best)}` : 'Sin récord todavía'}${bestLap === undefined ? '' : ` · Mejor vuelta: ${bestLap === null ? '—' : raceClock(bestLap)}`}</span>
     </button>`;
 }
 
@@ -1133,10 +1135,13 @@ function drawTrackMap(canvas: HTMLCanvasElement, city: CityData): void {
   const ctx = canvas.getContext('2d')!;
   const W = canvas.width;
   const H = canvas.height;
-  const strip = 84;
+  // A circuit is flat-ish: a line of text under the map in place of a height profile.
+  const strip = t.circuit ? 34 : 84;
   const pad = 18;
+  // A circuit shows one lap (the details are the circuit card's), not its laps piled up.
+  const end = t.circuit ? t.start + t.circuit.lap : t.finish;
   const i0 = t.cum.findIndex((c) => c >= t.start);
-  const i1 = t.cum.findIndex((c) => c >= t.finish);
+  const i1 = t.cum.findIndex((c) => c >= end);
   const pts = t.points.slice(i0, i1 + 1);
   const xs = pts.map((p) => p.x);
   const zs = pts.map((p) => p.z);
@@ -1165,7 +1170,7 @@ function drawTrackMap(canvas: HTMLCanvasElement, city: CityData): void {
     ctx.stroke();
   };
   dot(pts[0], '#2e7d4f');
-  dot(pts[pts.length - 1], '#1d1a14');
+  if (!t.circuit) dot(pts[pts.length - 1], '#1d1a14');
   ctx.font = 'bold 12px system-ui, sans-serif';
   ctx.fillStyle = '#1d1a14';
   ctx.textAlign = 'center';
@@ -1175,13 +1180,21 @@ function drawTrackMap(canvas: HTMLCanvasElement, city: CityData): void {
     ctx.fillText(text, Math.max(half, Math.min(W - half, X(p.x))), Z(p.z) - 13);
   };
   label(t.from, pts[0]);
-  label(t.to, pts[pts.length - 1]);
+  if (!t.circuit) label(t.to, pts[pts.length - 1]);
+  if (t.circuit) {
+    ctx.fillStyle = '#16283a';
+    ctx.fillRect(0, H - strip, W, strip);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${((end - t.start) / 1000).toFixed(1).replace('.', ',')} km por vuelta · ${t.circuit.laps} vueltas`, pad, H - strip + 21);
+    return;
+  }
   // The profile: height against distance, from the start line to the finish.
   const ys = t.y.slice(i0, i1 + 1);
   const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
   const top = H - strip + 22;
   const bottom = H - 10;
-  const PX = (c: number) => pad + ((c - t.start) / (t.finish - t.start)) * (W - pad * 2);
+  const PX = (c: number) => pad + ((c - t.start) / (end - t.start)) * (W - pad * 2);
   const PY = (y: number) => bottom - ((y - y0) / (y1 - y0 || 1)) * (bottom - top);
   ctx.fillStyle = '#16283a';
   ctx.fillRect(0, H - strip, W, strip);
@@ -1189,9 +1202,10 @@ function drawTrackMap(canvas: HTMLCanvasElement, city: CityData): void {
   ctx.beginPath();
   ctx.moveTo(PX(t.start), bottom);
   ys.forEach((y, i) => ctx.lineTo(PX(t.cum[i0 + i]), PY(y)));
-  ctx.lineTo(PX(t.finish), bottom);
+  ctx.lineTo(PX(end), bottom);
   ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(`${((t.finish - t.start) / 1000).toFixed(1).replace('.', ',')} km · baja ${Math.round(ys[0] - ys[ys.length - 1])} m`, pad, H - strip + 15);
+  const km = ((end - t.start) / 1000).toFixed(1).replace('.', ',');
+  ctx.fillText(`${km} km · baja ${Math.round(ys[0] - ys[ys.length - 1])} m`, pad, H - strip + 15);
 }

@@ -21,12 +21,13 @@ const FALL = 0.35;
 
 const ramp = (x: number, lo: number, hi: number) => Math.max(0, Math.min(1, (x - lo) / (hi - lo)));
 
-/** How hard `me` is pulled (0..1) by whichever of `others` it sits closest behind. */
-export function draftOf(me: RoadUser, others: readonly RoadUser[]): number {
+/** How hard `me` is pulled (0..1) by whichever of `others` it sits closest behind. `lap`: a circuit's lap length (m): a racer a lap down is in the same place. */
+export function draftOf(me: RoadUser, others: readonly RoadUser[], lap = 0): number {
   let best = 0;
   for (const o of others) {
     if (o === me) continue;
-    const gap = o.s - o.len - me.s;
+    let gap = o.s - o.len - me.s;
+    if (lap > 0) gap -= Math.round(gap / lap) * lap;
     if (gap <= 0 || gap > DRAFT_RANGE) continue;
     const side = 1 - ramp(Math.abs(o.off - me.off), DRAFT_ALIGN, DRAFT_SIDE);
     const speed = Math.min(ramp(me.v, DRAFT_SPEED, DRAFT_FULL_SPEED), ramp(o.v, DRAFT_SPEED, DRAFT_FULL_SPEED));

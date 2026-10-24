@@ -1,3 +1,4 @@
+import type { ZoneCircuit } from '../src/world/osm/circuit';
 import type { TrackEnd } from '../src/world/osm/track';
 
 /** Real-city zones that can be imported. bbox = [south, west, north, east]. */
@@ -23,6 +24,8 @@ export const ZONES: Record<
      * src/world/osm/track.ts). Only its ways are fetched (`track` query).
      */
     track?: { ref: string; from: TrackEnd; to: TrackEnd; biome?: 'paramo' | 'cloudforest' | 'canyon'; road?: string; minRadius?: number; structures?: boolean };
+    /** Closed street circuits raced inside a city (see src/world/osm/circuit.ts). */
+    circuits?: ZoneCircuit[];
   }
 > = {
   mariscal: {
@@ -44,6 +47,18 @@ export const ZONES: Record<
     // entrance on Av. América: OSM node 2907866129 ("Plaza Indoamerica", historic=monument).
     // Just past the roadworks at the map edge, in view from Av. América.
     monuments: [{ kind: 'relojSolar', name: 'Reloj Solar de la Universidad Central', lat: -0.2013468, lon: -78.5017621 }],
+    // Zona Rosa street circuit (city metres of the street crossings, in driving order; the first is
+    // the start/finish line's street, the line itself 120 m after it). Twisty: Amazonas straight,
+    // Calama / Mera / García chicane, Reina Victoria past Plaza Foch, Foch, Almagro, Wilson, back
+    // along Reina Victoria and Carrión.
+    circuits: [
+      {
+        id: 'zonarosa',
+        name: 'Circuito Zona Rosa',
+        laps: 3,
+        via: [[-141, 1], [214, -286], [268, -209], [324, -243], [384, -161], [272, -94], [333, -12], [237, 43], [180, -36], [28, 153]],
+      },
+    ],
   },
   // "Paso de la Muerte": the E20 (Vía Interoceánica) from Papallacta down the Papallacta river's
   // gorge toward Cuyuja and Baeza: its first ~4.5 km raced (3120 to 2900 m, the windiest stretch),

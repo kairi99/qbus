@@ -358,35 +358,45 @@ function chevronLamps(lamps: Lamp[]): THREE.Mesh {
   return mesh;
 }
 
+/** Where a gantry's legs stand, relative to the line's center: a circuit's sit outside its barriers, on either side. */
+export interface GantrySpan {
+  /** Distance from the center to each leg (m). */
+  left: number;
+  right: number;
+  /** Half width of the checkered line (the asphalt, not the sidewalks). */
+  line: number;
+}
+
 /** A gantry across the road (two poles and a banner) and a checkered line painted under it. */
-function gantry(race: TrackData, s: number, label: string, solid: ChunkedMeshBuilder, paint: ChunkedMeshBuilder, scene: THREE.Scene, world: RAPIER.World, fixed: RAPIER.RigidBody): void {
+export function gantry(race: TrackData, s: number, label: string, solid: ChunkedMeshBuilder, paint: ChunkedMeshBuilder, scene: THREE.Scene, world: RAPIER.World, fixed: RAPIER.RigidBody, span?: GantrySpan): void {
   const q = trackPoint(race, s);
   const n = { x: -q.dz, z: q.dx };
-  const half = race.width / 2 + 1.3;
+  const reach = span ?? { left: race.width / 2 + 1.3, right: race.width / 2 + 1.3, line: race.width / 2 };
   const top = q.y + 6.2;
   const mb = solid.at(q.x, q.z);
-  for (const side of [-1, 1]) {
-    const p = { x: q.x + n.x * half * side, z: q.z + n.z * half * side };
+  for (const off of [-reach.left, reach.right]) {
+    const p = { x: q.x + n.x * off, z: q.z + n.z * off };
     post(mb, p, q.y - 1, top + 1.2, 0.35, '#c62d2d');
     world.createCollider(RAPIER.ColliderDesc.cylinder(4, 0.2).setTranslation(p.x, q.y + 3, p.z), fixed);
   }
   // Checkered line across the asphalt, two rows of squares.
   const sq = 0.6;
-  const cells = Math.round(race.width / sq);
+  const cells = Math.round((reach.line * 2) / sq);
   for (let row = 0; row < 2; row++)
     for (let k = 0; k < cells; k++) {
-      const u0 = -race.width / 2 + k * sq;
+      const u0 = -reach.line + k * sq;
       const s0 = row * sq;
       const corner = (u: number, a: number) => ({ x: q.x + n.x * u + q.dx * a, y: q.y + 0.025, z: q.z + n.z * u + q.dz * a });
       paint.at(q.x, q.z).quad(corner(u0, s0), corner(u0, s0 + sq), corner(u0 + sq, s0 + sq), corner(u0 + sq, s0), (k + row) % 2 ? '#111111' : '#f4f4f4');
     }
   // The banner: a canvas texture with the label, both faces.
-  const width = half * 2;
+  const width = reach.left + reach.right;
+  const mid = (reach.right - reach.left) / 2;
   // Facing the racers coming up to it, and the same the right way round on its back.
   const material = bannerMaterial(label);
   for (const turn of [0, Math.PI]) {
     const banner = new THREE.Mesh(new THREE.PlaneGeometry(width, 1.3), material);
-    banner.position.set(q.x, top + 0.45, q.z);
+    banner.position.set(q.x + n.x * mid, top + 0.45, q.z + n.z * mid);
     banner.rotation.y = Math.atan2(-q.dx, -q.dz) + turn;
     scene.add(banner);
   }

@@ -1,4 +1,4 @@
-import type { CityData, Vec2 } from './cityData';
+import type { CircuitData, CityData, Vec2 } from './cityData';
 
 /**
  * A race track: a stretch of a real mountain highway (osm/track.ts imports it), raced from
@@ -37,6 +37,35 @@ export interface TrackData {
   tunnels?: { s0: number; s1: number; name?: string; top: number[] }[];
   /** Real bridges (OSM bridge=yes) along the track: the ground falls away under the deck, parapets both sides. */
   bridges?: { s0: number; s1: number; name?: string }[];
+  /**
+   * A closed street circuit (circuitTrack.ts) unrolled over all its laps: `points` run lead-in + `laps` x `lap`
+   * + run-off, so `s` only grows and the lap is `lapOf(t, s)`. `data` is the one-lap course.
+   */
+  circuit?: { id: string; laps: number; lap: number; data: CircuitData };
+  /** Per point barrier offsets from the centerline (m, + right of travel, both positive); where present they replace `width / 2`. */
+  edges?: {
+    left: number[];
+    right: number[];
+    /** Carriageway half widths (m): the AI's line stays inside them on straights. */
+    road?: number[];
+  };
+}
+
+/** Is this track a street circuit (laps, city look) rather than a mountain road? */
+export function isCircuit(t: TrackData | null | undefined): boolean {
+  return !!t?.circuit;
+}
+
+/** The lap (1-based, clamped to [1, laps]) that `s` meters along an unrolled circuit is on; the lead-in is lap 1, the run-off the last. Other tracks: 1. */
+export function lapOf(t: TrackData, s: number): number {
+  const c = t.circuit;
+  if (!c) return 1;
+  return Math.max(1, Math.min(c.laps, Math.floor((s - t.start) / c.lap) + 1));
+}
+
+/** `s` of the line that starts `lap` (1-based; `laps + 1` = the finish line). */
+export function lapStart(t: TrackData, lap: number): number {
+  return t.start + (t.circuit ? (lap - 1) * t.circuit.lap : 0);
 }
 
 /** Spacing (m) of `Tunnel.top`. */
@@ -102,14 +131,30 @@ export function trackHeading(t: TrackData, s: number): number {
  * road's height there. `hint` (a previous `s`) searches only near it, `reach` meters either way;
  * without one the whole track is searched. With a height (`p.y`) the nearest road counts the
  * vertical distance too: a hairpin's other leg 40 m off but 80 m up isn't the road under a bus.
+ * On a street circuit the laps overlap in space, so a search without a hint covers one lap only (its
+ * span padded 40 m, lap 1 with the lead-in, the last lap with the run-off): `lapHint` (1-based, from
+ * `lapOf(t, lastS)`) says which, and without it lap 1 is searched. Mountain tracks ignore `lapHint`.
  */
-export function locateOnTrack(t: TrackData, p: Vec2 & { y?: number }, hint = -1, reach = 80): { s: number; off: number; y: number } {
+export function locateOnTrack(t: TrackData, p: Vec2 & { y?: number }, hint = -1, reach = 80, lapHint?: number): { s: number; off: number; y: number } {
   const { points: pts, cum } = t;
   let i0 = 0;
   let i1 = pts.length - 1;
+  // A circuit's lap search: the lap's own span (the padding only catches a car just over a seam).
+  let lo = -Infinity;
+  let hi = Infinity;
   if (hint >= 0) {
     i0 = indexAt(cum, hint - reach);
     i1 = Math.min(pts.length - 1, indexAt(cum, hint + reach) + 1);
+  } else if (t.circuit) {
+    const lap = Math.max(1, Math.min(t.circuit.laps, Math.round(lapHint ?? 1)));
+    if (lap > 1) {
+      lo = lapStart(t, lap);
+      i0 = indexAt(cum, lo - LAP_PAD);
+    }
+    if (lap < t.circuit.laps) {
+      hi = lapStart(t, lap + 1);
+      i1 = Math.min(pts.length - 1, indexAt(cum, hi + LAP_PAD) + 1);
+    }
   }
   let best = Infinity;
   let bs = 0;
@@ -126,10 +171,12 @@ export function locateOnTrack(t: TrackData, p: Vec2 & { y?: number }, hint = -1,
     const ez = p.z - (a.z + dz * u);
     const ry = t.y[i] + (t.y[i + 1] - t.y[i]) * u;
     const ey = p.y === undefined ? 0 : p.y - ry;
-    const d2 = ex * ex + ez * ez + ey * ey;
+    // The seam's padding repeats the lap's other end (the lap is closed): there the lap's own span wins a tie.
+    const at = cum[i] + (cum[i + 1] - cum[i]) * u;
+    const d2 = ex * ex + ez * ez + ey * ey + (at < lo - 1e-6 || at > hi + 1e-6 ? PAD_PENALTY : 0);
     if (d2 < best) {
       best = d2;
-      bs = cum[i] + (cum[i + 1] - cum[i]) * u;
+      bs = at;
       // Right of travel is (-dz, dx) in x/z (z points south).
       const l = Math.sqrt(l2);
       boff = (ex * -dz + ez * dx) / l;
@@ -138,6 +185,10 @@ export function locateOnTrack(t: TrackData, p: Vec2 & { y?: number }, hint = -1,
   }
   return { s: bs, off: boff, y: by };
 }
+
+/** A lap's search span reaches this far (m) into its neighbours. */
+const LAP_PAD = 40;
+const PAD_PENALTY = 4;
 
 /** Index of the last point at or before `s`. */
 function indexAt(cum: number[], s: number): number {
@@ -173,4 +224,9 @@ export function trackPose(t: TrackData, s: number, off = 0): { pos: Vec2; headin
 /** The track of a city, if it is one. */
 export function trackOf(city: CityData): TrackData | null {
   return city.race ?? null;
+}
+
+/** Is the city a mountain track (the point-to-point roads with their own terrain, mist and haze)? A circuit is a city with a race. */
+export function onMountain(city: Pick<CityData, 'race'>): boolean {
+  return !!city.race && !city.race.circuit;
 }

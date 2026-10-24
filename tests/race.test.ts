@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { GOOD, IDLE, LaunchRev, WINDOW, aiGrade, gradeOf } from '../src/gameplay/launch';
-import { COUNT_STEP, GRID_WAIT, PLACE_SETTLE, PlaceCaller, RaceGame, raceClock } from '../src/gameplay/raceGame';
+import { COUNT_STEP, GRID_WAIT, PLACE_SETTLE, PlaceCaller, RaceGame, bestLap, raceClock } from '../src/gameplay/raceGame';
 import { CREWS, MAX_RIVALS, parseRivalChoice, rivalVehicles } from '../src/gameplay/raceField';
 import { PICKUP_FILL, PICKUP_RESPAWN, Pickups } from '../src/gameplay/pickups';
-import { KEEP_RIGHT, chooseLane } from '../src/gameplay/raceDriver';
+import { BARRIER_GAP, KEEP_RIGHT, SKILLS, chooseLane, racingLine, speedProfile } from '../src/gameplay/raceDriver';
+import { readFileSync } from 'node:fs';
+import type { TrackData } from '../src/world/track';
+import { loadZone } from '../src/world/loadCity';
+import { trackPoint } from '../src/world/track';
 import { Nitro } from '../src/gameplay/nitro';
 import { playUrl } from '../src/menu/menu';
 
@@ -127,6 +131,113 @@ describe('the race', () => {
   });
 });
 
+describe('laps', () => {
+  const LAP = 500;
+  const go = (n = 2) => {
+    const g = new RaceGame(Array.from({ length: n }, (_, i) => `r${i}`), 3 * LAP, { laps: { count: 3, lap: LAP } });
+    for (let t = 0; t < GRID_WAIT + 3 * COUNT_STEP + 0.2; t += 0.05) g.update(0.05, new Array(n).fill(0));
+    return g;
+  };
+  /** Runs `secs` more; `at(t)` = progress per racer at race time t. */
+  const run = (g: RaceGame, secs: number, at: (t: number) => number[]) => {
+    const out: { type: string; racer?: number; lap?: number; time?: number }[] = [];
+    for (let t = 0; t < secs; t += 0.05) for (const e of g.update(0.05, at(g.time + 0.05))) if (e.type === 'lap' || e.type === 'finish') out.push(e);
+    return out;
+  };
+
+  it('a lap event fires once per line crossed (laps 2..laps); the finish closes the last lap', () => {
+    const g = go();
+    const ev = run(g, 80, (t) => [t * 20, t * 10]);
+    expect(ev.filter((e) => e.type === 'lap' && e.racer === 0).map((e) => e.lap)).toEqual([2, 3]);
+    expect(ev.filter((e) => e.type === 'finish').map((e) => e.racer)).toEqual([0]);
+    expect(g.racers[0].lap).toBe(3);
+    expect(g.racers[0].lapTimes).toHaveLength(3);
+    expect(g.racers[1].lap).toBe(2);
+    expect(g.racers[1].lapTimes).toHaveLength(1);
+    expect(ev.filter((e) => e.racer === 1).map((e) => e.lap)).toEqual([2]);
+  });
+
+  it('lap times sum to the race time at the finish', () => {
+    const g = go();
+    run(g, 200, (t) => [t * 20 + Math.sin(t) * 30, 0]);
+    const me = g.racers[0];
+    expect(me.time).not.toBeNull();
+    expect(me.lapTimes.reduce((a, b) => a + b, 0)).toBeCloseTo(me.time!, 9);
+    expect(bestLap(me)).toBe(Math.min(...me.lapTimes));
+  });
+
+  it('a reset back over a line neither un-counts nor repeats the lap', () => {
+    const g = go();
+    const prog = [LAP - 5, 0];
+    run(g, 0.1, () => prog);
+    prog[0] = LAP + 10;
+    expect(run(g, 0.2, () => prog).map((e) => e.lap)).toEqual([2]);
+    prog[0] = LAP - 30;
+    expect(run(g, 0.2, () => prog)).toEqual([]);
+    expect(g.racers[0].lap).toBe(2);
+    prog[0] = LAP + 5;
+    expect(run(g, 0.2, () => prog)).toEqual([]);
+    expect(g.racers[0].lapTimes).toHaveLength(1);
+  });
+
+  it('a lapped car ranks behind on total distance', () => {
+    const g = go();
+    // The same spot of the lap (x/z) for both: A is a whole lap ahead of B there, on lap 3 to B's 2.
+    const spot = 120;
+    run(g, 0.2, () => [2 * LAP + spot, LAP + spot]);
+    expect(g.racers[0].s % LAP).toBe(g.racers[1].s % LAP);
+    expect(g.ranking()).toEqual([0, 1]);
+    expect(g.placeOf(0)).toBe(1);
+    expect(g.racers[0].lap).toBe(3);
+    expect(g.racers[1].lap).toBe(2);
+    // B sits ahead on the lap but is the one lapped: A passes it, then B stays behind.
+    run(g, 0.2, () => [2 * LAP + spot + 40, LAP + spot + 30]);
+    expect(g.ranking()).toEqual([0, 1]);
+    run(g, 0.2, () => [2.9 * LAP, 3.4 * LAP]);
+    expect(g.racers.every((r) => r.lap <= 3)).toBe(true);
+  });
+
+  it('two lines in one frame are timed by interpolation, not 0 s', () => {
+    const g = go(1);
+    // One 3 s frame (a stall), from just before line 1 to past line 2.
+    g.update(0.05, [LAP - 10]);
+    const ev = g.update(3, [2 * LAP + 10]).filter((e) => e.type === 'lap');
+    expect(ev).toHaveLength(2);
+    const laps = g.racers[0].lapTimes;
+    expect(laps[0]).toBeGreaterThan(0);
+    expect(laps[1]).toBeGreaterThan(0);
+    expect(laps[1]).toBeLessThan(3);
+    expect(laps[1]).toBeCloseTo((3 * LAP) / (LAP + 20), 1);
+    expect(g.racers[0].best).toBe(Math.min(...laps));
+  });
+
+  it('a racer first seen past a line (late join) gets no lap time for the laps behind', () => {
+    const g = go(2);
+    // Its first snapshot lands 1.5 laps on, after the grid's 0 (a jump no bus drives).
+    const ev = run(g, 0.3, () => [10, 1.5 * LAP]);
+    expect(ev).toEqual([]);
+    expect(g.racers[1].lap).toBe(2);
+    expect(g.racers[1].lapTimes).toEqual([]);
+    expect(g.racers[1].best).toBeNull();
+    // Its next line is timed from there on, not from the start of the race.
+    const next = run(g, 3, (t) => [10, 1.5 * LAP + (t - 0.3 > 0 ? 100 * (t - 0.3) : 0)]);
+    expect(next.filter((e) => e.racer === 1)).toEqual([]);
+  });
+
+  it('skipTo (a resume) counts the lines before it without events or times', () => {
+    const g = go();
+    g.skipTo(0, 1.4 * LAP);
+    expect(run(g, 0.2, () => [1.4 * LAP, 0])).toEqual([]);
+    expect(g.racers[0].lap).toBe(2);
+    expect(g.racers[0].lapTimes).toEqual([]);
+  });
+
+  it('without laps nothing changes', () => {
+    const g = new RaceGame(['a'], 100);
+    expect(g.racers[0]).toMatchObject({ lap: 1, lapTimes: [] });
+  });
+});
+
 describe('online clock', () => {
   const run = (g: RaceGame, goIns: number[]) => {
     const out: string[] = [];
@@ -237,6 +348,21 @@ describe('nitro pickups', () => {
     expect(new Pickups(spots).take(95, 101, 0, 11, 1.7)).toEqual([]);
   });
 
+  it('on a circuit one spot serves every lap: taken on lap 1 it is gone for lap 2 too, and a racer on lap 2 can take it', () => {
+    const lap = 1500;
+    const p = new Pickups(spots, lap);
+    // Lap 2: the spot is a lap further on.
+    expect(p.take(lap + 95, lap + 101, 1.6, 11, 2.5)).toEqual([1]);
+    expect(p.gone[1]).toBeGreaterThan(0);
+    // A racer one lap down, in the same place, finds it gone (it is the same canister).
+    expect(p.take(95, 101, 1.9, 11, 2.5)).toEqual([]);
+    for (let t = 0; t < PICKUP_RESPAWN + 0.1; t += 0.1) p.step(0.1);
+    // Back: whoever comes past next takes it, on any lap.
+    expect(p.take(2 * lap + 95, 2 * lap + 101, 1.9, 11, 2.5)).toEqual([1]);
+    // Between spots on any lap: nothing.
+    expect(new Pickups(spots, lap).take(lap + 300, lap + 306, 1.9, 11, 2.5)).toEqual([]);
+  });
+
   it('fill half a tank', () => {
     const n = new Nitro();
     n.level = 0.1;
@@ -334,5 +460,149 @@ describe('online finish', () => {
     ev = g.update(0.1, [100, 100], true, -14);
     expect(ev).toEqual([{ type: 'finish', racer: 1, place: 2, time: 14 }]);
     expect(g.ranking()).toEqual([0, 1]);
+  });
+});
+
+describe('lanes on a street circuit', () => {
+  const room = { left: 4, right: 4, lap: 1565 };
+  const me = { s: 100, off: 0, v: 20, len: 11 };
+  const slow = { s: 110, off: 0.2, v: 12, len: 11 };
+
+  it('a slower racer ahead is passed at once, whatever the oncoming half (nobody comes the other way)', () => {
+    const way = chooseLane(me, [slow], [], 0, SKILLS.hard.passClear, null, null, room);
+    expect(way.limit).toBe(Infinity);
+    expect(way.lane).toBeLessThan(0);
+  });
+
+  it('passes on the side with room: the far side of the car if it fits, else the other', () => {
+    expect(chooseLane({ ...me, off: 3 }, [{ ...slow, off: 2.8 }], [], 0, 110, null, null, room).lane).toBeLessThan(0);
+    expect(chooseLane({ ...me, off: -3 }, [{ ...slow, off: -3.2 }], [], 0, 110, null, null, room).lane).toBeGreaterThan(0);
+    // The car to our left, the wall to our right: the lane takes what is there.
+    const lane = chooseLane({ ...me, off: 1.9 }, [{ ...slow, off: 1.6 }], [], 0, 110, null, null, { ...room, right: 3.6 }).lane;
+    expect(Math.abs(lane)).toBeLessThanOrEqual(1.9);
+  });
+
+  it('with no room either side it follows at the slower racer’s speed', () => {
+    const way = chooseLane(me, [slow], [], 0, 110, null, null, { left: 1, right: 1, lap: 1565 });
+    expect(way.limit).toBeLessThan(slow.v + 0.5);
+    expect(way.lane).toBe(0);
+  });
+
+  it('a racer a lap down is a slower one ahead, a faster one is followed, not passed', () => {
+    expect(chooseLane(me, [{ ...slow, s: 110 - 1565 }], [], 0, 110, null, null, room).lane).not.toBe(0);
+    expect(chooseLane(me, [{ ...slow, s: 110 + 1565 }], [], 0, 110, null, null, room).lane).not.toBe(0);
+    expect(chooseLane(me, [{ ...slow, v: 30 }], [], 0, 110, null, null, room)).toEqual({ lane: 0, limit: Infinity });
+  });
+
+  it('the mountain rules are unchanged without a room: an oncoming car holds a pass on the left half', () => {
+    const oncoming = [{ s: 160, off: -1.5, v: 15, len: 11, dir: -1 as const }];
+    const way = chooseLane(me, [slow], oncoming, 0, 110);
+    expect(way.lane).toBeGreaterThan(0);
+    expect(way.limit).toBeLessThan(Infinity);
+  });
+});
+
+describe('the racing line on the Zona Rosa', () => {
+  const HALF = 1.25;
+  const LEN = 11;
+  let race: Awaited<ReturnType<typeof loadZone>>['race'] & object;
+  let line: ReturnType<typeof racingLine>;
+  /** Signed turn (rad, + right) over 24 m round each 3 m sample of the centerline. */
+  let turn: number[];
+  beforeAll(async () => {
+    race = (await loadZone('zonarosa')).race!;
+    line = racingLine(race, HALF, LEN);
+    const a = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
+    const b = { x: 0, z: 0, y: 0, dx: 1, dz: 0 };
+    turn = Array.from(line.off, (_, i) => {
+      trackPoint(race, i * 3 - 12, a);
+      trackPoint(race, i * 3 + 12, b);
+      return Math.asin(Math.max(-1, Math.min(1, a.dx * b.dz - a.dz * b.dx)));
+    });
+  });
+
+  it('never comes nearer a barrier than the clearance plus its half width', () => {
+    const e = race.edges!;
+    for (let i = 0; i < line.off.length; i++) {
+      const j = race.cum.findIndex((c) => c >= i * 3);
+      const at = Math.max(0, j);
+      expect(line.off[i]).toBeLessThanOrEqual(e.right[at] - BARRIER_GAP - HALF + 0.3);
+      expect(line.off[i]).toBeGreaterThanOrEqual(-(e.left[at] - BARRIER_GAP - HALF) - 0.3);
+    }
+  });
+
+  it('keeps to the carriageway on the straights, well clear of any corner', () => {
+    const e = race.edges!;
+    let checked = 0;
+    for (let i = 20; i < line.off.length - 20; i++) {
+      // No corner within 60 m either way.
+      if (turn.slice(i - 20, i + 21).some((t) => Math.abs(t) > 0.12)) continue;
+      const j = Math.max(0, race.cum.findIndex((c) => c >= i * 3));
+      expect(Math.abs(line.off[i])).toBeLessThanOrEqual(e.road![j] - HALF + 0.05);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(40);
+  });
+
+  it('swings outside, inside, outside round a corner of its own, and uses more than the carriageway somewhere', () => {
+    const e = race.edges!;
+    let swung = 0;
+    let wide = false;
+    for (let i = 40; i < line.off.length - 40; i++) {
+      // The sharpest point of an isolated corner (more than 60 m from the next one).
+      const t = turn[i];
+      if (Math.abs(t) < 0.5 || turn.slice(i - 20, i + 21).some((u, k) => k !== 20 && Math.abs(u) > Math.abs(t))) continue;
+      if (turn.slice(i - 40, i - 12).some((u) => Math.abs(u) > 0.5) || turn.slice(i + 12, i + 41).some((u) => Math.abs(u) > 0.5)) continue;
+      const dir = Math.sign(t);
+      // Inside at the apex (more toward the turn than 30 m before and after).
+      if (line.off[i] * dir > line.off[i - 10] * dir + 0.5 && line.off[i] * dir > line.off[i + 10] * dir + 0.5) swung++;
+    }
+    for (let i = 0; i < line.off.length; i++) if (Math.abs(line.off[i]) > e.road![Math.max(0, race.cum.findIndex((c) => c >= i * 3))] - HALF + 0.3) wide = true;
+    expect(swung).toBeGreaterThanOrEqual(2);
+    expect(wide).toBe(true);
+  });
+
+  it('the speed plan follows the line: no slower round a corner than on the centerline, and faster overall', () => {
+    const on = speedProfile(race, 8, 8, 25, line);
+    const centre = speedProfile(race, 8, 8, 25, null);
+    const mean = (v: Float32Array) => v.reduce((a, b) => a + b, 0) / v.length;
+    expect(Math.min(...on)).toBeGreaterThanOrEqual(Math.min(...centre) - 0.01);
+    expect(mean(on)).toBeGreaterThan(mean(centre));
+  });
+
+  it('a longer vehicle keeps further off the inside of a bend (its rear swings in)', () => {
+    const long = racingLine(race, HALF, 18.4);
+    let inner = 0;
+    for (let i = 0; i < line.off.length; i++) if (Math.abs(turn[i]) > 0.5 && long.off[i] * Math.sign(turn[i]) < line.off[i] * Math.sign(turn[i])) inner++;
+    expect(inner).toBeGreaterThan(10);
+  });
+});
+
+describe('the line planner edge cases', () => {
+  it('a gap narrower than the clearances on both sides gets the midpoint, never min above max', () => {
+    // A straight 1.0 m left / 2.0 m right of the centerline: far less than 2 x (gap + half width).
+    const n = 40;
+    const points = Array.from({ length: n }, (_, i) => ({ x: i * 3, z: 0 }));
+    const track = {
+      points,
+      y: points.map(() => 0),
+      cum: points.map((p) => p.x),
+      edges: { left: points.map(() => 1), right: points.map(() => 2), road: points.map(() => 1) },
+    } as unknown as TrackData;
+    const line = racingLine(track, 1.25, 11);
+    for (let i = 0; i < line.min.length; i++) {
+      expect(line.min[i]).toBeLessThanOrEqual(line.max[i]);
+      expect(line.min[i]).toBeCloseTo(line.max[i], 6);
+      expect(line.off[i]).toBeCloseTo(line.min[i], 3);
+    }
+  });
+
+  it('without a line the speed plan of a mountain track is what it always was', () => {
+    const papallacta = JSON.parse(readFileSync('data/cities/papallacta.json', 'utf8')).race as TrackData;
+    const v = speedProfile(papallacta, 10, 8, 30);
+    expect(v.length).toBe(1686);
+    expect(Math.min(...v)).toBeCloseTo(17.8549, 3);
+    expect(v.indexOf(Math.min(...v))).toBe(244);
+    expect(v.reduce((a, b) => a + b, 0)).toBeCloseTo(49208.73, 1);
   });
 });

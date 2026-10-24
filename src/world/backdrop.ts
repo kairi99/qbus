@@ -4,7 +4,7 @@ import type { CityData, Horizon, Landmark } from './cityData';
 import { buildMountains } from './mountains';
 import { type Puff, MIST_LOOK, mistMesh } from './mist';
 import { LIGHTING, type TimeOfDay, skyDome } from './sky';
-import type { TrackData } from './track';
+import { type TrackData, onMountain } from './track';
 
 /**
  * The Virgen is drawn this many times life size (≈45 m with her base): from La Mariscal, 4 km
@@ -30,12 +30,12 @@ export function buildBackdrop(city: CityData, cityRadius: number, tod: TimeOfDay
 
   const scale = city.terrain?.scale ?? 1;
   if (city.horizon) {
-    scene.add(horizonMesh(city.horizon, scale, light.horizon, city.race));
+    scene.add(horizonMesh(city.horizon, scale, light.horizon, onMountain(city) ? city.race : undefined));
     // Quito's lights around a city zone; out on a mountain road the valley is dark.
-    if (tod === 'night' && !city.race) scene.add(cityLights(city.horizon, scale));
+    if (tod === 'night' && !onMountain(city)) scene.add(cityLights(city.horizon, scale));
     for (const l of city.landmarks ?? []) scene.add(l.kind === 'virgen' ? virgen(l, scale) : volcano(l, scale));
     // Out in the mountains, banks of cloud over the far ridges and around the volcanoes.
-    if (city.race) scene.add(mistMesh(farClouds(city.horizon, city.landmarks ?? []), MIST_LOOK[tod], 40000));
+    if (onMountain(city)) scene.add(mistMesh(farClouds(city.horizon, city.landmarks ?? []), MIST_LOOK[tod], 40000));
   } else scene.add(buildMountains(cityRadius));
   return scene;
 }

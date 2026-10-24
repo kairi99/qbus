@@ -39,6 +39,8 @@ export interface StreetscapeContext {
   light: Lighting;
   /** Other street furniture (traffic light poles): nothing stands within 2 m. */
   keepClear?: Vec2[];
+  /** A circuit race's course: nothing stands there (true = on the course). */
+  keepOut?: (p: Vec2) => boolean;
   world: RAPIER.World;
   fixed: RAPIER.RigidBody;
 }
@@ -82,6 +84,7 @@ export function addStreetscape(ctx: StreetscapeContext): THREE.Mesh[] {
   };
 
   for (const t of city.trees) {
+    if (ctx.keepOut?.(t)) continue;
     const r = hash2(t.x, t.z, 1);
     plantTree(t, r < 0.55 ? 'broad' : r < 0.82 ? 'conifer' : 'jacaranda', 0.8 + hash2(t.x, t.z, 2) * 0.5);
   }
@@ -90,6 +93,7 @@ export function addStreetscape(ctx: StreetscapeContext): THREE.Mesh[] {
   const stops = city.stops.flatMap((s) => [s.pos, stopZone(s)]);
   const free = (p: Vec2, pad: number) =>
     inPlayArea(city, p, 4) &&
+    !ctx.keepOut?.(p) &&
     hulls.distance(p) > 4.5 &&
     ctx.lifted.clearance(p) > 10 &&
     stops.every((s) => Math.hypot(p.x - s.x, p.z - s.z) > 7) &&

@@ -32,6 +32,18 @@ const store = (): Store | null => {
 const valid = (r: any): r is OnlineRecord =>
   !!r && Number.isFinite(r.time) && r.time > 0 && typeof r.bus === 'string' && typeof r.date === 'string' && Number.isInteger(r.place) && r.place >= 1 && Number.isInteger(r.racers) && r.racers >= r.place;
 
+/** Best lap per circuit (s), apart from the race records: a save without it has none. */
+function loadLaps(s: Store | null): Record<string, number> {
+  const out: Record<string, number> = {};
+  try {
+    const v = JSON.parse(s?.getItem(KEY) ?? 'null');
+    if (v && v.version === VERSION && v.laps && typeof v.laps === 'object') for (const [k, l] of Object.entries(v.laps)) if (typeof l === 'number' && Number.isFinite(l) && l > 0) out[k] = l;
+  } catch {
+    // dropped
+  }
+  return out;
+}
+
 function load(s: Store | null): Record<string, OnlineRecord> {
   const out: Record<string, OnlineRecord> = {};
   try {
@@ -43,9 +55,9 @@ function load(s: Store | null): Record<string, OnlineRecord> {
   return out;
 }
 
-function save(s: Store | null, tracks: Record<string, OnlineRecord>): void {
+function save(s: Store | null, tracks: Record<string, OnlineRecord>, laps: Record<string, number> = loadLaps(s)): void {
   try {
-    s?.setItem(KEY, JSON.stringify({ version: VERSION, tracks }));
+    s?.setItem(KEY, JSON.stringify({ version: VERSION, tracks, laps }));
   } catch {
     // full or blocked: the record just isn't kept
   }
@@ -54,6 +66,21 @@ function save(s: Store | null, tracks: Record<string, OnlineRecord>): void {
 /** The best online time on a track, if any. */
 export function bestOnline(track: string, s: Store | null = store()): OnlineRecord | null {
   return load(s)[track] ?? null;
+}
+
+/** The best online lap (s) on a circuit, if any. */
+export function bestOnlineLap(track: string, s: Store | null = store()): number | null {
+  return loadLaps(s)[track] ?? null;
+}
+
+/** Saves a lap time; true if it's the new best online lap of the track. */
+export function recordOnlineLap(track: string, time: number, s: Store | null = store()): boolean {
+  if (!Number.isFinite(time) || time <= 0) return false;
+  const laps = loadLaps(s);
+  if (laps[track] !== undefined && laps[track] <= time) return false;
+  laps[track] = time;
+  save(s, load(s), laps);
+  return true;
 }
 
 /** Saves a finish; true if it's the new best. Not a real time (NaN, zero, negative) or a place out of the grid: nothing kept. */

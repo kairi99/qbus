@@ -107,3 +107,41 @@ test('two players race online: shared start, each sees the other, results from t
   await a.ctx.close();
   await b.ctx.close();
 });
+
+test('an online room on the Zona Rosa circuit: both reach racing and show the lap counter', async ({ browser }) => {
+  const errors: string[] = [];
+  const open = async (name: string) => {
+    const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+    await page.goto('/');
+    await page.getByRole('button', { name: 'En línea' }).click();
+    await page.locator('input[name="name"]').fill(name);
+    return { ctx, page };
+  };
+  const a = await open('Ana');
+  const b = await open('Beto');
+  await a.page.getByRole('button', { name: 'Crear sala' }).click();
+  const codeEl = a.page.locator('[data-room-code]');
+  await expect(codeEl).toHaveText(/^[A-Z0-9]{4}$/, { timeout: 20_000 });
+  await b.page.locator('input[name="code"]').fill((await codeEl.textContent())!);
+  await b.page.getByRole('button', { name: 'Unirse' }).click();
+  await expect(a.page.locator('.mn-seat[data-seat]')).toHaveCount(2);
+  await a.page.locator('input[name="ai"][value="0"]').check();
+  await a.page.locator('input[name="track"][value="zonarosa"]').check();
+  await b.page.getByRole('button', { name: '¡Listo!' }).click();
+  const start = a.page.getByRole('button', { name: '¡Arrancar!' });
+  await expect(start).toBeEnabled();
+  await start.click();
+  for (const p of [a.page, b.page]) {
+    await p.waitForURL(/mode=online/, { timeout: 30_000 });
+    await expect.poll(() => q(p, '!!q?.online'), { timeout: 150_000 }).toBe(true);
+  }
+  for (const p of [a.page, b.page]) {
+    await expect.poll(() => q(p, 'q.racing.game.green'), { timeout: 60_000 }).toBe(true);
+    await expect(p.locator('.rh-lap')).toContainText('Vuelta 1/3');
+  }
+  expect(errors).toEqual([]);
+  await a.ctx.close();
+  await b.ctx.close();
+});

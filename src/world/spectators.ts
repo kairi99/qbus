@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Vec2 } from './cityData';
+import type { CircuitData, Vec2 } from './cityData';
 import { MeshBuilder, hash2, vertexColorMaterial } from './meshBuilder';
 import { type TrackData, trackPoint } from './track';
 
@@ -46,6 +46,93 @@ export function crowdSpots(t: TrackData, s0: number, s1: number, ground: (p: Vec
         fans.push({ x: p.x + (hash2(p.x, p.z, 7) - 0.5) * 0.3, y: g, z: p.z + (hash2(p.x, p.z, 9) - 0.5) * 0.3, fx, fz, look: hash2(p.x, p.z, 13) });
       });
   return fans;
+}
+
+/** Circuit crowd: dense this far (m) either side of the line, and within the radius of each hot spot (Plaza Foch, the Calama / J. L. Mera / L. Garcia chicane). */
+const DENSE_LINE = 60;
+const HOT_SPOTS = [
+  { x: 272, z: -94, r: 55 },
+  { x: 325, z: -205, r: 75 },
+];
+/** Share of spots filled in a dense stretch and elsewhere (second row: less). */
+const DENSE_FILL = 0.8;
+const SPARSE_FILL = 0.14;
+const MOUTH_FILL = 0.2;
+/** Meters between the rows of a circuit crowd. */
+const ROW_GAP = 0.9;
+
+/**
+ * The circuit's crowd: behind the barrier and its fence, on what is left of the sidewalk or plaza
+ * (`free` says a spot is not in a building, on a street or on another part of the course). `cum`
+ * = lap distance of each point. Also says where the fence stands: points whose fence spot and
+ * first row are free (`fenced`, right side then left, by lap point).
+ */
+export function circuitFans(
+  c: CircuitData,
+  cum: number[],
+  o: { ground: (p: Vec2) => number; free: (p: Vec2) => boolean; fenceAt: number; firstRow: number; /** A spot in a side street behind a mouth fence: not in a building, not on the course. */ mouthFree: (p: Vec2) => boolean },
+): { fans: Fan[]; fenced: [boolean[], boolean[]] } {
+  const n = c.points.length - 1;
+  const L = cum[n];
+  const out = (i: number, side: number) => {
+    const a = c.points[i === 0 || i === n ? n - 1 : i - 1];
+    const b = c.points[i === 0 || i === n ? 1 : i + 1];
+    const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: (-(b.z - a.z) / l) * side, z: ((b.x - a.x) / l) * side };
+  };
+  const spot = (i: number, side: number, u: number): Vec2 => {
+    const d = out(i, side);
+    const k = (side > 0 ? c.right[i] : c.left[i]) + u;
+    return { x: c.points[i].x + d.x * k, z: c.points[i].z + d.z * k };
+  };
+  const fenced: [boolean[], boolean[]] = [[], []];
+  for (const side of [1, -1])
+    for (let i = 0; i <= n; i++) {
+      const row = spot(i, side, o.firstRow);
+      const base = o.ground(spot(i, side, 0));
+      fenced[side > 0 ? 0 : 1].push(o.free(spot(i, side, o.fenceAt)) && o.free(row) && Math.abs(o.ground(row) - base) < 0.6);
+    }
+  const dense = (s: number, p: Vec2) => {
+    const d = Math.abs(((s - c.line) % L + L) % L);
+    return Math.min(d, L - d) <= DENSE_LINE || HOT_SPOTS.some((h) => Math.hypot(p.x - h.x, p.z - h.z) < h.r);
+  };
+  const fans: Fan[] = [];
+  let i = 0;
+  for (let s = 0; s < L; s += SPACING) {
+    while (i < n - 1 && cum[i + 1] <= s) i++;
+    for (const side of [1, -1])
+      for (let r = 0; r < 2; r++) {
+        if (!fenced[side > 0 ? 0 : 1][i]) continue;
+        const p = spot(i, side, o.firstRow + r * ROW_GAP);
+        if (!o.free(p)) continue;
+        const look = hash2(p.x, p.z, 41);
+        const fill = dense(s, p) ? DENSE_FILL : SPARSE_FILL;
+        if (look > fill * (r ? 0.7 : 1)) continue;
+        const d = out(i, side);
+        fans.push({ x: p.x + (hash2(p.x, p.z, 7) - 0.5) * 0.3, y: o.ground(p), z: p.z + (hash2(p.x, p.z, 9) - 0.5) * 0.3, fx: -d.x, fz: -d.z, look: hash2(p.x, p.z, 13) });
+      }
+  }
+  // Side streets: behind each mouth's fence, 0.5 to 6 m back, over the opening's width. Sparse, dense at the line, Plaza Foch and the chicane.
+  for (const m of c.mouths) {
+    for (let along = -m.width / 2 + 0.5; along <= m.width / 2 - 0.5; along += SPACING) {
+      let j = 0;
+      while (j < n - 1 && cum[j + 1] <= m.s + along) j++;
+      for (let r = 0; r < 6; r++) {
+        const d = out(j, m.side);
+        // At least 1.2 m behind the wall's face, measured square to it (a diagonal wall is nearer along the normal).
+        const slope = ((c.right[Math.min(n, j + 1)] - c.right[Math.max(0, j - 1)]) * (m.side > 0 ? 1 : 0) + (c.left[Math.min(n, j + 1)] - c.left[Math.max(0, j - 1)]) * (m.side > 0 ? 0 : 1)) / (cum[Math.min(n, j + 1)] - cum[Math.max(0, j - 1)] || 1);
+        const u = 1.2 * Math.sqrt(1 + slope * slope) + r * ROW_GAP;
+        const k = (m.side > 0 ? c.right[j] : c.left[j]) + u;
+        const p = { x: c.points[j].x + d.x * k, z: c.points[j].z + d.z * k };
+        if (!o.mouthFree(p)) continue;
+        const look = hash2(p.x, p.z, 43);
+        const fill = (dense(m.s + along, p) ? DENSE_FILL : MOUTH_FILL) * (1 - r * 0.1);
+        if (look > fill) continue;
+        fans.push({ x: p.x + (hash2(p.x, p.z, 7) - 0.5) * 0.3, y: o.ground(p), z: p.z + (hash2(p.x, p.z, 9) - 0.5) * 0.3, fx: -d.x, fz: -d.z, look: hash2(p.x, p.z, 13) });
+      }
+    }
+  }
+  return { fans, fenced };
 }
 
 const at = (x: number, y: number, z: number) => new THREE.Matrix4().makeTranslation(x, y, z);

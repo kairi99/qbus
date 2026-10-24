@@ -14,7 +14,7 @@ import { buildBackdrop } from './world/backdrop';
 import { buildCity } from './world/cityBuilder';
 import { groundHeightAt, nearestRoad } from './world/cityData';
 import { buildRoadGraph } from './world/roadGraph';
-import { DEFAULT_ZONE } from './world/loadCity';
+import { CIRCUIT_ZONES, DEFAULT_ZONE } from './world/loadCity';
 import type { CityData } from './world/cityData';
 import { snapToRoad } from './world/roadSnap';
 import { vehicleClearance } from './physics/clearance';
@@ -30,7 +30,7 @@ import { Tutorial } from './ui/tutorial';
 import { Weather, gripFor, parseRainSetting } from './gameplay/weather';
 import { FloodWater, floodBasins, floodedEdges, waterDepth } from './world/floods';
 import { RainView } from './world/rain';
-import { BORE_HALF, BORE_TOP, type TrackData, inTunnel, locateOnTrack, trackPose } from './world/track';
+import { BORE_HALF, BORE_TOP, type TrackData, inTunnel, isCircuit, lapOf, locateOnTrack, onMountain, trackPose } from './world/track';
 import { FALL_BACK, FallWatch } from './gameplay/fallWatch';
 import { OffRoad } from './gameplay/offRoad';
 import { RaceSession } from './gameplay/raceSession';
@@ -97,7 +97,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   performance.mark('qbus:city-loaded');
   // Out in the mountains the air is clear: a long, light haze (the far view's too, so the near
   // terrain and the far one meet without a seam) instead of a city's fog.
-  if (city.race) {
+  if (onMountain(city)) {
     const fog = scene.fog as THREE.Fog;
     fog.near = TRACK_FOG.near;
     fog.far = TRACK_FOG.far;
@@ -109,7 +109,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   performance.mark('qbus:city-built');
   const { min, max } = city.bounds;
   const backdrop = buildBackdrop(city, Math.max(...[min.x, max.x].flatMap((x) => [min.z, max.z].map((z) => Math.hypot(x, z)))), tod);
-  if (city.race) Object.assign(backdrop.fog as THREE.Fog, TRACK_FOG);
+  if (onMountain(city)) Object.assign(backdrop.fog as THREE.Fog, TRACK_FOG);
 
   // Free roam (?mode=free) has no route; a route shift is always driven in a bus. A race
   // (?mode=race on a track: `&rivals=1..3`, `&rivalBus=mixed|same|<vehicle id>`,
@@ -149,7 +149,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const hudRoot = document.querySelector<HTMLElement>('#hud')!;
   const hud = new Hud(hudRoot, city.attribution, !!city.race);
   // Records are kept per zone and route (a generated city other than the default seed is its own zone).
-  const zone = params.get('city') ?? (params.has('seed') ? `grid-${params.get('seed')}` : DEFAULT_ZONE);
+  const zoneId = params.get('city') ?? (params.has('seed') ? `grid-${params.get('seed')}` : DEFAULT_ZONE);
+  // A circuit's zone is only for racing: free roam and shifts there are plain Mariscal.
+  const zone = CIRCUIT_ZONES[zoneId] && !city.race ? CIRCUIT_ZONES[zoneId].of : zoneId;
   const rivals = Math.max(1, Math.min(MAX_RIVALS, Number(params.get('rivals') ?? 1) || 1));
   const skill = (['easy', 'normal', 'hard'] as const).find((k) => k === params.get('skill')) ?? 'normal';
   const ids = VEHICLES.map((v) => v.preset.id);
@@ -157,7 +159,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   const field = net ? net.localAi.map((a) => a.vehicle) : raceMode ? rivalVehicles(parseRivalChoice(params.get('rivalBus'), ids), preset.id, rivals, ids) : [];
   const grid = net ? [...net.localAi.map((a) => a.slot), net.slots[net.me]] : raceMode ? gridSlots(city.race!, [...field.map((id) => busById(id).body.length), preset.body.length]) : null;
   // Traffic on a track only if asked for (free roam on one too).
-  const trackTraffic = city.race && params.get('traffic') === '1' ? TRACK_TRAFFIC : 0;
+  const trackTraffic = onMountain(city) && params.get('traffic') === '1' ? TRACK_TRAFFIC : 0;
   const session = new GameSession({ world, scene, city, bus, props, signals, audio, hudRoot, graph, route, zone, start: grid?.[grid.length - 1], title: net ? 'Carrera en línea' : raceMode ? 'Carrera' : undefined, trackTraffic });
   const racing = raceMode
     ? new RaceSession(world, scene, city.race!, zone, { bus, preset, nitro: session.nitro }, audio, hudRoot, { vehicles: field, slots: grid!, skill, traffic: trackTraffic ? { sim: session.traffic, trackS: session.trackS } : null, ground: (p) => groundHeightAt(city, p), seed: joined?.go.seed, slides: params.get('slides') === '0' ? false : undefined, online: net ? { keys: net.keys, goIn: () => net.goIn(), remotes: net.remotes } : null })
@@ -185,13 +187,19 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     session.showPause(paused);
   };
   const toMenu = () => (location.search = '');
+  /** Meters along the track at the last locate (-1: unknown, search the whole track). */
+  let trackS = -1;
+  /** The lap of the last known `trackS` (a circuit: where the search after a reset looks). */
+  let trackLap = 1;
   const again = () => {
     setPaused(false);
     session.restart();
     racing?.restart();
     fall.reset();
     offRoad.reset();
+    // Back on the grid: lap 1, nothing known yet.
     trackS = -1;
+    trackLap = 1;
     smoke.clear();
   };
   session.onHudAction = (a) => {
@@ -206,6 +214,8 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     const back = net.resumeAt();
     if (back) {
       racing.resume(back.player, back.ai);
+      // A circuit's search goes on from where the bus was put (the laps overlap).
+      if (back.player !== null && city.race && isCircuit(city.race)) (trackS = back.player), (trackLap = lapOf(city.race, back.player));
       if (joined?.rows) racing.applyResults(joined.rows, false);
     }
   }
@@ -213,7 +223,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
 
   // How to play, every time a shift, free roam or a race starts (unless turned off, or ?tutorial=0).
   // A race's grid waits for it to close.
-  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system, racing ? { from: city.race!.from, to: city.race!.to, traffic: trackTraffic > 0, slides: !!racing.slides } : null);
+  const tutorial = new Tutorial(hudRoot, free, session.stars, !!route?.system, racing ? { from: city.race!.from, to: city.race!.to, traffic: trackTraffic > 0, slides: !!racing.slides, circuit: isCircuit(city.race), laps: city.race!.circuit?.laps } : null);
   tutorial.onClose = (dontShow) => dontShow && saveSettings({ ...loadSettings(), tutorial: false });
   // Online the countdown runs on the room's clock: no card to hold it.
   if (settings.tutorial && params.get('tutorial') !== '0' && !net) tutorial.show();
@@ -240,7 +250,9 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
   let rained = false;
   let floodedNews = false;
   // On a mountain track: going over the edge puts the bus back on the road a little behind.
+  // (A street circuit has no edge to go over: it only keeps the bus's place along it.)
   const race = city.race ?? null;
+  const mountain = onMountain(city);
   const fall = new FallWatch();
   const offRoad = new OffRoad();
   // An R reset or the off-road countdown running out: back in lane `off` at `s`, then the wait.
@@ -251,9 +263,10 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     racing?.playerReset();
     fall.reset();
     offRoad.reset();
-    trackS = -1;
+    // (On a circuit the laps overlap: the search goes on from where the bus was put.)
+    trackS = isCircuit(race) ? s : -1;
+    trackLap = lapOf(race, s);
   };
-  let trackS = -1;
   /** How far past the asphalt's edge the bus is (m, negative on it), on a track. */
   let offEdge = -1;
   let river = 0;
@@ -315,7 +328,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         // (so R is no shortcut out of a crash). Not on the grid: it would only lose the slot.
         if (!racing.canReset) continue;
         const p = bus.position(scratchPos);
-        const at = trackS >= 0 ? locateOnTrack(race, p, trackS, 120) : locateOnTrack(race, p);
+        const at = trackS >= 0 ? locateOnTrack(race, p, trackS, 120, trackLap) : locateOnTrack(race, p, -1, 80, trackLap);
         putBackOnTrack(race, Math.max(race.start, trackS >= 0 ? trackS : at.s), at.off < 0 ? -2.1 : 2.1);
       } else if (action === 'reset') {
         const t = bus.position();
@@ -425,12 +438,12 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
       const p = bus.position(scratchPos);
       // Near the last spot (cheap), by position and height; off that stretch of road (a teleport,
       // an R reset onto another leg), the whole track.
-      let here = locateOnTrack(race, p, trackS, 120);
-      if (Math.hypot(here.off, here.y - p.y) > 25) here = locateOnTrack(race, p);
+      let here = locateOnTrack(race, p, trackS, 120, trackLap);
+      if (Math.hypot(here.off, here.y - p.y) > 25) here = locateOnTrack(race, p, -1, 80, trackLap);
       // Down a ravine the nearest bit of road can be a hairpin's other leg: keep the last good spot.
-      if (!fall.falling) trackS = here.s;
-      offEdge = fall.falling ? -1 : Math.abs(here.off) - race.width / 2;
-      const ev = fall.update(dt, { roadY: here.y, busY: p.y, off: here.off, halfWidth: race.width / 2, wheelsOnGround: bus.wheelsOnGround });
+      if (!fall.falling) (trackS = here.s), (trackLap = lapOf(race, here.s));
+      if (mountain) offEdge = fall.falling ? -1 : Math.abs(here.off) - race.width / 2;
+      const ev = !mountain ? null : fall.update(dt, { roadY: here.y, busY: p.y, off: here.off, halfWidth: race.width / 2, wheelsOnGround: bus.wheelsOnGround });
       if (ev === 'fell') session.notice('¡Al barranco!');
       if (ev === 'respawn') {
         const s = trackPose(race, Math.max(race.start - 12, trackS - FALL_BACK));
@@ -440,7 +453,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
         offRoad.reset();
       }
       // Wandering on the mountain: a countdown, then back on the road where it left.
-      if (racing) {
+      if (racing && mountain) {
         const lost = offRoad.update(dt, { edge: offEdge, s: here.s, off: here.off, wheels: bus.wheelsOnGround, active: racing.canReset && !racing.playerHeld && !fall.falling });
         racing.offRoad = offRoad.countdown;
         if (lost) {
@@ -509,7 +522,7 @@ export async function main(params: URLSearchParams, cityReady: Promise<CityData>
     );
     radio.update(audio.context, paused);
     // Inside a tunnel's bore (the camera's, which follows the bus): dark fog and light, the engine echoing.
-    if (race?.tunnels && trackS >= 0) {
+    if (!isCircuit(race) && race?.tunnels && trackS >= 0) {
       const c = locateOnTrack(race, { x: camera.position.x, z: camera.position.z, y: camera.position.y }, trackS, 80);
       const inside = inTunnel(race, c.s) && Math.abs(c.off) < BORE_HALF && camera.position.y - c.y < BORE_TOP + 0.5;
       tunnelK += ((inside ? 1 : 0) - tunnelK) * Math.min(1, dt * 6);

@@ -23,6 +23,8 @@ import { LIGHTING, timeOfDayOf } from './sky';
 import { SignalLamps } from './signalBuilder';
 import { TrafficLights } from '../gameplay/trafficLights';
 import { buildTrack } from './trackBuilder';
+import { isCircuit, onMountain } from './track';
+import { KEEP_PAD, courseInside, dressCircuit, wallRuns } from './circuitBuilder';
 
 // Draw order on the ground is enforced with polygon offsets, not height gaps, so layers stay
 // put at any distance: terrain < sidewalk < asphalt < paint.
@@ -60,9 +62,14 @@ export interface BuiltCity {
  * lit for the scene's time of day (`setupSky`; day if none): windows lit from inside, lamps.
  */
 export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scene, graph = buildRoadGraph(city)): BuiltCity {
-  if (city.race) return buildTrack(city, world, scene, graph);
+  if (onMountain(city)) return buildTrack(city, world, scene, graph);
   const light = LIGHTING[timeOfDayOf(scene)];
   const h = (p: Vec2) => terrainAt(city, p);
+  // A circuit race clears its course of everything static (buildings stay): `out` says where.
+  const circuit = isCircuit(city.race) ? city.race!.circuit!.data : null;
+  const out = circuit ? courseInside(circuit, KEEP_PAD) : undefined;
+  const clear = (p: Vec2) => !out?.(p);
+  const clearAlong = (pos: Vec2, heading: number, length: number) => [-0.5, -0.25, 0, 0.25, 0.5].every((k) => clear({ x: pos.x + Math.cos(heading) * length * k, z: pos.z - Math.sin(heading) * length * k }));
   // Draped layers take the highest ground within half a drape step, so a flat quad spanning a
   // crease in the terrain rides over it instead of cutting under the ridge.
   const r = DRAPE / 2;
@@ -175,16 +182,17 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
   }
 
   for (const f of city.features) {
+    if (!clear(f.pos)) continue;
     const pts = featurePoints(f, h);
     solid.at(f.pos.x, f.pos.z).add(new ConvexGeometry(pts), IDENTITY, f.kind === 'ramp' ? '#e39a2d' : MARK_YELLOW, f.kind === 'ramp' ? '#b8741c' : '#3a3a3a');
     collide(RAPIER.ColliderDesc.convexHull(new Float32Array(pts.flatMap((p) => [p.x, p.y, p.z]))));
   }
   // Rapid-transit stops are served at their stations instead of a shelter.
-  for (const s of city.stops) if (!s.system) addShelter(solid.at(s.pos.x, s.pos.z), s, groundHeightAt(city, s.pos), world, fixed);
-  for (const s of city.stations ?? []) addStation(solid.at(s.pos.x, s.pos.z), s, h, world, fixed);
-  for (const e of city.metro ?? []) addMetroEntrance(solid.at(e.pos.x, e.pos.z), e, h, world, fixed);
-  addWalls(solid, city.walls ?? [], h, world, fixed);
-  for (const m of city.monuments ?? []) addMonument(solid.at(m.pos.x, m.pos.z), m, h, world, fixed);
+  for (const s of city.stops) if (!s.system && clear(s.pos)) addShelter(solid.at(s.pos.x, s.pos.z), s, groundHeightAt(city, s.pos), world, fixed);
+  for (const s of city.stations ?? []) if (clearAlong(s.pos, s.heading, s.length)) addStation(solid.at(s.pos.x, s.pos.z), s, h, world, fixed);
+  for (const e of city.metro ?? []) if (clear(e.pos)) addMetroEntrance(solid.at(e.pos.x, e.pos.z), e, h, world, fixed);
+  addWalls(solid, out ? (city.walls ?? []).flatMap((w) => wallRuns(w.points, out).map((points) => ({ points }))) : (city.walls ?? []), h, world, fixed);
+  for (const m of city.monuments ?? []) if (clear(m.pos)) addMonument(solid.at(m.pos.x, m.pos.z), m, h, world, fixed);
   for (const m of buildGrades(city, graph, trenches, solid, groundColor, world, fixed)) {
     m.material = layer(6);
     m.receiveShadow = true;
@@ -229,6 +237,8 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     city,
     graph,
     lights: new TrafficLights(graph, city.signals ?? []),
+    keepOut: out,
+    flash: !!circuit,
     roads: roadIndex,
     buildings: buildingIndex,
     ground: hUp,
@@ -249,10 +259,14 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     ground: hUp,
     bulbs: light.lamps ? glow : detail,
     keepClear: signals.poles,
+    keepOut: out,
     light,
     world,
     fixed,
   });
+
+  if (circuit)
+    dressCircuit({ city, race: city.race!, ground: (p) => hUp(p) + Y.sidewalk, roads: roadIndex, buildings: buildingIndex, onCourse: courseInside(circuit), solid, paint, scene, world, fixed });
 
   const ground = [...sidewalks.build(layer(3)), ...asphalt.build(layer(0)), ...paint.build(layer(-3))];
   for (const m of ground) m.receiveShadow = true;
@@ -272,11 +286,11 @@ export function buildCity(city: CityData, world: RAPIER.World, scene: THREE.Scen
     ...streets.map((m) => withinRange(m, light.fogFar * 0.75)),
     ...lights(glow, signs, atlas).map((m) => withinRange(m, light.fogFar)),
   ];
-  scene.add(...ground, ...solidMeshes, ...far, ...signals.meshes, ...transitSigns(city.stations ?? [], city.metro ?? [], h), ...worksSigns(works.signs));
+  scene.add(...ground, ...solidMeshes, ...far, ...signals.meshes, ...transitSigns((city.stations ?? []).filter((st) => clearAlong(st.pos, st.heading, st.length)), (city.metro ?? []).filter((e) => clear(e.pos)), h), ...worksSigns(works.signs));
 
   markStatic(world);
   // The roadworks' cones can be knocked over like any other.
-  return { props: new PropSystem(world, scene, { ...city, props: [...city.props, ...works.cones] }), signals };
+  return { props: new PropSystem(world, scene, { ...city, props: [...city.props.filter((p) => clear(p.pos)), ...works.cones.filter((p) => clear(p.pos))] }), signals };
 }
 
 /** Depth bias for things laid on a wall (facade detail, lit windows, signs). */

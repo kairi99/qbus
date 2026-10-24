@@ -165,3 +165,13 @@ test('a race with five rivals: six on the grid, the countdown runs, nobody start
   await page.screenshot({ path: `${shots}/b10-six-on-the-grid.png` });
   expect(errors).toEqual([]);
 });
+
+test('a race on the Zona Rosa circuit: the lap counter starts at Vuelta 1/3', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?play=1&mode=race&city=zonarosa&tutorial=0&rain=0&rivals=1');
+  await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 90_000 });
+  await expect(page.locator('.rh-lap')).toContainText('Vuelta 1/3', { timeout: 60_000 });
+  await expect(page.locator('.rh-place')).toContainText('/ 2');
+  expect(errors).toEqual([]);
+});

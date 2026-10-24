@@ -53,6 +53,10 @@ export interface RaceInfo {
   traffic: boolean;
   /** The track has landslides. */
   slides?: boolean;
+  /** A street circuit: laps, barriers, no ravines or mountain. */
+  circuit?: boolean;
+  /** Circuit: laps to run. */
+  laps?: number;
 }
 
 const keyList = (rows: [string, string][], cls: string) =>
@@ -71,11 +75,11 @@ function pages(free: boolean, targets: StarThresholds | null, brt: boolean, race
     return [
       `<h2>¡A la carrera!</h2>
       <ul>
-        <li>Llega primero de <b>${race.from}</b> a <b>${race.to}</b>: arrancas al fondo de la parrilla.</li>
+        <li>${race.circuit ? `Da ${race.laps ?? 3} vueltas al <b>${race.from}</b> y llega primero` : `Llega primero de <b>${race.from}</b> a <b>${race.to}</b>`}: arrancas al fondo de la parrilla.</li>
         <li><b>La salida:</b> en la cuenta 3-2-1 acelera y mantén la aguja en lo <b class="rh-green">verde</b>. ¡Salida perfecta! = un empujón y ${tank(perfect.nitro)} de nitro. Muy poco y el motor <b>se ahoga</b>; a fondo, las llantas <b>patinan</b>.</li>
         <li><b>Nitro en la vía:</b> los tanques azules llenan ${tank(PICKUP_FILL)} (vuelven a los ${PICKUP_RESPAWN} s). También se recarga derrapando, pasando con las justas y pegado a la cola de otro bus (<b>rebufo</b>).</li>
-        <li><b>Barrancos:</b> hay tramos sin baranda. Si te vas abajo vuelves a la vía un poco más atrás.</li>
-        <li><b>Fuera de la vía:</b> si andas por el cerro más de un par de segundos, cuenta regresiva y vuelves a la vía donde te saliste.</li>
+        ${race.circuit ? '<li><b>El circuito:</b> calles cerradas de La Mariscal, con barreras a los lados: no hay barrancos. Arriba ves la vuelta, la última y tu mejor; con una <b>vuelta rápida</b> te felicitamos.</li>' : `<li><b>Barrancos:</b> hay tramos sin baranda. Si te vas abajo vuelves a la vía un poco más atrás.</li>
+        <li><b>Fuera de la vía:</b> si andas por el cerro más de un par de segundos, cuenta regresiva y vuelves a la vía donde te saliste.</li>`}
         <li>Con <b>R</b> vuelves a la vía donde estabas, pero esperas ${RESET_WAIT} s antes de seguir.</li>
         <li>Al terminar, <b>◀ ▶</b> para ver a los demás.</li>
         ${race.slides ? '<li><b>Derrumbes:</b> suena un retumbo y bajan piedras por el cerro. Un carril siempre queda libre: lo tapado es lodo y rocas, y en el lodo el bus pesa y patina; las llantas se quedan embarradas un buen rato.</li>' : ''}

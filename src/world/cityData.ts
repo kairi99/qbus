@@ -191,6 +191,26 @@ export interface CityData {
   signals?: TrafficSignal[];
   /** A race track (a mountain highway, `world/track.ts`) instead of a city: one road, no streets. */
   race?: import('./track').TrackData;
+  /** Closed street circuits (race mode only; route shifts and free roam ignore them). */
+  circuits?: CircuitData[];
+}
+
+/** A closed street circuit raced for `laps` laps (built from `tools/zones.ts` `circuits` by `osm/circuit.ts`). */
+export interface CircuitData {
+  id: string;
+  name: string;
+  laps: number;
+  /** One lap, closed (last point = first), corners filleted, every ~2 m. */
+  points: Vec2[];
+  /** Barrier offsets from the centreline at each point (m, both positive): carriageway edge + sidewalk, clipped 0.3 m short of any building. Left/right as seen driving along `points` (+Z is right when facing +X). */
+  left: number[];
+  right: number[];
+  /** Carriageway half widths at each point (the AI's preferred line stays inside on straights). */
+  halfRoad: number[];
+  /** Where other roads meet the course: distance along the lap, side (1 = right, -1 = left), opening width wall to wall (side-street walls go here). */
+  mouths: { s: number; side: 1 | -1; width: number }[];
+  /** Start/finish line: distance along the lap. */
+  line: number;
 }
 
 export const SIDEWALK_HEIGHT = 0.15;

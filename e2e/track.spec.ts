@@ -67,3 +67,83 @@ for (const track of ['papallacta', 'silante', 'rioverde']) test(`the ${track} tr
   await page.screenshot({ path: `${shots}/a3-${track}-respawned.png` });
   expect(errors).toEqual([]);
 });
+
+test('the Zona Rosa circuit: a race on Amazonas with the city around it, no mountain systems', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  await page.goto('/?play=1&mode=race&city=zonarosa&tutorial=0&rain=0&rivals=1&traffic=1');
+  await page.waitForFunction(() => (window as any).__qbus?.racing, null, { timeout: 90_000 });
+  const info = await page.evaluate(() => {
+    const q = (window as any).__qbus;
+    const r = q.city.race;
+    const p = q.bus.position();
+    const c = r.circuit;
+    // Where the bus is on the lap, and which street (the nearest road's name).
+    return { laps: c.laps, lap: c.lap, start: r.start, finish: r.finish, p: { x: p.x, z: p.z }, line: r.points[r.cum.findIndex((v: number) => v >= r.start)], cars: q.session.traffic.cars?.length ?? 0, scale: q.city.terrain.scale, fog: q.scene.fog.far };
+  });
+  expect(info.laps).toBe(3);
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.bus.wheelsOnGround), { timeout: 30_000 }).toBe(4);
+  expect(info.cars).toBe(0);
+  expect(info.scale).toBe(1);
+  expect(info.fog).toBeLessThan(10_000);
+  // On the grid, a few tens of meters behind the line.
+  expect(Math.hypot(info.p.x - info.line.x, info.p.z - info.line.z)).toBeLessThan(60);
+  await expect(page.locator('.rh-lap')).toContainText('Vuelta 1/3');
+  await page.screenshot({ path: `${shots}/a4-zonarosa-grid.png` });
+  // The dressing from the driver's side: the line's gantry, the chicane and Plaza Foch (the bus put on the lap there, facing along it).
+  const at = (x: number, z: number, back: number) =>
+    page.evaluate(
+      ([x, z, back]) => {
+        const q = (window as any).__qbus;
+        const pts: { x: number; z: number }[] = q.city.race.circuit.data.points;
+        let k = 0;
+        pts.forEach((p, i) => {
+          if (Math.hypot(p.x - x, p.z - z) < Math.hypot(pts[k].x - x, pts[k].z - z)) k = i;
+        });
+        const i = (k - Math.round(back / 2) + pts.length - 1) % (pts.length - 1);
+        const [a, b] = [pts[i], pts[i + 1]];
+        const l = Math.hypot(b.x - a.x, b.z - a.z);
+        q.bus.reset({ x: a.x, y: q.groundAt(a) + 0.5, z: a.z, heading: Math.atan2(-(b.z - a.z) / l, (b.x - a.x) / l) });
+      },
+      [x, z, back],
+    );
+  // The mouth nearest the chicane, for the side-street crowd.
+  const mouth: { x: number; z: number } = await page.evaluate(() => {
+    const c = (window as any).__qbus.city.race.circuit.data;
+    let acc = 0;
+    const cum = c.points.map((p: any, i: number) => (acc += i ? Math.hypot(p.x - c.points[i - 1].x, p.z - c.points[i - 1].z) : 0));
+    let best = { x: 0, z: 0, d: Infinity };
+    for (const m of c.mouths) { const i = cum.findIndex((v: number) => v >= m.s); const p = c.points[i]; const d = Math.hypot(p.x - 325, p.z - -205); if (d < best.d) best = { x: p.x, z: p.z, d }; }
+    return best;
+  });
+  const line = info.line;
+  for (const [name, x, z, back] of [['z1-line', line.x, line.z, 30], ['z2-chicane', mouth.x, mouth.z, 12], ['z3-foch', 272, -94, 25]] as const) {
+    await at(x, z, back);
+    await page.waitForTimeout(2500);
+    await page.screenshot({ path: `${shots}/${name}.png` });
+    const perf = await page.evaluate(() => (window as any).__qbus.perf);
+    test.info().annotations.push({ type: `draw calls at ${name}`, description: `${perf.calls} calls, ${perf.triangles} triangles` });
+  }
+  // A lap: after GO the bus is put back along the lap in steps (the laps overlap, so the session finds the bus from where it was last
+  // known: a jump to the line's own spot would read as the lead-in), the last one 40 m short of the line that closes lap 1.
+  await expect.poll(() => page.evaluate(() => (window as any).__qbus.racing.game.green), { timeout: 120_000 }).toBe(true);
+  await page.keyboard.down('KeyW');
+  for (const short of [700, 500, 300, 150, 40]) {
+    const want = await page.evaluate((short) => {
+      const q = (window as any).__qbus;
+      const r = q.city.race;
+      const i = r.cum.findIndex((v: number) => v >= r.start + r.circuit.lap - short);
+      const [a, b] = [r.points[i - 1], r.points[i]];
+      const l = Math.hypot(b.x - a.x, b.z - a.z);
+      q.bus.reset({ x: a.x, y: q.groundAt(a) + 0.5, z: a.z, heading: Math.atan2(-(b.z - a.z) / l, (b.x - a.x) / l) });
+      return r.circuit.lap - short;
+    }, short);
+    // Progress (m past the line) follows the bus to where it was put.
+    await expect.poll(() => page.evaluate((w) => Math.abs((window as any).__qbus.racing.game.racers[0].s - w), want), { timeout: 60_000 }).toBeLessThan(60);
+  }
+  await expect(page.locator('.rh-lap')).toContainText('Vuelta 2/3', { timeout: 120_000 });
+  await page.keyboard.up('KeyW');
+  await page.screenshot({ path: `${shots}/z4-lap2.png` });
+  expect(errors).toEqual([]);
+});

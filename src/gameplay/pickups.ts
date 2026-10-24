@@ -15,7 +15,8 @@ export class Pickups {
   /** Seconds until each is back (0: on the road). */
   readonly gone: Float32Array;
 
-  constructor(readonly spots: readonly { s: number; off: number }[]) {
+  /** `lap`: on a street circuit, its lap length (m): every spot is on each lap, so positions compare modulo it. */
+  constructor(readonly spots: readonly { s: number; off: number }[], private readonly lap = 0) {
     this.gone = new Float32Array(spots.length);
   }
 
@@ -33,9 +34,12 @@ export class Pickups {
     const hi = Math.max(s0, s1);
     // Only a short step's worth: a racer put back on the road (a fall, a reset) hasn't driven there.
     if (hi - lo > length + 30) return out;
+    const mid = (lo + hi) / 2;
     for (let i = 0; i < this.spots.length; i++) {
       const p = this.spots[i];
-      if (this.gone[i] > 0 || p.s < lo || p.s > hi || Math.abs(p.off - off) > width / 2 + REACH) continue;
+      // The copy of this spot on the racer's lap.
+      const at = this.lap > 0 ? p.s + Math.round((mid - p.s) / this.lap) * this.lap : p.s;
+      if (this.gone[i] > 0 || at < lo || at > hi || Math.abs(p.off - off) > width / 2 + REACH) continue;
       this.gone[i] = PICKUP_RESPAWN;
       out.push(i);
     }

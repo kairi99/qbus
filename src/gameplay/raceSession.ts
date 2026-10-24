@@ -4,7 +4,7 @@ import { BusPhysics } from '../vehicle/bus';
 import { BusModel } from '../vehicle/busModel';
 import { type BusPreset, isTrain } from '../vehicle/busPreset';
 import { busById } from '../vehicle/buses';
-import { type TrackData, locateOnTrack, trackPoint, trackPose } from '../world/track';
+import { type TrackData, isCircuit, lapOf, locateOnTrack, trackPoint, trackPose } from '../world/track';
 import type { RoadPose } from '../world/roadSnap';
 import type { BusAudio, RivalVoice } from '../core/audio';
 import type { DriveInput } from '../core/input';
@@ -14,15 +14,16 @@ import { BumpTracker, type V3 } from '../physics/bump';
 import { Nitro } from './nitro';
 import { draftOf, Slipstream } from './slipstream';
 import { TireMud } from './tireMud';
-import { KEEP_RIGHT, RaceDriver, type RoadUser, SKILLS, type TrafficCar, chooseLane, vehicleLimits } from './raceDriver';
+import { type CourseRoom, KEEP_RIGHT, RaceDriver, type RoadUser, SKILLS, type TrafficCar, chooseLane, courseRoom, vehicleLimits } from './raceDriver';
 import { FALL_BACK, FallWatch } from './fallWatch';
 import { GHOST_TIME, Ghost } from './ghost';
+import { LapTracker } from './lapTracker';
 import { LAUNCH_EFFECT, type LaunchGrade, LaunchRev, aiGrade } from './launch';
-import { PlaceCaller, RaceGame } from './raceGame';
+import { PlaceCaller, RaceGame, raceClock } from './raceGame';
 import { SpectatorCycle, type Watchable } from './spectator';
 import type { CameraTarget } from '../camera/cameraRig';
-import { bestOnline, recordOnline, settleOnlinePlace } from './onlineRecords';
-import { bestRace, recordRace } from './raceRecords';
+import { bestOnline, bestOnlineLap, recordOnline, recordOnlineLap, settleOnlinePlace } from './onlineRecords';
+import { bestLapRecord, bestRace, recordLap, recordRace } from './raceRecords';
 import { CREWS, MAX_RIVALS, RESET_WAIT } from './raceField';
 import { PICKUP_FILL, Pickups } from './pickups';
 import { PickupView } from './pickupView';
@@ -60,6 +61,11 @@ const RELOCATE_GAP = 2;
 const RELOCATE_LANE = 3.2;
 /** A rival this close (s) to the player's time at the line makes it a photo finish. */
 const PHOTO_GAP = 1;
+/** Seconds the "¡Vuelta rápida!" banner stays. */
+const FAST_LAP_SHOW = 3;
+
+/** A circuit's lap rules for `RaceGame` (undefined: a point-to-point track). */
+const lapsOf = (t: TrackData) => (t.circuit ? { count: t.circuit.laps, lap: t.circuit.lap } : undefined);
 /** A racer who crossed the line stays watchable this long (s): its own finish is seen before the camera moves on. */
 const WATCH_HOLD = 2.5;
 /** The live results beside the spectator view refresh this often (s). */
@@ -84,6 +90,8 @@ interface Rival {
   /** Time left held still after being put back on the road (s). */
   wait: number;
   lastS: number;
+  /** The lap it was last on: where a circuit's search without `lastS` (after a reset) looks. */
+  lap: number;
   /** Its throttle last step (for the engine's sound). */
   throttle: number;
   /** How deep in mud it is (0..1). */
@@ -109,6 +117,8 @@ export interface RemoteEntry {
 interface Remote extends RemoteEntry {
   model: BusModel;
   lastS: number;
+  /** The lap it was last on: where a circuit's search without `lastS` (after a reset) looks. */
+  lap: number;
   life: Life;
   /** Its horn's sound state (a tap lasts at least `HORN_MIN`). */
   hornHold: HornHold;
@@ -162,6 +172,8 @@ export class RaceSession {
   /** Each racer on the road (front axle's meters along, offset + right, speed), the player first. */
   private users: RoadUser[];
   private near: RoadUser[] = [];
+  /** A circuit's room either side of the centerline at the racer being steered (reused). */
+  private room: CourseRoom = { left: 0, right: 0, lap: 1e9 };
   /** Slipstream pull: each local racer's target (0..1, from `users` each frame) and its eased pull (player first, then the rivals). */
   private draftTarget: number[] = [];
   private slips: Slipstream[] = [];
@@ -171,6 +183,17 @@ export class RaceSession {
   private view: PickupView;
   private nose = { x: 0, y: 0, z: 0 };
   private playerS = -1;
+  /** The player's lap when `playerS` was last known (a circuit's search after a reset starts there). */
+  private playerLap = 1;
+  /** This race beat the best lap on record. */
+  private newLap = false;
+  /** Seconds left of the "¡Vuelta rápida!" banner. */
+  private fastIn = 0;
+  /** The player's laps already looked at and the fastest of this race. */
+  private laps = new LapTracker();
+  private fastLaps: number[] = [];
+  /** Scratch for the HUD's lap numbers. */
+  private readonly lapInfo = { n: 1, count: 1, length: 1, last: null as number | null, best: null as number | null };
   private noseS: number[];
   private taken: number[] = [];
   private hold = { throttle: 0, steer: 0, handbrake: false, boost: false, parked: true };
@@ -273,13 +296,13 @@ export class RaceSession {
       scene.add(model.root);
       // The middle of the road, a little to either side; with traffic about, the right half.
       const home = busy ? KEEP_RIGHT - (i % 2) * 0.3 : (i % 2 ? 1 : -1) * 0.6;
-      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], vehicleLimits(preset), home), nitro: new Nitro(), fall: new FallWatch(), ghost: new Ghost(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, throttle: 0, mud: 0, tires: new TireMud(), slideBrake: vehicleLimits(preset).brake * SKILLS[this.skill].brake * SLIDE_BRAKE });
+      this.rivals.push({ preset, base, bus, model, driver: new RaceDriver(track, SKILLS[this.skill], vehicleLimits(preset), home), nitro: new Nitro(), fall: new FallWatch(), ghost: new Ghost(), slot, home, grade: null, effect: 0, wait: 0, lastS: -1, lap: 1, throttle: 0, mud: 0, tires: new TireMud(), slideBrake: vehicleLimits(preset).brake * SKILLS[this.skill].brake * SLIDE_BRAKE });
     }
     this.online = opts.online ?? null;
     for (const e of this.online?.remotes ?? []) {
       const model = new BusModel(e.preset);
       scene.add(model.root);
-      this.remotes.push({ ...e, model, lastS: -1, life: 'live', hornHold: new HornHold() });
+      this.remotes.push({ ...e, model, lastS: -1, lap: 1, life: 'live', hornHold: new HornHold() });
     }
     // Collisions: the player and the local AI take their share of every hit; a remote bus's is sent to its owner.
     const keys = this.online?.keys;
@@ -290,7 +313,7 @@ export class RaceSession {
     if (this.online) this.bump.send = (to, from, j, at) => this.bumpsOut.push({ from, to, j: { x: j.x, y: 0, z: j.z }, at: { x: at.x, y: at.y, z: at.z } });
     const others = [...this.rivals.map((r) => r.preset), ...this.remotes.map((r) => r.preset)];
     const total = 1 + others.length;
-    this.game = new RaceGame(['Tú', ...this.rivals.map((r) => r.preset.name), ...this.remotes.map((r) => r.name)], track.finish - track.start, { estimate: !this.online });
+    this.game = new RaceGame(['Tú', ...this.rivals.map((r) => r.preset.name), ...this.remotes.map((r) => r.name)], track.finish - track.start, { estimate: !this.online, laps: lapsOf(track) });
     this.progress = new Array(total).fill(0);
     this.doneFor = new Array(total).fill(0);
     this.watchList = Array.from({ length: total - 1 }, (_, i) => ({ racer: i + 1, place: 0, racing: false }));
@@ -302,7 +325,7 @@ export class RaceSession {
     const colors = [...this.rivals.map(() => AI_COLOR), ...this.remotes.map((r) => r.color)];
     this.positions = others.map((_, i) => (this.online ? { x: 0, z: 0, color: colors[i] } : { x: 0, z: 0 }));
     this.voices = others.map((p) => ({ x: 0, y: 0, z: 0, speedFrac: 0, load: 0, car: p.kind === 'car' || isTrain(p) }));
-    this.pickups = new Pickups(track.pickups);
+    this.pickups = new Pickups(track.pickups, track.circuit?.lap ?? 0);
     this.view = new PickupView(scene, track, this.pickups);
     this.hud = new RaceHud(hudRoot, track.from, track.to, total);
     if (this.online) {
@@ -350,7 +373,8 @@ export class RaceSession {
   playerReset(): void {
     this.wait = RESET_WAIT;
     this.tires.reset();
-    this.playerS = -1;
+    // On a circuit the laps overlap: the bus was put back where it was, which stays the hint.
+    if (!isCircuit(this.track)) this.playerS = -1;
     this.noseS[0] = -1;
     this.becomeGhost(this.ghost, this.player.bus, RESET_WAIT + GHOST_TIME);
   }
@@ -367,15 +391,16 @@ export class RaceSession {
       const at = trackPose(t, Math.max(t.start - 12, player - this.player.preset.body.length / 2));
       this.player.bus.reset({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading, pitch: at.pitch });
       this.playerReset();
+      if (isCircuit(t)) (this.playerS = player), (this.playerLap = lapOf(t, player)), this.game.skipTo(0, player - t.start);
     }
     this.rivals.forEach((r, i) => {
       const s = ai[i];
       if (s === null || s === undefined) return;
       const at = trackPose(t, Math.max(t.start - 12, s - r.preset.body.length / 2), r.driver.lane);
       r.bus.reset({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading, pitch: at.pitch });
-      r.driver.rescued();
       r.tires.reset();
-      r.lastS = -1;
+      if (isCircuit(t)) (r.lastS = s), (r.lap = lapOf(t, s)), r.driver.rescued(s), this.game.skipTo(i + 1, s - t.start);
+      else (r.driver.rescued(), (r.lastS = -1));
       r.wait = RESET_WAIT;
       this.noseS[i + 1] = -1;
       this.becomeGhost(r.ghost, r.bus, RESET_WAIT + GHOST_TIME);
@@ -435,7 +460,7 @@ export class RaceSession {
     const t = this.track;
     const me = this.users[k];
     const p = bus.position(this.nose);
-    const at = locateOnTrack(t, p, k ? this.rivals[k - 1].lastS : this.playerS, 120);
+    const at = locateOnTrack(t, p, k ? this.rivals[k - 1].lastS : this.playerS, 120, k ? this.rivals[k - 1].lap : this.playerLap);
     const lane = at.off < 0 ? -2.1 : 2.1;
     let pick: { s: number; lane: number } | null = null;
     search: for (let d = 0; d <= RELOCATE_REACH; d += RELOCATE_STEP) {
@@ -456,17 +481,21 @@ export class RaceSession {
     bus.reset({ x: to.pos.x, y: to.y, z: to.pos.z, heading: to.heading, pitch: to.pitch });
     if (k) {
       const r = this.rivals[k - 1];
-      r.driver.rescued();
-      r.lastS = -1;
-    } else this.playerS = -1;
+      r.driver.rescued(isCircuit(t) ? pick.s : -1);
+      r.lastS = isCircuit(t) ? pick.s : -1;
+    } else this.playerS = isCircuit(t) ? pick.s : -1;
     this.noseS[k] = -1;
   }
 
   /** Nobody else (racer or traffic car) overlaps a vehicle of length `len` with its front axle at `s` in lane `off`. */
   private spotFree(k: number, s: number, off: number, len: number): boolean {
+    const lap = this.track.circuit?.lap ?? 0;
     for (let j = 0; j < this.users.length; j++) {
       const u = this.users[j];
-      if (j !== k && Math.abs(u.s - s) < (u.len + len) / 2 + RELOCATE_GAP && Math.abs(u.off - off) < RELOCATE_LANE) return false;
+      let ds = u.s - s;
+      // On a circuit a racer a lap apart is in the same place.
+      if (lap > 0) ds -= Math.round(ds / lap) * lap;
+      if (j !== k && Math.abs(ds) < (u.len + len) / 2 + RELOCATE_GAP && Math.abs(u.off - off) < RELOCATE_LANE) return false;
     }
     for (const c of this.cars) if (Math.abs(c.s - s) < (c.len + len) / 2 + RELOCATE_GAP && Math.abs(c.off - off) < RELOCATE_LANE) return false;
     return true;
@@ -482,13 +511,23 @@ export class RaceSession {
     return (this.grade && this.effect > 0 ? LAUNCH_EFFECT[this.grade].grip : 1) * mudGrip(Math.max(this.playerMud, this.tires.effective), this.wet);
   }
 
+  /** Racer `j` (index in `users`) is over the line or a ghost: other racers drive through it. */
+  private passable(j: number): boolean {
+    if (this.game.racers[j].time !== null) return true;
+    const base = 1 + this.rivals.length;
+    return j === 0 ? this.player.bus.ghost : j < base ? this.rivals[j - 1].bus.ghost : this.remotes[j - base].remote.ghost;
+  }
+
   /** Racer `k`'s lane and speed limit (`chooseLane`), against the other racers and the traffic. */
   private laneFor(k: number, home: number, brake: number): { lane: number; limit: number } {
     const me = this.users[k];
     this.near.length = 0;
-    for (let j = 0; j < this.users.length; j++) if (j !== k) this.near.push(this.users[j]);
+    const circuit = isCircuit(this.track);
+    // On a circuit the parked finishers and the ghosts are not in the way (a lapped car would swing out round them at the line).
+    for (let j = 0; j < this.users.length; j++) if (j !== k && !(circuit && this.passable(j))) this.near.push(this.users[j]);
     const slide = this.slides ? slideAdvice(this.slides.sites, this.game.time, me.s, me.len, brake, this.advice) : null;
-    return chooseLane(me, this.near, this.cars, home, SKILLS[this.skill].passClear, slide, this.track.tunnels ?? null);
+    const room = this.track.edges ? courseRoom(this.track, me.s, this.room) : null;
+    return chooseLane(me, this.near, this.cars, home, SKILLS[this.skill].passClear, slide, this.track.tunnels ?? null, room);
   }
 
   /** Each physics step, before the world steps: the rivals drive. */
@@ -609,17 +648,18 @@ export class RaceSession {
     this.slideFrame(dt);
     // Progress: each front axle's distance past the start line.
     const pn = this.player.bus.nose(this.nose);
-    const here = locateOnTrack(t, pn, this.playerS, 120);
-    this.playerS = Math.hypot(here.off, here.y - pn.y) > 25 ? locateOnTrack(t, pn).s : here.s;
+    const here = locateOnTrack(t, pn, this.playerS, 120, this.playerLap);
+    this.playerS = Math.hypot(here.off, here.y - pn.y) > 25 ? locateOnTrack(t, pn, -1, 80, this.playerLap).s : here.s;
+    this.playerLap = lapOf(t, this.playerS);
     this.progress[0] = this.playerS - t.start;
     this.users[0].s = this.playerS;
     this.users[0].off = here.off;
     this.users[0].v = this.player.bus.speed;
     this.rivals.forEach((r, i) => {
       const p = r.bus.position(this.nose);
-      const at = locateOnTrack(t, p, r.lastS, 120);
-      const s = Math.hypot(at.off, at.y - p.y) > 25 ? locateOnTrack(t, p) : at;
-      if (!r.fall.falling) r.lastS = s.s;
+      const at = locateOnTrack(t, p, r.lastS, 120, r.lap);
+      const s = Math.hypot(at.off, at.y - p.y) > 25 ? locateOnTrack(t, p, -1, 80, r.lap) : at;
+      if (!r.fall.falling) (r.lastS = s.s), (r.lap = lapOf(t, s.s));
       this.progress[i + 1] = Math.max(r.driver.s, 0) - t.start;
       this.users[i + 1].s = Math.max(r.driver.s, 0);
       this.users[i + 1].off = s.off;
@@ -632,7 +672,8 @@ export class RaceSession {
       v.z = p.z;
       v.speedFrac = Math.abs(r.bus.speed) / (r.preset.topSpeedKmh / 3.6);
       v.load = engineLoad(r.throttle, r.bus.speed, r.bus.boosting);
-      const ev = r.fall.update(dt, { roadY: s.y, busY: p.y, off: s.off, halfWidth: t.width / 2, wheelsOnGround: r.bus.wheelsOnGround });
+      // Nothing to fall off in a street circuit.
+      const ev = isCircuit(t) ? null : r.fall.update(dt, { roadY: s.y, busY: p.y, off: s.off, halfWidth: t.width / 2, wheelsOnGround: r.bus.wheelsOnGround });
       if (ev === 'respawn') {
         const back = trackPose(t, Math.max(t.start - 12, r.lastS - FALL_BACK), r.driver.lane);
         r.bus.reset({ x: back.pos.x, y: back.y, z: back.pos.z, heading: back.heading, pitch: back.pitch });
@@ -645,7 +686,7 @@ export class RaceSession {
       if (r.driver.needsRescue && !r.fall.falling) {
         const at = trackPose(t, r.lastS, r.driver.lane);
         r.bus.reset({ x: at.pos.x, y: at.y, z: at.pos.z, heading: at.heading, pitch: at.pitch });
-        r.driver.rescued();
+        r.driver.rescued(isCircuit(t) ? r.lastS : -1);
         r.wait = RESET_WAIT;
         this.noseS[i + 1] = -1;
         this.becomeGhost(r.ghost, r.bus, RESET_WAIT + GHOST_TIME);
@@ -654,13 +695,13 @@ export class RaceSession {
       r.model.sync(r.bus);
       if (this.smoke && !r.fall.falling) {
         const spin = r.grade === 'spin' && r.effect > 0 ? r.throttle : 0;
-        this.smoke.emit(r.bus, smokeOf(r.bus.slipAngle, r.bus.speed, spin), dustOf(Math.abs(s.off) - t.width / 2, r.bus.speed), dt, r.mud);
+        this.smoke.emit(r.bus, smokeOf(r.bus.slipAngle, r.bus.speed, spin), dustOf(isCircuit(t) ? -1 : Math.abs(s.off) - t.width / 2, r.bus.speed), dt, r.mud);
       }
     });
     this.tickGhost(0, this.ghost, this.player.bus, null, dt, g.racers[0].time !== null);
     this.syncRemotes(dt);
     // Slipstream: who sits close behind whom (remotes pull us too; their own clients pull them).
-    for (let k = 0; k < this.slips.length; k++) this.draftTarget[k] = g.phase === 'racing' ? draftOf(this.users[k], this.users) : 0;
+    for (let k = 0; k < this.slips.length; k++) this.draftTarget[k] = g.phase === 'racing' ? draftOf(this.users[k], this.users, this.track.circuit?.lap ?? 0) : 0;
     if (this.tags && this.camera) this.tags.update(this.camera);
     if (g.green) this.collect(dt);
     this.view.update(dt);
@@ -677,12 +718,16 @@ export class RaceSession {
       }
       if (e.type === 'go') this.go();
       if (e.type === 'over') this.finish();
+      if (e.type === 'lap' && e.racer === 0) this.playerLapDone();
       // Another racer's real time: the results and the live panel follow.
       if (e.type === 'finish' && e.racer > 0) this.refreshResults();
       // Online: the player's time and the local AI's go to the server (a remote's own client reports it).
       if (e.type === 'finish' && this.online && e.racer <= this.rivals.length) this.finishes.push({ key: this.online.keys[e.racer], time: e.time });
     }
+    if (this.fastIn > 0 && (this.fastIn -= dt) <= 0) this.hud.fastLap(null);
+    const me = g.racers[0];
     this.hud.update(dt, {
+      lap: t.circuit ? this.lapNow(me, t.circuit) : undefined,
       rpm: g.green ? null : this.launch.shown,
       place: g.placeOf(0) || this.progress.length,
       racers: this.progress.length,
@@ -693,6 +738,17 @@ export class RaceSession {
       tires: this.tires.visible ? this.tires.level : 0,
       offRoad: g.phase === 'racing' ? this.offRoad : 0,
     });
+  }
+
+  /** The HUD's lap numbers for racer `me` in the reused scratch object. */
+  private lapNow(me: { lap: number; lapTimes: number[]; best: number | null }, c: { laps: number; lap: number }) {
+    const o = this.lapInfo;
+    o.n = me.lap;
+    o.count = c.laps;
+    o.length = c.lap;
+    o.last = me.lapTimes.length ? me.lapTimes[me.lapTimes.length - 1] : null;
+    o.best = me.best;
+    return o;
   }
 
   /** Pickups: whoever ran over one since the last frame gets half a tank. */
@@ -723,9 +779,10 @@ export class RaceSession {
       if (m.life === 'gone') return;
       const bus = m.remote.bus;
       const p = bus.position(this.nose);
-      const near = locateOnTrack(t, p, m.lastS, 120);
-      const at = Math.hypot(near.off, near.y - p.y) > 25 ? locateOnTrack(t, p) : near;
+      const near = locateOnTrack(t, p, m.lastS, 120, m.lap);
+      const at = Math.hypot(near.off, near.y - p.y) > 25 ? locateOnTrack(t, p, -1, 80, m.lap) : near;
       m.lastS = at.s;
+      m.lap = lapOf(t, at.s);
       // Its own client's progress (the front axle's), as sent.
       this.progress[k] = m.remote.s - t.start;
       this.users[k].s = m.remote.s;
@@ -830,13 +887,17 @@ export class RaceSession {
     const card: RaceResults = {
       solo: this.offline,
       place: g.placeOf(0),
-      rows: resultRows(g.racers, g.ranking(), [this.player.preset.name, ...this.rivals.map((r) => r.base.name), ...this.remotes.map((r) => r.vehicle)]),
+      rows: resultRows(g.racers, g.ranking(), [this.player.preset.name, ...this.rivals.map((r) => r.base.name), ...this.remotes.map((r) => r.vehicle)], isCircuit(this.track)),
       launch: this.grade ? LAUNCH_EFFECT[this.grade].label.replace(/[¡!]/g, '') : '—',
       best: (online ? bestOnline(this.zone)?.time : bestRace(this.zone)?.time) ?? null,
       online,
       newBest: this.results?.newBest ?? false,
       final: this.final,
     };
+    if (isCircuit(this.track)) {
+      card.bestLap = (online ? bestOnlineLap(this.zone) : bestLapRecord(this.zone)) ?? null;
+      card.newLap = this.newLap;
+    }
     if (this.offline) card.rows = card.rows.filter((r) => r.player);
     return card;
   }
@@ -883,9 +944,22 @@ export class RaceSession {
     }
   }
 
+  /** The player closed a lap (the last one too, at the finish): announce it if it beats this race's laps. */
+  private playerLapDone(): void {
+    for (const t of this.laps.step(this.game.racers[0].lapTimes, this.fastLaps)) {
+      this.hud.fastLap(`¡Vuelta rápida! ${raceClock(t)}`);
+      this.fastIn = FAST_LAP_SHOW;
+    }
+  }
+
   private finish(): void {
     const g = this.game;
     const mine = g.racers[0].time!;
+    if (isCircuit(this.track)) {
+      this.playerLapDone();
+      // The lap record is saved here, from a race the player finished.
+      if (this.laps.settle((t) => (this.online ? recordOnlineLap(this.zone, t) : recordLap(this.zone, t)))) this.newLap = true;
+    }
     // Online times have their own records (the field and the rules differ from a race against the AI).
     const newBest = this.online ? recordOnline(this.zone, { time: mine, bus: this.player.preset.name, place: g.placeOf(0), racers: g.racers.length }) : recordRace(this.zone, mine, this.player.preset.name);
     this.myTime = mine;
@@ -1035,6 +1109,7 @@ export class RaceSession {
       r.effect = 0;
       r.wait = 0;
       r.lastS = -1;
+      r.lap = 1;
       r.ghost.reset();
       r.bus.setGhost(false);
       r.model.setGhost(1);
@@ -1049,6 +1124,7 @@ export class RaceSession {
     for (const sl of this.slips) sl.reset();
     this.draftTarget.fill(0);
     this.playerS = -1;
+    this.playerLap = 1;
     this.noseS.fill(-1);
     this.finishIn = 0;
     this.results = null;
@@ -1070,7 +1146,11 @@ export class RaceSession {
     this.offRoad = 0;
     this.player.bus.mud = 0;
     for (const r of this.rivals) (r.mud = 0), (r.bus.mud = 0);
-    this.game = new RaceGame(this.game.racers.map((r) => r.name), this.track.finish - this.track.start);
+    this.game = new RaceGame(this.game.racers.map((r) => r.name), this.track.finish - this.track.start, { laps: lapsOf(this.track) });
+    this.newLap = false;
+    this.laps.reset();
+    this.fastIn = 0;
+    this.hud.fastLap(null);
     this.hud.showResults(null);
   }
 

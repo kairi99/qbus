@@ -9,8 +9,10 @@ import type { CityData } from '../src/world/cityData';
 import { terrainHeight } from '../src/world/terrain';
 import { buildRoadGraph } from '../src/world/roadGraph';
 import { snapToRoad } from '../src/world/roadSnap';
-import { locateOnTrack, trackPoint, trackPose, trackStartPose } from '../src/world/track';
-import { RaceDriver, SKILLS, chooseLane, vehicleLimits } from '../src/gameplay/raceDriver';
+import { type TrackData, lapOf, locateOnTrack, trackPoint, trackPose, trackStartPose } from '../src/world/track';
+import { circuitTrack } from '../src/world/circuitTrack';
+import { loadZone } from '../src/world/loadCity';
+import { RaceDriver, SKILLS, chooseLane, courseRoom, vehicleLimits } from '../src/gameplay/raceDriver';
 import { gridSlots } from '../src/gameplay/raceField';
 import { TrafficSim } from '../src/gameplay/traffic';
 import { FALL_AIR, FALL_SHOW, FallWatch } from '../src/gameplay/fallWatch';
@@ -326,4 +328,116 @@ describe.each(ZONES)('$name', (zone) => {
       expect(Math.abs(s.y - q.y)).toBeLessThan(0.5);
     });
   });
+});
+
+/** The street circuit: grid, the AI's line and the AIs round it. */
+describe('Circuito Zona Rosa', () => {
+  let zr: CityData;
+  let race: TrackData;
+  let world: ReturnType<typeof createWorld>;
+  beforeAll(async () => {
+    await initRapier();
+    zr = await loadZone('zonarosa');
+    race = zr.race!;
+    world = createWorld();
+    buildCity(zr, world, new THREE.Scene(), buildRoadGraph(zr));
+  });
+
+  it.each([
+    ['four of the longest', [19.6, 18.4, 19.6, 19.6]],
+    ['six container trucks', [17.7, 17.7, 17.7, 17.7, 17.7, 17.7]],
+    ['six gusanitos', [19.6, 19.6, 19.6, 19.6, 19.6, 19.6]],
+  ])('fits %s one behind the other, behind the line, within the course, none overlapping', (_, lengths) => {
+    const slots = gridSlots(race, lengths);
+    const at = slots.map((p) => locateOnTrack(race, p.pos));
+    at.forEach((a, k) => {
+      expect(a.s + lengths[k] / 2).toBeLessThanOrEqual(race.start + 0.1);
+      expect(a.s - lengths[k] / 2).toBeGreaterThan(0);
+      expect(Math.abs(a.off)).toBeLessThan(2.5);
+      for (let j = 0; j < k; j++) if (Math.sign(at[j].off) === Math.sign(a.off)) expect(at[j].s - lengths[j] / 2 - (a.s + lengths[k] / 2)).toBeGreaterThan(2);
+    });
+  });
+
+  // Best lap of each vehicle (s, hard, second lap: a flying one) with a margin; measured with `tools/sim-race.ts zonarosa <vehicle> hard`.
+  it.each([
+    ['articulado', 99.7],
+    ['gusanito', 119],
+    ['trailer', 106.3],
+    ['popular', 83.4],
+    ['buseta', 82.2],
+    ['interparroquial', 81.4],
+    ['ae86', 71.5],
+  ])('the AI drives a %s round two laps without a rescue, off a barrier, in about %s s a lap', (id, lap) => {
+    const two = circuitTrack(zr, { ...zr.circuits![0], laps: 2 });
+    const start = trackStartPose(two, 12);
+    const preset = busById(id);
+    const bus = new BusPhysics(world, preset, { x: start.pos.x, y: start.y, z: start.pos.z, heading: start.heading, pitch: start.pitch });
+    const driver = new RaceDriver(two, SKILLS.hard, vehicleLimits(preset));
+    const p = { x: 0, y: 0, z: 0 };
+    const lapEnds: number[] = [];
+    let seen = 1;
+    let rescues = 0;
+    let closest = Infinity;
+    let t = 0;
+    for (; t < 400 && driver.s < two.finish; t += PHYSICS_STEP) {
+      bus.update(driver.drive(bus, PHYSICS_STEP), PHYSICS_STEP);
+      world.step();
+      if (driver.needsRescue) rescues++, driver.rescued(driver.s);
+      if (lapOf(two, driver.s) > seen) lapEnds.push(t), seen++;
+      // Every 0.2 s: the nose's distance to the nearest barrier (the sides of the body are checked in the physics: a rescue means one was hit).
+      if (Math.round(t / PHYSICS_STEP) % 12 === 0) {
+        const at = locateOnTrack(two, bus.nose(p), driver.s, 60, driver.lap);
+        const i = Math.min(two.cum.length - 1, Math.round((at.s / two.cum[two.cum.length - 1]) * (two.cum.length - 1)));
+        closest = Math.min(closest, (at.off >= 0 ? two.edges!.right[i] : two.edges!.left[i]) - Math.abs(at.off) - preset.body.width / 2);
+      }
+    }
+    for (const b of bus.bodies) world.removeRigidBody(b);
+    expect(driver.s).toBeGreaterThanOrEqual(two.finish);
+    expect(rescues).toBe(0);
+    expect(closest).toBeGreaterThan(0.1);
+    const second = t - lapEnds[0];
+    expect(second).toBeGreaterThan(lap * 0.92);
+    expect(second).toBeLessThan(lap * 1.08);
+  }, 120_000);
+
+  it.each([
+    ['six (all the vehicles) lap each other', ['interparroquial', 'buseta', 'popular', 'articulado', 'gusanito', 'ae86'], 2],
+    ['six with the container truck', ['trailer', 'buseta', 'popular', 'articulado', 'gusanito', 'ae86'], 2],
+  ])('%s: two laps from the grid together, passing and lapping, without getting stuck on each other', (_, ids, maxRescues) => {
+    // A world of their own: what the single-vehicle runs leave behind (sleeping, removed bodies) changes how a pack jams.
+    const world = createWorld();
+    buildCity(zr, world, new THREE.Scene(), buildRoadGraph(zr));
+    const two = circuitTrack(zr, { ...zr.circuits![0], laps: 2 });
+    const slots = gridSlots(two, ids.map((id) => busById(id).body.length));
+    const buses = slots.map((sl, k) => new BusPhysics(world, busById(ids[k]), { x: sl.pos.x, y: sl.y, z: sl.pos.z, heading: sl.heading, pitch: sl.pitch }));
+    const homes = slots.map((_, k) => (k % 2 ? 1 : -1) * 0.6);
+    const drivers = slots.map((_, k) => new RaceDriver(two, SKILLS.hard, vehicleLimits(busById(ids[k])), homes[k]));
+    const users = ids.map((id) => ({ s: 0, off: 0, v: 0, len: busById(id).body.length }));
+    const room = { left: 0, right: 0, lap: 1e9 };
+    const p = { x: 0, y: 0, z: 0 };
+    let rescues = 0;
+    for (let t = 0; t < 500 && drivers.some((d) => d.s < two.finish); t += PHYSICS_STEP) {
+      buses.forEach((b, k) => {
+        users[k].s = drivers[k].s;
+        users[k].off = locateOnTrack(two, b.position(p), drivers[k].s, 60, drivers[k].lap).off;
+        users[k].v = b.speed;
+      });
+      buses.forEach((b, k) => {
+        const way = chooseLane(users[k], users.filter((_, j) => j !== k), [], homes[k], SKILLS.hard.passClear, null, null, courseRoom(two, users[k].s, room));
+        drivers[k].lane = way.lane;
+        b.update(drivers[k].drive(b, PHYSICS_STEP, 1, false, way.limit), PHYSICS_STEP);
+      });
+      world.step();
+      drivers.forEach((d, k) => {
+        if (!d.needsRescue) return;
+        const pose = trackPose(two, d.s, d.lane);
+        buses[k].reset({ x: pose.pos.x, y: pose.y, z: pose.pos.z, heading: pose.heading, pitch: pose.pitch });
+        d.rescued(d.s);
+        rescues++;
+      });
+    }
+    for (const b of buses) for (const body of b.bodies) world.removeRigidBody(body);
+    expect(rescues).toBeLessThanOrEqual(maxRescues);
+    for (const d of drivers) expect(d.s).toBeGreaterThanOrEqual(two.finish);
+  }, 240_000);
 });

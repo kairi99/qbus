@@ -1,5 +1,5 @@
 import { IDLE, WINDOW } from '../gameplay/launch';
-import { type Racer, raceClock } from '../gameplay/raceGame';
+import { type Racer, bestLap, raceClock } from '../gameplay/raceGame';
 import { setStyle, setText } from './dom';
 
 /** The tachometer's scale: 0 to 8 (×1000 rpm), the needle sweeping 240°. */
@@ -16,6 +16,8 @@ export interface RaceResultRow {
   time: number | null;
   estimated: boolean;
   player: boolean;
+  /** Circuits: the racer's fastest lap (s), null before its first; absent elsewhere (no column). */
+  bestLap?: number | null;
 }
 
 export interface RaceResults {
@@ -30,6 +32,9 @@ export interface RaceResults {
   solo?: boolean;
   /** An online race: `best` is the player's best online time. */
   online?: boolean;
+  /** Circuits: the player's best lap on record (s) and whether this race beat it. */
+  bestLap?: number | null;
+  newLap?: boolean;
 }
 
 export type RaceHudAction = 'again' | 'menu' | 'lobby' | 'watchPrev' | 'watchNext' | 'results' | 'endNow' | 'keep';
@@ -48,6 +53,9 @@ export class RaceHud {
   private needle: SVGElement;
   private dots: HTMLElement[] = [];
   private tachHideIn = -1;
+  private fast = false;
+  /** Lap numbers last written: lap, laps, last and best in tenths (-1: none). */
+  private readonly lapKey = [0, 0, -2, -2];
 
   constructor(root: HTMLElement, from: string, to: string, racers: number) {
     this.el = document.createElement('div');
@@ -67,6 +75,7 @@ export class RaceHud {
         <div class="rh-route">RUTA: ${from.toUpperCase()} → ${to.toUpperCase()}</div>
         <div class="rh-place">POSICIÓN: <b data-k="place">1 / ${racers}</b></div>
         <div class="rh-time" data-k="time">0:00.0</div>
+        <div class="rh-lap" data-k="lap" hidden><b data-k="lapN">Vuelta 1/1</b><small data-k="lapTimes"></small></div>
       </div>
       <div class="rh-count" data-k="count"></div>
       <div class="rh-flash" data-k="flash" hidden></div>
@@ -107,6 +116,7 @@ export class RaceHud {
           <ol class="rh-table" data-k="rTable"></ol>
           <p data-k="rLaunch"></p>
           <p data-k="rBest"></p>
+          <p data-k="rLap" hidden></p>
           <div class="gh-actions">
             <button class="gh-btn gh-btn-go" data-act="again">Otra carrera <small>Enter</small></button>
             <button class="gh-btn" data-act="menu">Menú</button>
@@ -162,7 +172,7 @@ export class RaceHud {
   }
 
   /** `wait`: seconds before the player may go on after an R reset (0: none). */
-  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; wait: number; tires: number; offRoad: number }): void {
+  update(dt: number, f: { rpm: number | null; place: number; racers: number; time: number; progress: readonly number[]; length: number; lap?: { n: number; count: number; length: number; last: number | null; best: number | null }; wait: number; tires: number; offRoad: number }): void {
     setText(this.k.place, `${f.place} / ${f.racers}`);
     const waiting = f.wait > 0;
     if (this.k.wait.hidden === waiting) this.k.wait.hidden = !waiting;
@@ -179,10 +189,36 @@ export class RaceHud {
       this.k.tach.classList.add('rh-tach-off');
       this.k.count.textContent = '';
     }
+    const lap = f.lap;
+    if (this.k.lap.hidden === !!lap) this.k.lap.hidden = !lap;
+    if (lap) {
+      // Strings only when a number changes at display resolution (0.1 s).
+      const last = lap.last === null ? -1 : Math.round(lap.last * 10);
+      const best = lap.best === null ? -1 : Math.round(lap.best * 10);
+      if (lap.n !== this.lapKey[0] || lap.count !== this.lapKey[1]) {
+        this.lapKey[0] = lap.n;
+        this.lapKey[1] = lap.count;
+        if (!this.fast) setText(this.k.lapN, `Vuelta ${lap.n}/${lap.count}`);
+      }
+      if (last !== this.lapKey[2] || best !== this.lapKey[3]) {
+        this.lapKey[2] = last;
+        this.lapKey[3] = best;
+        setText(this.k.lapTimes, lap.last === null ? '' : `Última ${raceClock(lap.last)} · Mejor ${raceClock(lap.best!)}`);
+      }
+    }
     f.progress.forEach((s, i) => {
-      const k = Math.max(0, Math.min(1, s / f.length));
+      // A circuit's strip is the current lap, each racer on its own.
+      const k = lap ? (s >= f.length ? 1 : Math.max(0, Math.min(1, (s % lap.length) / lap.length))) : Math.max(0, Math.min(1, s / f.length));
       this.dots[i].style.left = `${(k * 100).toFixed(1)}%`;
     });
+  }
+
+  /** A small banner in place of "Vuelta N/3" ("¡Vuelta rápida!"); null puts the lap back. */
+  fastLap(text: string | null): void {
+    this.fast = text !== null;
+    this.k.lap.classList.toggle('rh-lap-fast', this.fast);
+    if (text !== null) setText(this.k.lapN, text);
+    else this.lapKey[0] = 0;
   }
 
   /**
@@ -204,8 +240,9 @@ export class RaceHud {
     if (el.hidden !== !r) el.hidden = !r;
     if (!r) return;
     const html = r.rows
-      .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span><b>${row.time === null ? 'en carrera' : `${row.estimated ? '≈ ' : ''}${raceClock(row.time)}`}</b></li>`)
+      .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span>${lapCell(row)}<b>${row.time === null ? 'en carrera' : `${row.estimated ? '≈ ' : ''}${raceClock(row.time)}`}</b></li>`)
       .join('');
+    this.k.liveTable.classList.toggle('rh-laps', r.rows.some((row) => row.bestLap !== undefined));
     if (this.k.liveTable.innerHTML !== html) this.k.liveTable.innerHTML = html;
   }
 
@@ -228,11 +265,16 @@ export class RaceHud {
     }
     this.k.rTitle.textContent = r.solo ? 'Terminaste la carrera' : r.place === 1 ? '¡GANASTE, ÑAÑO!' : `Llegaste ${r.place}º`;
     this.k.rTable.innerHTML = r.rows
-      .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span><small>${row.bus}</small><b>${row.time === null ? (r.final ? 'retirado' : 'en carrera') : `${row.estimated ? '≈ ' : ''}${raceClock(row.time)}`}</b></li>`)
+      .map((row) => `<li class="${row.player ? 'rh-me' : ''}"><span>${row.name}</span><small>${row.bus}</small>${lapCell(row)}<b>${row.time === null ? (r.final ? 'retirado' : 'en carrera') : `${row.estimated ? '≈ ' : ''}${raceClock(row.time)}`}</b></li>`)
       .join('');
+    this.k.rTable.classList.toggle('rh-laps', r.rows.some((row) => row.bestLap !== undefined));
     this.k.rLaunch.textContent = `Salida: ${r.launch}`;
     this.k.rBest.textContent = r.newBest ? `¡Récord${r.online ? ' en línea' : ' de la ruta'}! ${raceClock(r.best!)}` : r.best !== null ? `${r.online ? 'Tu mejor en línea' : 'Récord'}: ${raceClock(r.best)}` : '';
     this.k.rBest.classList.toggle('rh-record', r.newBest);
+    const lapLine = r.bestLap !== undefined && r.bestLap !== null;
+    this.k.rLap.hidden = !lapLine;
+    if (lapLine) this.k.rLap.textContent = r.newLap ? `¡Vuelta récord! ${raceClock(r.bestLap!)}` : `${r.online ? 'Tu mejor vuelta en línea' : 'Mejor vuelta'}: ${raceClock(r.bestLap!)}`;
+    this.k.rLap.classList.toggle('rh-record', !!r.newLap);
   }
 
   /** Online: "Volver a la sala" in place of another race. */
@@ -275,7 +317,16 @@ export class RaceHud {
   }
 }
 
+/** The best-lap cell of a results row (circuits only: rows without `bestLap` get none). */
+function lapCell(row: RaceResultRow): string {
+  return row.bestLap === undefined ? '' : `<em>${row.bestLap === null ? '—' : raceClock(row.bestLap)}</em>`;
+}
+
 /** Rows for the results card, from the race's racers in finishing order. */
-export function resultRows(racers: Racer[], order: number[], buses: string[]): RaceResultRow[] {
-  return order.map((i) => ({ name: racers[i].name, bus: buses[i], time: racers[i].time, estimated: racers[i].estimated, player: i === 0 }));
+export function resultRows(racers: Racer[], order: number[], buses: string[], laps = false): RaceResultRow[] {
+  return order.map((i) => {
+    const row: RaceResultRow = { name: racers[i].name, bus: buses[i], time: racers[i].time, estimated: racers[i].estimated, player: i === 0 };
+    if (laps) row.bestLap = bestLap(racers[i]);
+    return row;
+  });
 }

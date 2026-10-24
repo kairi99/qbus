@@ -6,6 +6,24 @@ const RANGE = 230;
 /** Resolution of the pre-rendered street map. */
 const PX_PER_M = 1;
 
+/** A circuit's lap loop for the map and where its start/finish line crosses it (position + unit direction). */
+export function courseOf(city: CityData): { path: Vec2[]; line: { x: number; z: number; dx: number; dz: number } } | null {
+  const data = city.race?.circuit?.data;
+  if (!data || data.points.length < 3) return null;
+  const pts = data.points;
+  let u = 0;
+  let i = 0;
+  while (i < pts.length - 2 && u + Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z) < data.line) {
+    u += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
+    i++;
+  }
+  const a = pts[i];
+  const b = pts[i + 1];
+  const d = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+  const k = Math.max(0, Math.min(1, (data.line - u) / d));
+  return { path: pts, line: { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, dx: (b.x - a.x) / d, dz: (b.z - a.z) / d } };
+}
+
 /**
  * Round, heading-up minimap: streets (pre-rendered once), the stops of the route, the legal
  * path to the next stop, and the bus in the middle pointing up.
@@ -153,6 +171,23 @@ export class MiniMap {
         r.points.forEach((p, i) => (i ? c.lineTo(p.x, p.z) : c.moveTo(p.x, p.z)));
         c.stroke();
       }
+    }
+    // A circuit race: the lap loop in the route color, the start/finish line across it.
+    const course = courseOf(this.city);
+    if (course) {
+      c.strokeStyle = '#e8821e';
+      c.lineWidth = 9;
+      c.beginPath();
+      course.path.forEach((p, i) => (i ? c.lineTo(p.x, p.z) : c.moveTo(p.x, p.z)));
+      c.stroke();
+      const l = course.line;
+      c.strokeStyle = '#1d1a14';
+      c.lineWidth = 4;
+      c.lineCap = 'butt';
+      c.beginPath();
+      c.moveTo(l.x - l.dz * 12, l.z + l.dx * 12);
+      c.lineTo(l.x + l.dz * 12, l.z - l.dx * 12);
+      c.stroke();
     }
     c.fillStyle = '#9bbf85';
     for (const park of this.city.parks ?? []) {

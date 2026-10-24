@@ -9,6 +9,7 @@ import { fromFile } from 'geotiff';
 import { HORIZON_HALF, importOsm, makeProjection, type Dem } from '../src/world/osm/import';
 import { sameWayStretches } from '../src/world/osm/carriageways';
 import { importTrack } from '../src/world/osm/track';
+import { buildCircuits } from '../src/world/osm/circuit';
 import { ZONES } from './zones';
 
 const zone = ZONES[process.argv[2] ?? 'mariscal'];
@@ -78,6 +79,7 @@ const extra = (kind: string) => {
 const city = importOsm(osm, dem, { name: zone.name, bbox: zone.bbox, seed: 7, dropWays: zone.dropWays, reverseWays: zone.reverseWays }, { routes, stations: extra('stations'), areas: extra('areas'), horizonDem });
 const { toXZ } = makeProjection(zone.bbox);
 if (zone.monuments) city.monuments = zone.monuments.map((m) => ({ kind: m.kind, name: m.name, pos: toXZ(m.lat, m.lon) }));
+if (zone.circuits) city.circuits = buildCircuits(city.roads, city.buildings, zone.circuits, console.log);
 const ms = performance.now() - t0;
 // A divided avenue whose carriageways run the same way side by side is a way drawn backwards
 // in OSM (see `reverseWays`), inside the play area at least (outside it, side lanes too).

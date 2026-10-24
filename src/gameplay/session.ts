@@ -7,7 +7,7 @@ import type { BusAudio } from '../core/audio';
 import type { CameraMode } from '../camera/cameraRig';
 import { Rng } from '../core/rng';
 import { RouteGame, type GameEvent } from './routeGame';
-import { trackStartPose } from '../world/track';
+import { isCircuit, trackStartPose } from '../world/track';
 import { type RouteDef, freeStartPose, routeLegs, routeStops, startPose } from './routes';
 import { type StarThresholds, starThresholds, starsFor } from './stars';
 import { Missions, pickMissions, type MissionEvent } from './missions';
@@ -148,18 +148,20 @@ export class GameSession {
     if (d.route) this.stars = starThresholds(routeStops(d.city, d.route), routeLegs(d.city, d.route, d.graph), this.start0.pos);
     const spawn = this.start0.pos;
     const graph = d.graph;
-    this.lights = new TrafficLights(graph, d.city.signals ?? []);
+    // A street circuit is closed to traffic and people: its lights change nothing (and cost no nitro to run).
+    const circuit = isCircuit(d.city.race);
+    this.lights = new TrafficLights(graph, circuit ? [] : (d.city.signals ?? []));
     this.redLights = new RedLightRunner(this.lights);
     // A race track has no people on it, and traffic only if asked for: a few cars and trucks
     // around each racer, both ways, never on the grid, driving off the road's ends.
     const race = d.city.race;
-    const cars = race ? (d.trackTraffic ?? 0) : MAX_CARS;
+    const cars = race ? (circuit ? 0 : (d.trackTraffic ?? 0)) : MAX_CARS;
     if (race) this.budget = cars;
     // The track's road is one edge each way: toward the finish (meters along are the track's) or back.
     const ahead = graph.edges.map((e) => !!race && Math.hypot(e.center.pts[0].x - race.points[0].x, e.center.pts[0].z - race.points[0].z) < 1);
     this.trackS = (edge, s) => (ahead[edge] ? s : graph.edges[edge].len - s);
     const keep = race && ((edge: number, s: number) => this.trackS(edge, s) > race.start + OFF_GRID);
-    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: cars, brt: brtBusCount(graph), avoid: { pos: spawn, radius: 25 }, lights: this.lights, keep: keep || undefined, uturns: !race });
+    this.traffic = new TrafficSim(graph, d.city, { seed: 11, count: cars, brt: circuit ? 0 : brtBusCount(graph), avoid: { pos: spawn, radius: 25 }, lights: this.lights, keep: keep || undefined, uturns: !race });
     this.traffic.setBudget(this.budget, spawn);
     this.trafficBodies = new TrafficBodies(d.world, this.traffic, laneSurface(d.city, graph, this.traffic, d.world));
     // Near misses are about traffic: scenery (walls, trees, props) doesn't score.
@@ -171,7 +173,7 @@ export class GameSession {
     this.peds.recycle(focus, true);
     this.pedView = new PedestrianView(d.scene, this.peds, d.city);
     // Metro riders mill about in front of the entrances, off the asphalt and out of buildings.
-    this.metro = new MetroCrowd(d.city.metro ?? [], {
+    this.metro = new MetroCrowd(circuit ? [] : (d.city.metro ?? []), {
       walkable: (p) => !nearestRoad(d.city, p) && !d.city.buildings.some((b) => pointInPolygon(p, b.footprint)),
     });
     this.metroView = new PedestrianView(d.scene, this.metro, d.city);

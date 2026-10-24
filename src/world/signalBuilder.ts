@@ -54,6 +54,10 @@ export interface SignalContext {
   /** Stop lines on the asphalt. */
   paint: ChunkedMeshBuilder;
   light: Lighting;
+  /** A circuit race's course: no pole stands there (true = on the course). */
+  keepOut?: (p: Vec2) => boolean;
+  /** Circuit race: every head flashes amber once a second instead of following the lights. */
+  flash?: boolean;
   world: RAPIER.World;
   fixed: RAPIER.RigidBody;
 }
@@ -71,6 +75,7 @@ export class SignalLamps {
   /** Where the poles stand: trees and lamps keep clear. */
   readonly poles: Vec2[] = [];
   private heads: Head[] = [];
+  private flash: boolean;
   private lamps: THREE.InstancedMesh | null = null;
   private glows: THREE.InstancedMesh | null = null;
   private m = new THREE.Matrix4();
@@ -81,9 +86,11 @@ export class SignalLamps {
 
   constructor(ctx: SignalContext) {
     const { city, graph, lights } = ctx;
+    this.flash = !!ctx.flash;
     const hulls = graph.nodes.filter((n) => n.hull).map((n) => n.hull!);
     const stops = city.stops.flatMap((s) => [s.pos, stopZone(s)]);
     const clear = (p: Vec2) =>
+      !ctx.keepOut?.(p) &&
       ctx.roads.clearance(p) > 0.45 &&
       ctx.buildings.distance(p) > 0.5 &&
       !hulls.some((h) => pointInPolygon(p, h)) &&
@@ -158,14 +165,14 @@ export class SignalLamps {
     }
   }
 
-  /** Shows each head's light at time `t` (only what changed is written). */
+  /** Shows each head's light at time `t` (only what changed is written); on a circuit all flash amber at 1 Hz (half a second on, half off). */
   update(lights: TrafficLights, t: number): void {
     const lamps = this.lamps;
     if (!lamps) return;
     let changed = false;
     for (let i = 0; i < this.heads.length; i++) {
       const h = this.heads[i];
-      const state = lights.state(h.edge, t);
+      const state = this.flash ? (Math.floor(t * 2) % 2 === 0 ? 'amber' : null) : lights.state(h.edge, t);
       if (state === h.state) continue;
       h.state = state;
       changed = true;

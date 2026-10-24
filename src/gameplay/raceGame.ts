@@ -9,6 +9,10 @@
 export const COUNT_STEP = 1;
 export const GRID_WAIT = 1.2;
 
+/** A forward step over this many meters AND faster than this many m/s between two updates is a teleport, not driving. */
+const TELEPORT_M = 50;
+const TELEPORT_SPEED = 200;
+
 export type RacePhase = 'grid' | 'countdown' | 'racing' | 'over';
 
 export type RaceEvent =
@@ -16,6 +20,8 @@ export type RaceEvent =
   | { type: 'go' }
   | { type: 'overtake'; place: number; gained: boolean }
   | { type: 'finish'; racer: number; place: number; time: number }
+  /** Racer crossed the line into `lap` (2..laps); `time` = the lap just completed (s). The last lap's time comes with 'finish'. */
+  | { type: 'lap'; racer: number; lap: number; time: number }
   | { type: 'over' };
 
 export interface Racer {
@@ -26,6 +32,17 @@ export interface Racer {
   time: number | null;
   /** Finish time estimated from its pace when the race ended without it. */
   estimated: boolean;
+  /** Current lap, 1..laps (1 without laps). Never goes back, whatever an R reset does. */
+  lap: number;
+  /** Times (s) of the laps completed so far; at the finish they sum to `time`. */
+  lapTimes: number[];
+  /** Fastest of `lapTimes` (s), null before the first. */
+  best: number | null;
+}
+
+/** The racer's fastest completed lap (s), null before the first. */
+export function bestLap(r: Racer): number | null {
+  return r.best;
 }
 
 export class RaceGame {
@@ -39,18 +56,39 @@ export class RaceGame {
   private order: number[] = [];
   /** Last count announced on an external clock. */
   private shown = 0;
+  /** Race time each racer's current lap began (s). */
+  private lapAt: number[];
+  /** Each racer's progress at the last racing update (NaN: none yet, its first sample is judged on its own). */
+  private prevS: number[];
 
   /**
    * `names[0]` is the player. `length`: start line to finish (m). `estimate: false` (online):
    * `estimateRest` does nothing, racers still on the road keep a null time until `setTime`.
+   * `laps` (a circuit): `length` is `count` x `lap` meters; each line crossed by a racer's progress
+   * starts the next lap (once: going back over one never un-counts or repeats it).
    */
   constructor(
     names: string[],
     readonly length: number,
-    private readonly opts: { estimate?: boolean } = {},
+    private readonly opts: { estimate?: boolean; laps?: { count: number; lap: number } } = {},
   ) {
-    this.racers = names.map((name) => ({ name, s: 0, time: null, estimated: false }));
+    this.racers = names.map((name) => ({ name, s: 0, time: null, estimated: false, lap: 1, lapTimes: [], best: null }));
+    this.lapAt = names.map(() => 0);
+    this.prevS = names.map(() => NaN);
     this.order = names.map((_, i) => i);
+  }
+
+  /**
+   * Racer `i` was put back at `progress` m by a resume (online page back): the lines before it count as crossed,
+   * with no lap event and no time: the lap it is on has no known start, so it is not timed either.
+   */
+  skipTo(i: number, progress: number): void {
+    const laps = this.opts.laps;
+    const r = this.racers[i];
+    if (!laps) return;
+    r.lap = Math.max(r.lap, Math.min(laps.count, Math.floor(progress / laps.lap) + 1));
+    if (r.lap > 1) this.lapAt[i] = NaN;
+    this.prevS[i] = NaN;
   }
 
   /** The countdown runs (from the grid wait). */
@@ -118,11 +156,42 @@ export class RaceGame {
     // The race goes on after the player's finish: the others' crossings still count (online the
     // host reports its AI's times to the server; solo they can be watched, or `estimateRest`).
     const over = this.phase === 'over';
+    const t0 = this.time;
     this.time = goIn !== undefined ? -goIn : this.time + dt;
     this.racers.forEach((r, i) => {
       r.s = progress[i];
+      const laps = this.opts.laps;
+      if (laps && r.time === null) {
+        const p0 = this.prevS[i];
+        // First sample (a late join, a resume), or a jump no bus drives (a remote's first snapshot, far on): lines already behind it are not crossings, and that lap has no known start.
+        if (Number.isNaN(p0) || (r.s - p0 > TELEPORT_M && r.s - p0 > TELEPORT_SPEED * (this.time - t0))) {
+          const at = Math.min(laps.count, Math.floor(Math.max(0, r.s) / laps.lap) + 1);
+          if (at > r.lap) r.lap = at;
+          if (r.lap > 1) this.lapAt[i] = NaN;
+        }
+        // Lines crossed in order, each at its interpolated time; the last one is the finish (below), which closes the final lap.
+        while (r.lap < laps.count && r.s >= r.lap * laps.lap) {
+          const line = r.lap * laps.lap;
+          const k = r.s > p0 ? Math.max(0, Math.min(1, (line - p0) / (r.s - p0))) : 1;
+          const at = Number.isNaN(p0) ? this.time : t0 + (this.time - t0) * k;
+          const t = at - this.lapAt[i];
+          this.lapAt[i] = at;
+          r.lap++;
+          if (!Number.isNaN(t)) {
+            r.lapTimes.push(t);
+            if (r.best === null || t < r.best) r.best = t;
+            ev.push({ type: 'lap', racer: i, lap: r.lap, time: t });
+          }
+        }
+        this.prevS[i] = r.s;
+      }
       if (r.time === null && r.s >= this.length) {
         r.time = this.time;
+        if (laps && !Number.isNaN(this.lapAt[i])) {
+          const t = this.time - this.lapAt[i];
+          r.lapTimes.push(t);
+          if (r.best === null || t < r.best) r.best = t;
+        }
         ev.push({ type: 'finish', racer: i, place: this.racers.filter((o) => o.time !== null).length, time: r.time });
       }
     });

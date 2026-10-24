@@ -14,6 +14,8 @@ export interface RaceRecord {
 interface Stored {
   version: number;
   tracks: Record<string, RaceRecord>;
+  /** Circuits: best single lap (s) per track, kept apart from the race times (absent in older saves = none). */
+  laps?: Record<string, number>;
 }
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
@@ -34,6 +36,27 @@ function load(s: Store | null): Stored {
 export function bestRace(track: string, s: Store | null = store()): RaceRecord | null {
   const r = load(s).tracks[track];
   return r && Number.isFinite(r.time) ? r : null;
+}
+
+/** The best lap (s) on a circuit, if any. */
+export function bestLapRecord(track: string, s: Store | null = store()): number | null {
+  const l = load(s).laps?.[track];
+  return typeof l === 'number' && Number.isFinite(l) && l > 0 ? l : null;
+}
+
+/** Saves a lap time; true if it's the new best lap of the track. */
+export function recordLap(track: string, time: number, s: Store | null = store()): boolean {
+  if (!Number.isFinite(time) || time <= 0) return false;
+  const all = load(s);
+  const old = all.laps?.[track];
+  if (typeof old === 'number' && old <= time) return false;
+  all.laps = { ...all.laps, [track]: time };
+  try {
+    s?.setItem(KEY, JSON.stringify(all));
+  } catch {
+    // full or blocked: the record just isn't kept
+  }
+  return true;
 }
 
 /** Saves a finish; true if it's the new best. */
